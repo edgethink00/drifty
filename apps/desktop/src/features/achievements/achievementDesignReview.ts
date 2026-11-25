@@ -103,6 +103,8 @@ type ReviewState = {
   readonly holding: AchievementReviewHolding;
   /** Offer a sort menu over the earned part (c15). */
   readonly sortMenu: boolean;
+  /** Set each part of the c15 list in a block, as the Usage tab sets its parts. */
+  readonly boxed: boolean;
   /** The composition being reviewed. */
   readonly layout: AchievementLayoutId;
   /** How much an opened row shows. */
@@ -110,7 +112,7 @@ type ReviewState = {
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, boxed: PRODUCTION_ACHIEVEMENT_BOXED, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
   let saved: Partial<ReviewState> & { readonly allEarned?: boolean } = {};
   try {
     saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean };
@@ -123,6 +125,7 @@ function initialState(): ReviewState {
     // ?achievementHolding=<id> wins; an older saved "all earned" choice still counts.
     holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? (saved.allEarned === true ? "all" : "record"),
     sortMenu: search.has("achievementSort") ? search.get("achievementSort") === "1" : saved.sortMenu === true,
+    boxed: search.has("achievementBoxed") ? search.get("achievementBoxed") === "1" : typeof saved.boxed === "boolean" ? saved.boxed : PRODUCTION_ACHIEVEMENT_BOXED,
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
@@ -168,6 +171,15 @@ export function useActiveAchievementLayout(): AchievementLayoutId {
 export function useActiveAchievementOpenStyle(): AchievementOpenStyle {
   const { open } = useAchievementReviewState();
   return isAchievementDesignReview() ? open : PRODUCTION_ACHIEVEMENT_OPEN_STYLE;
+}
+
+/** Whether people see the c15 list's parts in blocks, as the Usage tab sets its parts. */
+export const PRODUCTION_ACHIEVEMENT_BOXED = true;
+
+/** Whether the c15 list's parts sit in blocks: the reviewed choice during the dev review, else the production one. */
+export function useAchievementListBoxed(): boolean {
+  const { boxed } = useAchievementReviewState();
+  return isAchievementDesignReview() ? boxed : PRODUCTION_ACHIEVEMENT_BOXED;
 }
 
 /**

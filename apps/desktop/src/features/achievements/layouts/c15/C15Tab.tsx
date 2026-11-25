@@ -7,7 +7,7 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
 import { achievementRowParts, type EarnedRowOrder } from "../../achievementRows";
-import { isAchievementDesignReview, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
+import { isAchievementDesignReview, useAchievementListBoxed, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
 import { shownRarity } from "../../achievementCopy";
 import { SettingsSelect } from "../../../settings/SettingsSelect";
 import "../../../dashboard/timeline-zoom.css";
@@ -145,6 +145,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const [openId, setOpenId] = useState<AchievementId | null>(null);
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
   const openStyle = useActiveAchievementOpenStyle();
+  const boxed = useAchievementListBoxed();
   const popup = openStyle === "popup" || openStyle === "stage";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
@@ -171,7 +172,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const anyLater = parts.almost.length + later.length > 0;
 
   return (
-    <div className="c15">
+    <div className="c15" data-boxed={boxed ? "" : undefined}>
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>

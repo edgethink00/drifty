@@ -142,7 +142,7 @@
 /* The parts of the list: a quiet word over each, no rule. */
 :where(.achievements[data-layout="c15"]) .c15-part { margin-top: var(--space-6); }
 /* A part under a run of locked rows already gains about 6px of air from their smaller medals; the others get it as margin so every label reads evenly spaced. */
-:where(.achievements[data-layout="c15"]) .c15-part:has(.c15-item:last-child[data-state="earned"]) + .c15-part { margin-top: calc(var(--space-6) + 6px); }
+:where(.achievements[data-layout="c15"]) .c15:not([data-boxed]) .c15-part:has(.c15-item:last-child[data-state="earned"]) + .c15-part { margin-top: calc(var(--space-6) + 6px); }
 :where(.achievements[data-layout="c15"]) .c15-head + .c15-part,
 :where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-5); }
 
@@ -164,6 +164,30 @@
   margin-bottom: var(--space-1);
 }
 :where(.achievements[data-layout="c15"]) .c15-part__head .c15-part__label { margin: 0; }
+
+/*
+ * Boxed (review option): each part in a block like the Usage tab's, with the
+ * shared block corner, border, inset and gap, and its word as the block's
+ * head. Rows keep their hover plates inside the block.
+ */
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part,
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part + .c15-part {
+  margin-top: var(--block-gap);
+  padding: var(--block-pad-top) var(--block-pad) var(--space-1);
+  border: 1px solid var(--line);
+  border-radius: var(--block-radius);
+  background: var(--surface);
+}
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part:first-child { margin-top: var(--space-4); }
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part__label {
+  margin-bottom: var(--space-2);
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+  font-size: var(--type-overline-size);
+  font-weight: 600;
+  line-height: var(--block-title-leading);
+}
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-part__head .c15-part__label { margin: 0; }
+:where(.achievements[data-layout="c15"]) .c15[data-boxed] .c15-list { margin-inline: calc((var(--block-pad) - var(--space-1)) * -1); }
 /* The menu is taller than the word; the word sits on its centre line, and the rows below keep their place. */
 :where(.achievements[data-layout="c15"]) .c15-part__head:has(.c15-sort) { margin-block: calc(var(--space-1) * -1) 0; }
 
@@ -193,6 +217,9 @@
 :where(.achievements[data-layout="c15"]) .c15-item[data-open="true"] { background: var(--c15-open-plate); }
 :where(.achievements[data-layout="c15"]) .c15-item[data-open="true"]::before,
 :where(.achievements[data-layout="c15"]) .c15-item[data-open="true"] + .c15-item::before { opacity: 0; }
+/* A pointed-at row's plate stands on its own: the hairlines above and below it step aside. */
+:where(.achievements[data-layout="c15"]) .c15-item:has(> .c15-row:hover)::before,
+:where(.achievements[data-layout="c15"]) .c15-item:has(> .c15-row:hover) + .c15-item::before { opacity: 0; }
 
 :where(.achievements[data-layout="c15"]) .c15-row {
   display: grid;
