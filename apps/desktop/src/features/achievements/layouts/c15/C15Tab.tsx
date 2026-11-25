@@ -3,6 +3,7 @@ import { ModalPresence } from "../../../../components/ModalPresence";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import type { AchievementId } from "../../achievementCatalog";
+import { reportAchievementDetailOpened } from "../../achievementAnalytics";
 import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
@@ -130,6 +131,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const open = (id: AchievementId) => {
     setPopupId(id);
     choose(id);
+    reportAchievementDetailOpened();
   };
   const popupItem = popupId ? items.find((item) => item.definition.id === popupId) ?? null : null;
   const row = (item: AchievementItem, entry?: AlmostThereEntry) => (

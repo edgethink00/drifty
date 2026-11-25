@@ -3,8 +3,11 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
+import { orderNewAchievements } from "./achievementAnnouncement";
 import { c15Layout } from "./layouts/c15";
 import type { AchievementItem } from "./useAchievements";
+
+export { orderNewAchievements };
 
 export type AchievementUnlockDialogProps = {
   /** Achievements not shown before, most notable first. */
@@ -14,12 +17,6 @@ export type AchievementUnlockDialogProps = {
   readonly onClose: () => void;
   readonly onView: () => void;
 };
-
-/** Order newly earned achievements so the most notable leads the card. */
-export function orderNewAchievements(items: readonly AchievementItem[]): AchievementItem[] {
-  return [...items].sort((left, right) => right.definition.weight - left.definition.weight
-    || (right.earned?.lastDay ?? "").localeCompare(left.earned?.lastDay ?? ""));
-}
 
 /** Opens with the app when achievements arrived since it was last shown. */
 export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: AchievementUnlockDialogProps) {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACHIEVEMENT_GROUPS, type AchievementGroup, type AchievementId } from "./achievementCatalog";
+import { reportAchievementsTabOpened } from "./achievementAnalytics";
 import {
   isAchievementDesignReview,
   REVIEW_HOLDING_COUNT,
@@ -78,6 +79,10 @@ export function useAchievementsTab({ snapshot, onRetry, onOpenDay, onSeen }: Ach
   // Remember what was new when the tab opened so it stays marked during this visit.
   const newOnArrival = useRef<Set<AchievementId>>(new Set(unannounced));
   const [selectedId, setSelectedId] = useState<AchievementId>(() => initialAchievementSelection(items, unannounced));
+  // Opening the tab counts once a day.
+  useEffect(() => {
+    reportAchievementsTabOpened();
+  }, []);
   useEffect(() => {
     if (unannounced.length === 0) return;
     for (const id of unannounced) newOnArrival.current.add(id);
