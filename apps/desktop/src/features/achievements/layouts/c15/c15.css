@@ -848,8 +848,21 @@
 :where(.c15-pop) .c15-pop__share { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
 :where(.c15-pop) :is(.c15-pop__name, .c15-pop__condition, .c15-pop__share):lang(ko) { word-break: keep-all; }
 
-:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); }
-:where(.c15-pop) .c15-pop__label { margin: 0; color: var(--text-soft); font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
+/*
+ * Parts below the title are set off by a hairline. Their headings ("기록",
+ * "얻으려면") only repeat what the facts and the bar already say, so they are
+ * kept for screen readers alone.
+ */
+:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-5); border-top: 1px solid var(--line); }
+:where(.c15-pop) .c15-pop__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 :where(.c15-pop) .c15-pop__note { margin: 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
 
 :where(.c15-pop) .c15-pop__progress { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -899,11 +912,7 @@
 :where(.c15-spin)[data-live] .c15-spin__canvas { opacity: 1; }
 :where(.c15-spin) .c15-spin__canvas[data-dragging] { cursor: grabbing; }
 
-/*
- * Popup 2: the medal large and centred above the title, everything under it
- * centred on one axis. Parts below are set off by a hairline rather than a
- * heading; the headings stay for screen readers.
- */
+/* Popup 2: the medal large and centred above the title, everything under it centred on one axis. */
 :where(.c15-pop)[data-look="stage"] { width: min(30rem, calc(100vw - 4rem)); gap: var(--space-5); }
 :where(.c15-pop)[data-look="stage"] .c15-pop__head {
   grid-template-columns: minmax(0, 1fr);
@@ -915,20 +924,7 @@
 /* The medal's picture has air round it for turning; pull the text up into that air. */
 :where(.c15-pop)[data-look="stage"] .c15-pop__medal { --c15-medal: 11rem; width: 11rem; height: 11rem; margin: calc(var(--space-2) * -1) 0 calc(var(--space-1) * -1); }
 :where(.c15-pop)[data-look="stage"] .c15-pop__title { align-items: center; max-width: 24rem; }
-:where(.c15-pop)[data-look="stage"] .c15-pop__part {
-  align-items: center;
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--line);
-  text-align: center;
-}
-:where(.c15-pop)[data-look="stage"] .c15-pop__label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { align-items: center; text-align: center; }
 /*
  * First, latest and how many: the outer two in equal columns, so the middle
  * one, with the figure under it on one line, sits on the centre line.
