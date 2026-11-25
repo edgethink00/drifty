@@ -1,0 +1,77 @@
+import { localeForDisplayLanguage } from "../../lib/formatting";
+import type { DisplayLanguage } from "../localization/languagePreference";
+import type { Translate } from "../localization/translate";
+import type { TranslationKey } from "../localization/translations";
+import { formatRarityBasis, formatRarityPercent, type AchievementRarity } from "./achievementRarity";
+import type { AchievementItem } from "./useAchievements";
+
+export function achievementName(item: AchievementItem, t: Translate): string {
+  return item.definition.hidden && !item.earned
+    ? t("achievements.hiddenName")
+    : t(("achievements." + item.definition.id + ".name") as TranslationKey);
+}
+
+export function achievementCondition(item: AchievementItem, t: Translate): string {
+  return item.definition.hidden && !item.earned
+    ? t("achievements.hiddenCondition")
+    : t(("achievements." + item.definition.id + ".condition") as TranslationKey);
+}
+
+export function formatAchievementDay(day: string, language: DisplayLanguage, today = new Date()): string {
+  const [year, month, date] = day.split("-").map(Number);
+  if (!year || !month || !date) return day;
+  const options: Intl.DateTimeFormatOptions = year === today.getFullYear()
+    ? { month: "long", day: "numeric" }
+    : { year: "numeric", month: "long", day: "numeric" };
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), options).format(new Date(year, month - 1, date, 12));
+}
+
+/** The day an earned achievement points to: the latest time for repeatable ones, else the day it was reached. */
+export function achievementDay(item: AchievementItem): string | null {
+  if (!item.earned) return null;
+  return item.definition.repeatable ? item.earned.lastDay : item.earned.firstDay;
+}
+
+export function timesLabel(count: number, t: Translate): string {
+  return count === 1 ? t("achievements.once") : t("achievements.times", { count });
+}
+
+export function daysLabel(count: number, t: Translate): string {
+  return count === 1 ? t("achievements.dayOne") : t("achievements.days", { count });
+}
+
+/** Rarity that may be shown: none without a share of users, and none for a hidden achievement until it is earned. */
+export function shownRarity(item: AchievementItem): AchievementRarity | null {
+  if (!item.rarity) return null;
+  return item.definition.hidden && !item.earned ? null : item.rarity;
+}
+
+/**
+ * Below this share a rarity could read as "N of M people" rather than a
+ * percentage. Off for now (owner decision 2026-11-26): every rarity reads as
+ * a percentage until real holder counts exist; set this to 10 to bring the
+ * "only N of M" wording back for the rare ones.
+ */
+const FEW_HOLDERS_BELOW_PERCENT = 0;
+
+/** People in the sample who hold the achievement; the person reading it is always one of them. */
+export function rarityHolders(rarity: AchievementRarity): number {
+  return Math.max(1, Math.round((rarity.percent / 100) * rarity.basisCount));
+}
+
+export function rarityReadsAsFew(rarity: AchievementRarity): boolean {
+  return rarity.percent < FEW_HOLDERS_BELOW_PERCENT;
+}
+
+export function raritySentence(rarity: AchievementRarity, t: Translate, language: DisplayLanguage, place: "tab" | "card"): string {
+  if (rarityReadsAsFew(rarity)) {
+    return t(place === "tab" ? "achievements.rarity.few" : "achievements.rarity.cardFew", {
+      count: formatRarityBasis(rarityHolders(rarity), language),
+      basis: formatRarityBasis(rarity.basisCount, language),
+    });
+  }
+  return t(place === "tab" ? "achievements.rarity.detail" : "achievements.rarity.cardShare", {
+    percent: formatRarityPercent(rarity.percent, language),
+  });
+}
+

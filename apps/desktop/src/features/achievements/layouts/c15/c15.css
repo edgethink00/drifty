@@ -1,0 +1,622 @@
+/* Layout c15: one list of big-medal rows across the page, ending where the tab
+   rule above ends. The medal leads each row, name over condition beside it,
+   one strong fact on the right edge. */
+
+.achievements:where([data-layout="c15"]) {
+  --c15-measure: none;
+  /* The baked medal keeps a tenth clear on each side: a 5.875rem box shows a 76px medal. */
+  --c15-medal: 5.875rem;
+  --c15-medal-trim: calc(var(--c15-medal) * -0.1);
+  /* The medal's column is narrowed by that clear edge and the image hangs into the row's padding,
+     so the visible medal starts on the page's content edge, under the title and labels. */
+  --c15-medal-col: calc(var(--c15-medal) + var(--c15-medal-trim));
+  --c15-fact: 6.5rem;
+  --c15-gap: var(--space-4);
+  --c15-pad: var(--space-3);
+  --c15-hover-plate: color-mix(in srgb, var(--text) 3%, transparent);
+  --c15-press-plate: color-mix(in srgb, var(--text) 7%, transparent);
+  --c15-open-plate: color-mix(in srgb, var(--text) 4%, transparent);
+  /* A card sets itself off from the page by a faint fill, as Search Console's do. */
+  --c15-card: color-mix(in srgb, var(--text) 3%, var(--surface));
+  --c15-silver: var(--text-soft);
+  --c15-gold: var(--gold);
+  min-width: 0;
+}
+
+:root[data-theme="dark"] .achievements:where([data-layout="c15"]) {
+  --c15-hover-plate: color-mix(in srgb, var(--text) 4%, transparent);
+  --c15-press-plate: color-mix(in srgb, var(--text) 9%, transparent);
+  --c15-open-plate: color-mix(in srgb, var(--text) 5%, transparent);
+  --c15-card: color-mix(in srgb, var(--text) 4.5%, var(--surface));
+  --c15-gold: var(--gold-wash);
+}
+
+:where(.achievements[data-layout="c15"]) .c15 {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--c15-measure);
+  min-width: 0;
+  padding-bottom: var(--space-6);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-medal {
+  display: block;
+  flex: none;
+  width: var(--c15-medal);
+  height: var(--c15-medal);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-medal > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-dot {
+  display: inline-block;
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  vertical-align: 0.1em;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-bar {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--line-strong);
+  overflow: hidden;
+}
+
+/* Filled in the colour of the medal the bar leads to, where a row gives one. */
+:where(.achievements[data-layout="c15"]) .c15-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c15-bar-fill, var(--text-soft));
+}
+
+/* Head: only the error notice now; the loading state reuses the summary line for its status. */
+:where(.achievements[data-layout="c15"]) .c15-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-5);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-5);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-summary__count {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c15"]) .c15--loading .c15-summary__count {
+  color: var(--text-soft);
+  font-weight: 400;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 0 auto;
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-failed {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  color: var(--warn);
+  font-size: var(--text-md);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-failed p { margin: 0; }
+
+/* The parts of the list: a quiet word over each, no rule. */
+:where(.achievements[data-layout="c15"]) .c15-part { margin-top: var(--space-6); }
+:where(.achievements[data-layout="c15"]) .c15-head + .c15-part,
+:where(.achievements[data-layout="c15"]) .c15-failed + .c15-part { margin-top: var(--space-5); }
+
+:where(.achievements[data-layout="c15"]) .c15-part__label {
+  margin: 0 0 var(--space-1);
+  color: var(--text-soft);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/*
+ * Each achievement in a card of its own under its
+ * part's word, blocks a block gap apart, hairlines gone. The hover plate is
+ * the card itself.
+ */
+:where(.achievements[data-layout="c15"]) .c15 .c15-part { margin-top: var(--space-6); }
+/*
+ * The first part's word starts where the Usage tab's first block does, just
+ * under the tab rule, and every word sits close over its own cards, so it
+ * reads as their head and not as a line floating between rule and cards.
+ * It takes the shared block-head type, as the Usage tab's block titles do.
+ */
+:where(.achievements[data-layout="c15"]) .c15 .c15-part:first-child { margin-top: 0; }
+:where(.achievements[data-layout="c15"]) .c15 .c15-part__label {
+  margin: 0 0 var(--space-2);
+  padding-left: 1px;
+  color: color-mix(in srgb, var(--text-soft) 86%, var(--text));
+  font-size: var(--type-overline-size);
+  font-weight: 600;
+  line-height: var(--block-title-leading);
+}
+:where(.achievements[data-layout="c15"]) .c15 .c15-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--block-gap);
+  margin: 0;
+}
+:where(.achievements[data-layout="c15"]) .c15 .c15-item {
+  border: 1px solid var(--line);
+  border-radius: var(--block-radius);
+  background: var(--surface);
+}
+:where(.achievements[data-layout="c15"]) .c15 .c15-item + .c15-item::before { display: none; }
+:where(.achievements[data-layout="c15"]) .c15 .c15-row {
+  padding: var(--space-3) var(--block-pad);
+  border-radius: calc(var(--block-radius) - 1px);
+}
+:where(.achievements[data-layout="c15"]) .c15 .c15-item {
+  border-color: transparent;
+  background: var(--c15-card);
+}
+
+/* Rows reach past the content edge by their padding, so their plates hang outside it and their medals sit on it. */
+:where(.achievements[data-layout="c15"]) .c15-list {
+  margin: 0 calc(var(--c15-pad) * -1);
+  padding: 0;
+  list-style: none;
+}
+
+/* Rows sit on hairlines. */
+:where(.achievements[data-layout="c15"]) .c15-item {
+  position: relative;
+  border-radius: var(--radius-md);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-item + .c15-item::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: var(--c15-pad);
+  left: calc(var(--c15-pad) + var(--c15-medal-col) + var(--c15-gap));
+  height: 1px;
+  background: var(--line);
+}
+/* A pointed-at row's plate stands on its own: the hairlines above and below it step aside. */
+:where(.achievements[data-layout="c15"]) .c15-item:has(> .c15-row:hover)::before,
+:where(.achievements[data-layout="c15"]) .c15-item:has(> .c15-row:hover) + .c15-item::before { opacity: 0; }
+
+:where(.achievements[data-layout="c15"]) .c15-row {
+  display: grid;
+  grid-template-columns: var(--c15-medal-col) minmax(0, 1fr) var(--c15-fact) 1rem;
+  column-gap: var(--c15-gap);
+  align-items: center;
+  width: 100%;
+  min-height: calc(var(--c15-medal) + var(--c15-medal-trim) * 2 + var(--space-2) * 2);
+  padding: var(--space-2) var(--c15-pad);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row:hover { background: var(--c15-hover-plate); }
+:where(.achievements[data-layout="c15"]) .c15-row:active { background: var(--c15-press-plate); }
+
+:where(.achievements[data-layout="c15"]) .c15-row__medal {
+  margin: var(--c15-medal-trim) 0 var(--c15-medal-trim) var(--c15-medal-trim);
+  transition: transform var(--transition-base);
+}
+
+/* Not yet earned, the medal steps down to about 64px inside the same box, so earned ones lead. */
+:where(.achievements[data-layout="c15"]) .c15-item[data-state="locked"] .c15-row__medal > img { transform: scale(0.84); }
+
+:where(.achievements[data-layout="c15"]) .c15-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__name {
+  min-width: 0;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-item[data-state="locked"] .c15-row__name {
+  color: var(--text-soft);
+  font-weight: 500;
+}
+
+/* A goal under way is named in full ink, at the same size as every other name. */
+:where(.achievements[data-layout="c15"]) .c15-item[data-almost-there-id] .c15-row__name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__times {
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__new {
+  display: inline-flex;
+  align-items: center;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__condition {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--text-soft);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__group {
+  flex: none;
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+:root[data-theme="dark"] :where(.achievements[data-layout="c15"]) .c15-row__group { color: var(--text-muted); }
+
+:where(.achievements[data-layout="c15"]) .c15-row__group::before {
+  content: "·";
+  margin-right: var(--space-2);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__meaning {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) :is(.c15-row__name, .c15-row__meaning):lang(ko) { word-break: keep-all; }
+
+/* Under way: a bar across the whole text column, its share and what is left at its two ends. */
+:where(.achievements[data-layout="c15"]) .c15-row__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  margin: var(--space-2) 0 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__ends {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__share {
+  flex: none;
+  color: var(--text);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__left {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The right edge: one figure, a small word under it. */
+:where(.achievements[data-layout="c15"]) .c15-row__fact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__figure {
+  max-width: 100%;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 500;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__fact[data-kind="day"] .c15-row__figure { font-size: var(--text-lg); }
+:where(.achievements[data-layout="c15"]) .c15-row__fact[data-notable="true"] .c15-row__figure { color: var(--c15-gold); }
+:where(.achievements[data-layout="c15"]) .c15-item[data-state="locked"] .c15-row__figure { color: var(--text-soft); }
+
+:where(.achievements[data-layout="c15"]) .c15-row__word {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row__chevron {
+  justify-self: end;
+  color: var(--text-faint);
+  transition: transform var(--transition-base), color var(--transition-fast);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-row:hover .c15-row__chevron { color: var(--text-soft); }
+/* A row that opens a popup points sideways instead of down. */
+:where(.achievements[data-layout="c15"]) .c15-row[aria-haspopup="dialog"] .c15-row__chevron { transform: rotate(-90deg); }
+
+:where(.achievements[data-layout="c15"]) .c15-footnote {
+  margin: var(--space-5) 0 0;
+  color: var(--text-soft);
+  font-size: var(--text-xs);
+}
+
+.achievements[data-layout="c15"] :is(.c15-row):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 0;
+}
+
+/* Loading: the same rows as still shapes. */
+:where(.achievements[data-layout="c15"]) .c15-row--skeleton { cursor: default; }
+:where(.achievements[data-layout="c15"]) .c15-row--skeleton:hover { background: transparent; }
+
+:where(.achievements[data-layout="c15"]) .c15-skeleton {
+  display: block;
+  border-radius: var(--radius-xs);
+  background: var(--surface-strong);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-skeleton--medal {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius-pill);
+  transform: scale(0.78);
+}
+
+:where(.achievements[data-layout="c15"]) .c15-skeleton--name { width: 9rem; height: 1.125rem; }
+:where(.achievements[data-layout="c15"]) .c15-skeleton--line { width: 16rem; max-width: 100%; height: 0.875rem; margin-top: var(--space-1); }
+
+/* The smallest window: the list takes the full width, the medal stays large. */
+@media (max-width: 1100px) {
+  .achievements:where([data-layout="c15"]) {
+    --c15-measure: none;
+    --c15-medal: 5.25rem;
+    --c15-fact: 5.75rem;
+    --c15-gap: var(--space-3);
+    --c15-pad: var(--space-2);
+    --c15-day-cols: 5;
+  }
+
+  :where(.achievements[data-layout="c15"]) .c15-row { padding-block: var(--space-2); }
+  :where(.achievements[data-layout="c15"]) .c15-row__name { font-size: var(--text-lg); }
+  :where(.achievements[data-layout="c15"]) .c15-row__figure { font-size: var(--text-xl); }
+}
+
+@keyframes c15-open-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Reduced motion: rows open at once, medals stay still. */
+@media (prefers-reduced-motion: reduce) {
+  :where(.achievements[data-layout="c15"]) :is(.c15-row, .c15-row__medal, .c15-row__chevron) { transition: none; }
+}
+
+/* Without a summary line the list starts with its first part. */
+:where(.achievements[data-layout="c15"]) .c15 > .c15-part:first-child { margin-top: 0; }
+
+/* ---- Popup: an achievement opened from its card ---- */
+:where(.c15-pop) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: min(34rem, calc(100vw - 4rem));
+  max-height: calc(100vh - 4rem);
+  overflow: auto;
+}
+
+:where(.c15-pop) .c15-pop__head {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-5);
+  padding-right: var(--space-6);
+}
+
+:where(.c15-pop) .c15-pop__medal { --c15-medal: 7rem; width: 7rem; height: 7rem; }
+:where(.c15-pop) .c15-pop__medal img { width: 100%; height: 100%; object-fit: contain; }
+
+:where(.c15-pop) .c15-pop__title { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+:where(.c15-pop) .c15-pop__group { margin: 0; color: var(--text-soft); font-size: var(--text-xs); line-height: 1.4; }
+:where(.c15-pop) .c15-pop__name { margin: 0; color: var(--text); font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; line-height: 1.25; }
+:where(.c15-pop) .c15-pop__condition { margin: 0; color: var(--text-soft); font-size: var(--text-md); line-height: 1.45; }
+:where(.c15-pop) .c15-pop__share { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
+:where(.c15-pop) :is(.c15-pop__name, .c15-pop__condition, .c15-pop__share):lang(ko) { word-break: keep-all; }
+
+/*
+ * Parts below the title are set apart by space. Their headings ("기록",
+ * "얻으려면") only repeat what the facts and the bar already say, so they are
+ * kept for screen readers alone.
+ */
+/* Parts below the title are set apart by space alone. */
+:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); padding-top: var(--space-2); }
+/*
+ * The popup's rhythm in two steps: lines within a group sit 6px apart (a fact's
+ * label, value and note 4px), and the groups themselves (medal, title, record
+ * or progress, the popup's foot) sit about 24px apart, the popup's own inset.
+ */
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { padding-top: 0; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__title { gap: calc(var(--space-1) * 1.5); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__share { margin-top: 0; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact,
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact > dd { gap: var(--space-1); }
+/* The medal at the bar's end overhangs the bar instead of making its line taller, so the bar keeps the group's spacing. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__progress { gap: calc(var(--space-1) * 1.5); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__goal { margin-block: calc(var(--space-2) * -1); }
+:where(.c15-pop) .c15-pop__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+:where(.c15-pop) .c15-pop__note { margin: 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
+
+:where(.c15-pop) .c15-pop__progress { display: flex; flex-direction: column; gap: var(--space-2); }
+:where(.c15-pop) .c15-pop__progress-text { color: var(--text); font-size: var(--text-md); font-weight: 500; }
+:where(.c15-pop) .c15-pop__best { margin: 0; }
+:where(.c15-pop) .c15-pop__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+:where(.c15-pop) .c15-pop__link:hover { color: var(--text); }
+/* The bar runs into the medal it leads to. */
+:where(.c15-pop) .c15-pop__track { display: flex; align-items: center; gap: var(--space-2); }
+:where(.c15-pop) .c15-pop__track > .c15-bar { flex: 1; }
+:where(.c15-pop) .c15-pop__goal { width: 1.75rem; height: 1.75rem; flex: none; object-fit: contain; }
+/* The record: first and latest day, how many times; the latest opens its day. */
+:where(.c15-pop) .c15-pop__facts { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-8); margin: 0; }
+:where(.c15-pop) .c15-pop__fact { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+:where(.c15-pop) .c15-pop__fact > dt { color: var(--text-soft); font-size: var(--text-xs); line-height: 1.4; }
+:where(.c15-pop) .c15-pop__fact > dd { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+:where(.c15-pop) .c15-pop__fact-value { color: var(--text); font-size: var(--text-md); font-weight: 500; line-height: 1.4; font-variant-numeric: tabular-nums; }
+:where(.c15-pop) .c15-pop__fact-value.c15-pop__link { color: var(--text); font-size: var(--text-md); }
+:where(.c15-pop) .c15-pop__fact-note { color: var(--text-soft); font-size: var(--text-sm); line-height: 1.4; }
+
+/* The medal to hold: the baked image until the live one has drawn, then the live one. */
+:where(.c15-spin) { position: relative; display: block; }
+:where(.c15-spin) > img { transition: opacity 120ms linear; }
+:where(.c15-spin) .c15-spin__canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 160ms linear;
+  cursor: grab;
+  touch-action: none;
+}
+:where(.c15-spin)[data-live] > img { opacity: 0; }
+:where(.c15-spin)[data-live] .c15-spin__canvas { opacity: 1; }
+:where(.c15-spin) .c15-spin__canvas[data-dragging] { cursor: grabbing; }
+
+/* The popup: the medal large and centred above the title, everything under it centred on one axis. */
+:where(.c15-pop)[data-look="stage"] { width: min(30rem, calc(100vw - 4rem)); gap: var(--space-5); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__head {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6);
+  text-align: center;
+}
+/* The medal's picture has air round it for turning; pull the text up into that air. */
+/* The medal's top sits level with the close button; its picture's air above is pulled into the popup's inset. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__medal { --c15-medal: 11rem; width: 11rem; height: 11rem; margin: calc(var(--space-4) * -1) 0 calc(var(--space-1) * -1); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__title { align-items: center; max-width: 24rem; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__part { align-items: center; text-align: center; }
+/*
+ * First, latest and how many: the outer two in equal columns, so the middle
+ * one, with the figure under it on one line, sits on the centre line.
+ */
+:where(.c15-pop)[data-look="stage"] .c15-pop__facts {
+  display: grid;
+  width: 100%;
+  max-width: 24rem;
+  gap: var(--space-4);
+}
+:where(.c15-pop)[data-look="stage"] .c15-pop__facts:has(> :nth-child(3)) { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact-note { white-space: nowrap; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact { align-items: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__fact > dd { align-items: center; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__progress { width: 100%; max-width: 20rem; align-items: center; }
+/* A spacer as wide as the medal at the bar's end keeps the bar itself on the centre line. */
+:where(.c15-pop)[data-look="stage"] .c15-pop__track { align-self: stretch; }
+:where(.c15-pop)[data-look="stage"] .c15-pop__track:has(.c15-pop__goal)::before { content: ""; width: 1.75rem; flex: none; }
