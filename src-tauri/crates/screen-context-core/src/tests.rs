@@ -1409,3 +1409,100 @@ fn deletion_pause_survives_reopen_and_reapplying_saved_policy() {
     wait_idle(&service);
     assert_eq!(service.status().accepted, 1);
 }
+
+
+pub(crate) fn screen_png(width: u32, height: u32) -> Vec<u8> {
+    // A screen-like image with photographic noise, where PNG is large and WebP is not.
+    let mut pixels = Vec::with_capacity((width * height * 3) as usize);
+    let mut seed = 0x2545_f491_u32;
+    for y in 0..height {
+        for x in 0..width {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            let noise = (seed >> 27) as u8;
+            let ink = (x / 3 + y / 7) % 5 == 0;
+            pixels.extend_from_slice(&if ink { [20, 20, 24] } else { [(x % 200) as u8 + noise, (y % 200) as u8 + noise, 180 + noise] });
+        }
+    }
+    let mut data = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut data, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.write_header().unwrap().write_image_data(&pixels).unwrap();
+    }
+    data
+}
+
+pub(crate) fn month(gb: u64) -> Retention {
+    Retention { ttl: ImageRetention::Month.ttl(), max_bytes: gb << 30 }
+}
+
+const DAY_MS: i64 = 86_400_000;
+
+#[test]
+fn screens_kept_past_a_day_are_saved_as_webp_and_read_back() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut store = open(&temp.path().join("webp"), 1_000);
+    let captured = Frame::from_png(screen_png(320, 200)).unwrap();
+    let png_len = captured.bytes().len();
+    // A day keeps the screen as captured.
+    let day = store
+        .append(store.generation(), NewEvidence { frame: captured, ..evidence(1_000) }, true, 1_000)
+        .unwrap();
+    assert_eq!(store.read_frame(day, 1_001).unwrap().unwrap().mime_type(), "image/png");
+    store.set_retention(month(5), 1_002).unwrap();
+    let kept = NewEvidence { frame: Frame::from_png(screen_png(320, 200)).unwrap(), ..evidence(1_003) };
+    let id = store.append(store.generation(), kept, true, 1_003).unwrap();
+    let saved = store.read_frame(id, 1_004).unwrap().unwrap();
+    assert_eq!(saved.mime_type(), "image/webp");
+    assert!(saved.bytes().len() < png_len);
+    // AI inputs still receive a PNG of the same size.
+    let again = Frame::from_png(saved.png_bytes().unwrap().to_vec()).unwrap();
+    assert_eq!((again.width(), again.height()), (320, 200));
+    assert_eq!(saved.into_png().unwrap().mime_type(), "image/png");
+}
+
+#[test]
+fn a_shorter_period_removes_older_screens_at_once_and_a_longer_one_keeps_them() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut store = open(&temp.path().join("shorter"), 1_000);
+    store.set_retention(month(5), 1_000).unwrap();
+    let old = store.append(store.generation(), evidence(1_000), false, 1_000).unwrap();
+    let now = 1_000 + 3 * DAY_MS;
+    let recent = store.append(store.generation(), evidence(now), false, now).unwrap();
+    assert!(store.read_metadata(old, now + 1).unwrap().is_some());
+    store.set_retention(Retention::default(), now + 2).unwrap();
+    assert!(store.read_metadata(old, now + 3).unwrap().is_none());
+    assert!(store.read_metadata(recent, now + 3).unwrap().is_some());
+    assert!(store.next_expiry_ms().unwrap() <= now + DAY_MS);
+}
+
+#[test]
+fn opening_with_the_default_policy_keeps_a_longer_period_until_it_is_applied() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("reopen");
+    let id = {
+        let mut store = open(&root, 1_000);
+        store.set_retention(month(5), 1_000).unwrap();
+        store.append(store.generation(), evidence(1_000), false, 1_000).unwrap()
+    };
+    let later = 1_000 + 2 * DAY_MS;
+    let mut store = open(&root, later);
+    assert!(store.read_metadata(id, later).unwrap().is_some());
+    store.set_retention(month(5), later).unwrap();
+    assert!(store.read_metadata(id, later + 1).unwrap().is_some());
+    store.set_retention(Retention::default(), later + 2).unwrap();
+    assert!(store.read_metadata(id, later + 3).unwrap().is_none());
+}
+
+#[test]
+fn a_larger_storage_limit_raises_the_record_and_catalog_caps() {
+    assert_eq!(Retention::default().record_cap(), DEFAULT_RECORDS);
+    assert_eq!(Retention::default().catalog_cap(), DEFAULT_CATALOG_BYTES);
+    assert_eq!(month(5).record_cap(), 52_428);
+    assert_eq!(month(50).record_cap(), MAX_RECORDS_LIMIT);
+    assert_eq!(month(50).catalog_cap(), MAX_CATALOG_BYTES_LIMIT);
+    assert!(month(50).validate().is_ok());
+    assert!(month(51).validate().is_err());
+    assert!(!Retention::default().compresses() && month(1).compresses());
+}

@@ -1,4 +1,6 @@
 const PHASES = ["unavailable", "extracting", "limited", "retrying", "pending", "failed", "ready", "waiting_for_source"] as const;
+/** What memory read stays this many hours; 0 keeps it until deleted. 1 and 6 hours are an earlier version's choices. */
+export const MEMORY_RETENTION_HOURS: readonly number[] = [1, 6, 24, 168, 720, 0];
 export type MemoryDiagnostics = {
   phase: typeof PHASES[number];
   as_of_ms: number;
@@ -82,7 +84,7 @@ function route(raw: unknown): MemoryRoute | null {
 export function decodeMemoryStatus(raw: unknown): MemoryStatus {
   const value = object(raw), prefs = object(value.preferences), status = value.status === null ? {} : object(value.status);
   if (typeof value.supported !== "boolean" || typeof prefs.enabled !== "boolean" || typeof prefs.retentionHours !== "number"
-    || !Number.isInteger(prefs.retentionHours) || prefs.retentionHours < 1 || prefs.retentionHours > 24) throw new Error("memory_unavailable");
+    || !MEMORY_RETENTION_HOURS.includes(prefs.retentionHours)) throw new Error("memory_unavailable");
   const workSites = prefs.workSites === undefined ? [] : prefs.workSites;
   const apps = prefs.apps === undefined ? [] : prefs.apps;
   if (!Array.isArray(apps) || apps.length > 64 || apps.some((app) => typeof app !== "string" || !app || app.length > 64)) throw new Error("memory_unavailable");
@@ -101,6 +103,16 @@ export function decodeMemoryStatus(raw: unknown): MemoryStatus {
 export function decodeMemoryForgotten(raw: unknown): true {
   if (object(raw).forgotten !== true) throw new Error("memory_unavailable");
   return true;
+}
+
+/** An original memory still keeps; its screen image may be gone. */
+export type MemoryOriginal = { readonly id: string; readonly app: string; readonly text: string; readonly observedAtMs: number };
+export function decodeMemoryOriginal(raw: unknown): MemoryOriginal | null {
+  if (raw === null) return null;
+  const value = object(raw);
+  if (typeof value.source_id !== "string" || typeof value.app !== "string" || typeof value.text !== "string"
+    || typeof value.observed_at_ms !== "number" || value.text.length > 4000) throw new Error("memory_unavailable");
+  return { id: value.source_id, app: value.app, text: value.text, observedAtMs: value.observed_at_ms };
 }
 
 export type MemoryWikiLine = {

@@ -4,6 +4,8 @@ use ring::digest;
 use std::collections::BTreeSet;
 
 pub const MAX_MEMORY_SOURCES: usize = 500;
+/// Memory's text retention reaches "until deleted": about a hundred years in hours.
+pub const MAX_MEMORY_HOURS: u32 = 876_000;
 
 /// Scan newest-first pages and keep the newest currently supported observation
 /// for each exact (app, document, text source, text) group. This matches the
@@ -33,7 +35,7 @@ impl MemoryApps {
 
 impl MemorySourceSelection {
     pub fn new(allowed: BTreeSet<String>, hours: u32) -> Result<Self, Error> {
-        if allowed.is_empty() || allowed.len() > 64 || !(1..=24).contains(&hours) {
+        if allowed.is_empty() || allowed.len() > 64 || !(1..=MAX_MEMORY_HOURS).contains(&hours) {
             return Err(Error::Invalid("memory selection settings"));
         }
         Ok(Self {
@@ -47,7 +49,7 @@ impl MemorySourceSelection {
     /// Every app's documents except those the person excluded. Exclusions are
     /// compared case-insensitively by bundle identifier.
     pub fn every_app(excluded: &BTreeSet<String>, hours: u32) -> Result<Self, Error> {
-        if excluded.len() > 2048 || !(1..=24).contains(&hours) {
+        if excluded.len() > 2048 || !(1..=MAX_MEMORY_HOURS).contains(&hours) {
             return Err(Error::Invalid("memory selection settings"));
         }
         Ok(Self {

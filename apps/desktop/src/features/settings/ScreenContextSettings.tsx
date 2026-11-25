@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { ScreenEvidenceDeletion } from "@drifty/domain";
+import type { ScreenCapturePreferences, ScreenEvidenceDeletion, ScreenImageRetention, ScreenStorageLimitGb } from "@drifty/domain";
 import { ModalPresence } from "../../components/ModalPresence";
 import { useLocalization } from "../localization/LocalizationContext";
 import { localeForDisplayLanguage } from "../../lib/formatting";
@@ -13,7 +13,24 @@ import { EMPTY_SCREEN_PREFERENCES as EMPTY, isMacScreenRecording, replayAppNames
 import { ScreenReplayViewer } from "../screen-context/ScreenReplayViewer";
 import { useScreenDeletionPreview, type ScreenDeleteRange } from "../screen-context/useScreenDeletionPreview";
 import { ScreenRecordingDeleteModal } from "./ScreenRecordingDeleteModal";
+import { SettingsSelect } from "./SettingsSelect";
 import "../screen-context/screen-context.css";
+
+const RETENTIONS: readonly ScreenImageRetention[] = ["day", "week", "month", "unlimited"];
+const LIMITS: readonly ScreenStorageLimitGb[] = [1, 5, 10, 20, 50];
+/** A longer period needs room: choosing one raises a smaller storage limit to this. */
+const ROOM_FOR: Readonly<Record<ScreenImageRetention, ScreenStorageLimitGb>> = { day: 1, week: 5, month: 20, unlimited: 20 };
+
+/** Saved screens keep 24 hours and 1 GB unless the person chose otherwise. */
+function screenRetention(preferences: ScreenCapturePreferences): { readonly retention: ScreenImageRetention; readonly limit: ScreenStorageLimitGb } {
+  return { retention: preferences.retention ?? "day", limit: preferences.maxStorageGb ?? 1 };
+}
+
+function storedSize(bytes: number, locale: string): string {
+  const gb = bytes >= 1024 ** 3;
+  const value = new Intl.NumberFormat(locale, { maximumFractionDigits: gb ? 1 : 0 }).format(bytes / (gb ? 1024 ** 3 : 1024 ** 2));
+  return value + (gb ? "GB" : "MB");
+}
 
 function errorMessage(error: string | null, t: ReturnType<typeof useLocalization>["t"]): string | null {
   return error === "screen_context_storage_full" ? t("screenContext.storageFull")
@@ -97,7 +114,8 @@ export function ScreenRecordingPermissionRow({ client, accessibilityGranted = nu
         <span className="ui-badge ui-badge--quiet settings-permission-requirement">{t("common.optional")}</span>
       </div>
       <div className="desc">
-        {t(current?.generalCaptureSupported ? "screenRecording.permission.descGeneral" : mac ? "screenRecording.permission.descMac" : "screenRecording.permission.descWindows", { apps })}
+        {t(current?.generalCaptureSupported ? "screenRecording.permission.descGeneral" : mac ? "screenRecording.permission.descMac" : "screenRecording.permission.descWindows",
+          { apps, keep: t(`screenRecording.keepSentence.${screenRetention(preferences).retention}`) })}
         {preferences.enabled ? <> <button type="button" className="settings-inline-link settings-permission-link" disabled={busy}
           onClick={() => { setDenied(false); void configure({ ...preferences, enabled: false }); }}>{t("screenRecording.permission.turnOff")} <span aria-hidden="true">→</span></button></> : null}
       </div>
@@ -117,10 +135,15 @@ export function ScreenRecordingPermissionRow({ client, accessibilityGranted = nu
   </div>;
 }
 
-/** Settings › Privacy & Data › This computer's data: view or delete saved screens, once recording has been used. */
+/**
+ * Settings › Privacy & Data › This computer's data: view or delete saved screens, and how long and how
+ * much of them stay, once recording has been used. Past 24 hours screens are saved compressed; the
+ * storage limit deletes the oldest first.
+ */
 export function ScreenRecordingDataRow({ client }: { readonly client: ScreenContextClient }) {
-  const { t } = useLocalization();
-  const { snapshot, current, busy, error, setError, run } = useScreenRecording(client);
+  const { effectiveLanguage, t } = useLocalization();
+  const locale = localeForDisplayLanguage(effectiveLanguage);
+  const { snapshot, shown: current, busy, error, setError, run, configure } = useScreenRecording(client);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteRange, setDeleteRange] = useState<ScreenDeleteRange>("1");
   const [deletion, setDeletion] = useState<ScreenEvidenceDeletion | null>(null);
@@ -141,14 +164,34 @@ export function ScreenRecordingDataRow({ client }: { readonly client: ScreenCont
   const closeDelete = () => { if (busy) return; setDeleteOpen(false); window.requestAnimationFrame(() => deleteButton.current?.focus()); };
   if (!client.isDesktop() || !current?.helperInstalled || (!preferences.enabled && screenRecordingPristine(preferences))) return null;
   const errorText = errorMessage(error, t);
+  const { retention, limit } = screenRetention(preferences);
+  const keep = (next: { readonly retention: ScreenImageRetention; readonly limit: ScreenStorageLimitGb }) =>
+    void configure({ ...preferences, retention: next.retention, maxStorageGb: next.limit });
   return <>
     <div data-setting-id="settings.privacy.screenRecordings" className="settings-row ph-no-capture">
-      <div><div className="lbl">{t("screenRecording.row.saved")}</div><div className="desc">{t("screenRecording.keep.body")}</div>
+      <div><div className="lbl">{t("screenRecording.row.saved")}</div>
+        {current.storedBytes !== undefined ? <div className="desc">{t("screenRecording.keep.body", { size: storedSize(current.storedBytes, locale) })}</div> : null}
         {deletion ? <div className="desc screen-recording__result" role="status">{t("screenRecording.delete.done", { count: deletion.removedCount })}</div> : null}
         {errorText && !deleteOpen ? <div className="desc screen-recording__error" role="alert">{errorText}</div> : null}</div>
       <div className="ctrl screen-recording__keep-actions">
         <button type="button" className="settings-btn" onClick={() => setViewerOpen(true)}>{t("screenRecording.row.view")}</button>
         <button ref={deleteButton} type="button" className="settings-btn danger" disabled={busy} onClick={() => { setError(null); setDeleteOpen(true); }}>{t("screenRecording.keep.delete")}</button>
+      </div>
+    </div>
+    <div data-setting-id="settings.privacy.screenRetention" className="settings-row ph-no-capture">
+      <div><div className="lbl">{t("screenRecording.keep.period")}</div><div className="desc">{t("screenRecording.keep.periodDesc")}</div></div>
+      <div className="ctrl">
+        <SettingsSelect ariaLabel={t("screenRecording.keep.period")} value={retention} disabled={busy}
+          options={RETENTIONS.map((value) => ({ value, label: t(`screenRecording.keep.${value}`) }))}
+          onChange={(value) => keep({ retention: value, limit: Math.max(limit, ROOM_FOR[value]) as ScreenStorageLimitGb })} />
+      </div>
+    </div>
+    <div data-setting-id="settings.privacy.screenStorageLimit" className="settings-row ph-no-capture">
+      <div><div className="lbl">{t("screenRecording.keep.limit")}</div><div className="desc">{t("screenRecording.keep.limitDesc")}</div></div>
+      <div className="ctrl">
+        <SettingsSelect ariaLabel={t("screenRecording.keep.limit")} value={String(limit)} disabled={busy}
+          options={LIMITS.map((value) => ({ value: String(value), label: t("screenRecording.keep.gb", { count: value }) }))}
+          onChange={(value) => keep({ retention, limit: Number(value) as ScreenStorageLimitGb })} />
       </div>
     </div>
     {createPortal(<ModalPresence>{deleteOpen ? (
