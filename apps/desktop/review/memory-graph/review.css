@@ -1,0 +1,68 @@
+.memory-review {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.memory-review__header, .memory-review__scope {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.memory-review__header h1 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.4; }
+.memory-review__header p, .memory-review__scope p { margin: 0; color: var(--text-muted); font-size: 12px; }
+.memory-review__scope { min-height: 45px; }
+.memory-review__choices { display: flex; flex-wrap: wrap; gap: 4px; }
+.memory-review__choices button, .memory-review__notice button {
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 5px 10px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.memory-review__choices button:hover { background: var(--canvas); }
+.memory-review__choices button[aria-pressed="true"] {
+  border-color: var(--line);
+  background: var(--canvas);
+  color: var(--text);
+  font-weight: 650;
+}
+.memory-review__choices button:focus-visible, .memory-review__notice button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.memory-review__app { display: flex; flex: 1; min-height: 0; overflow: hidden; }
+.memory-review__notice {
+  position: absolute;
+  bottom: 56px;
+  left: 20px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  font-size: 13px;
+  z-index: 10;
+}
+.memory-review { --review-project: #47756c; --review-person: #9c6a49; --review-topic: #6777a0; }
+.memory-review__choices button[data-kind]:not([data-kind="all"])::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--kind);
+}
+.memory-review__choices button[data-kind="project"], .is-review-types .work-memory-graph__node--project { --kind: var(--review-project); }
+.memory-review__choices button[data-kind="person"], .is-review-types .work-memory-graph__node--person { --kind: var(--review-person); }
+.memory-review__choices button[data-kind="topic"], .is-review-types .work-memory-graph__node--topic { --kind: var(--review-topic); }
+.is-review-compact { --graph-edge: color-mix(in srgb, var(--text) 25%, transparent); }
+.is-review-compact .work-memory-graph__label { stroke-width: 2px; }
+.is-review-types .work-memory-graph__node:not(.is-selected, .is-focus) { --k: var(--kind); }

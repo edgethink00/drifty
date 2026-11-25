@@ -94,12 +94,18 @@ export type WikiLink = { readonly source: string; readonly target: string; reado
  * on every read at no model cost. Weight counts the linking sentences and
  * lines in both directions.
  */
-export function wikiLinks(pages: readonly MemoryWikiPage[]): WikiLink[] {
+export function wikiLinks(pages: readonly MemoryWikiPage[], shortNames: "all" | "unique" = "all"): WikiLink[] {
+  const keyCount = new Map<string, number>();
+  if (shortNames === "unique") {
+    for (const page of pages) {
+      for (const key of mentionKeys(page.title)) keyCount.set(key, (keyCount.get(key) ?? 0) + 1);
+    }
+  }
   const texts = new Map(pages.map((page) => [page.id, page.lines.filter((line) => line.status === "current").map((line) => normalize(line.text))]));
   const named = new Map(pages.map((page) => [page.id, page.doc ? docPoints(page.doc).flatMap((point) => [...point.text.matchAll(LINK)].map((match) => normalize(match[1]))) : []]));
   const weights = new Map<string, WikiLink>();
   for (const target of pages) {
-    const keys = mentionKeys(target.title);
+    const keys = mentionKeys(target.title).filter((key, index) => index === 0 || shortNames === "all" || keyCount.get(key) === 1);
     const title = normalize(target.title);
     for (const source of pages) {
       if (source.id === target.id) continue;

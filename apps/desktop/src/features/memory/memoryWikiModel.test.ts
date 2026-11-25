@@ -54,6 +54,28 @@ describe("work memory wiki model", () => {
     expect(links).toHaveLength(3);
   });
 
+  it("can skip a shared short name while keeping distinct aliases, full titles and wiki links", () => {
+    const review = line("Juniper 상태와 Atlas 검토를 했어요. Juniper 릴리스가 늦어졌어요.");
+    const pages = [
+      page("aaaaaaaaaaa1", "Juniper 릴리스", "project", [line("출시 예정.")]),
+      page("aaaaaaaaaaa2", "Juniper 설정", "project", [line("설정 메뉴 검토.")]),
+      page("aaaaaaaaaaa3", "Atlas CSV", "project", [line("내보내기 테스트.")]),
+      { ...page("aaaaaaaaaaa4", "Mira", "person", [review]), doc: {
+        summary: [{ text: "[[Juniper 설정]]", lines: [review.id] }],
+        sections: [], pendingLineIds: [], compiledAt: at(10),
+      } },
+      page("aaaaaaaaaaa5", "진행 상황", "topic", [line("Juniper 일정을 확인했어요.")]),
+    ];
+    expect(wikiLinks(pages)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa5" }),
+    ]));
+    expect(wikiLinks(pages, "unique")).toEqual([
+      { source: "aaaaaaaaaaa1", target: "aaaaaaaaaaa4", weight: 1 },
+      { source: "aaaaaaaaaaa2", target: "aaaaaaaaaaa4", weight: 1 },
+      { source: "aaaaaaaaaaa3", target: "aaaaaaaaaaa4", weight: 1 },
+    ]);
+  });
+
 });
 
 describe("work memory graph layout", () => {
