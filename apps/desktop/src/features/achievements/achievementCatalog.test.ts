@@ -21,7 +21,15 @@ describe("achievement catalogue", () => {
   it("counts a streak once, on the day it first reaches its length, and restarts after a missed day", () => {
     const facts = [...days("2026-09-01", 14), ...days("2026-09-16", 7)];
     expect(earned(facts, "streak7").earnedDays).toEqual(["2026-09-07", "2026-09-22"]);
-    expect(earned(facts, "streak30").progress).toEqual({ current: 14, target: 30, unit: "days" });
+    // Progress is the streak still going, not the longest one before the missed day.
+    expect(earned(facts, "streak30").progress).toEqual({ current: 7, target: 30, unit: "days" });
+  });
+
+  it("counts no streak as going once the last finished day was missed", () => {
+    const facts = days("2026-09-01", 14);
+    const going = (throughDay: string) => evaluateAchievements(facts, { throughDay }).find((evaluation) => evaluation.id === "streak30")!.progress;
+    expect(going("2026-09-14")).toEqual({ current: 14, target: 30, unit: "days" });
+    expect(going("2026-09-15")).toEqual({ current: 0, target: 30, unit: "days" });
   });
 
   it("does not count a day with too little recorded time toward a streak", () => {

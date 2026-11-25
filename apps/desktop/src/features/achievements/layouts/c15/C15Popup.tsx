@@ -11,7 +11,7 @@ import { achievementBadgeUrl, type AchievementBadgeStage } from "../../achieveme
 import { achievementCondition, achievementName, formatAchievementDay, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
 import type { AchievementDayFacts } from "../../achievementFacts";
 import { dayMeasure, dayMeasureKind, type DayMeasureKind } from "../../achievementDayMeasure";
-import { isRunningTotal, progressShare, progressText, remainingText } from "../../achievementProgress";
+import { carriesOn, progressShare, progressText, remainingText } from "../../achievementProgress";
 import { formatRarityPercent } from "../../achievementRarity";
 import type { AchievementItem } from "../../useAchievements";
 import { C15SpinMedal } from "./C15Medal";
@@ -62,8 +62,8 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
   const latestFigure = earned ? dayFigure(item, item.historyFacts?.[latestDay], t, effectiveLanguage) : null;
   const kind = dayMeasureKind(definition.id);
   const best = !earned && item.best && kind ? item.best : null;
-  // A running total says what is left under its bar; a best so far says so over it ("Best so far 6h 26m / 8h").
-  const total = isRunningTotal(item);
+  // Progress that carries on says what is left under its bar; a best so far says so over it ("Best so far 6h 26m / 8h").
+  const total = carriesOn(item);
   const measured = !earned && !concealed ? progressText(item, t, effectiveLanguage) : null;
   const progress = measured && !total ? t("achievements.bestSoFar", { amount: measured }) : measured;
   const open = (day: string) => { onClose(); onOpenDay(day); };

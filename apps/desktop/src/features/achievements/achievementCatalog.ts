@@ -51,6 +51,8 @@ export type AchievementDefinition = {
 export type AchievementEvaluationContext = {
   /** Focus from summarised days that are no longer kept one by one. */
   readonly archivedFocusSeconds?: number;
+  /** The last finished day summarised; a streak still counts as going only if it reaches this day. Defaults to the last day given. */
+  readonly throughDay?: string | null;
 };
 
 const MINUTE = 60;
@@ -116,8 +118,8 @@ export function evaluateAchievements(
   perDay("earlyStart", (day) => day.earlyFocusSeconds >= t.rhythmFocusSeconds, seconds(maxOf(days, (day) => day.earlyFocusSeconds), t.rhythmFocusSeconds));
   perDay("nightOwl", (day) => day.lateFocusSeconds >= t.rhythmFocusSeconds, seconds(maxOf(days, (day) => day.lateFocusSeconds), t.rhythmFocusSeconds));
   result.push(evaluateWeekendShift(days));
-  result.push(evaluateStreak("streak7", days, 7));
-  result.push(evaluateStreak("streak30", days, 30));
+  result.push(evaluateStreak("streak7", days, 7, context.throughDay));
+  result.push(evaluateStreak("streak30", days, 30, context.throughDay));
   result.push(evaluateCumulativeFocus(days, context.archivedFocusSeconds ?? 0));
   perDay("driftDay", isDriftDay, null);
   perDay("noDriftDay", (day) => day.trackedSeconds >= t.wholeDaySeconds && day.driftSeconds < t.noDriftSeconds, null);
@@ -149,9 +151,13 @@ function evaluateWeekendShift(days: readonly AchievementDayFacts[]): Achievement
   return { id: "weekendShift", earnedDays, progress: seconds(best, target) };
 }
 
-function evaluateStreak(id: AchievementId, days: readonly AchievementDayFacts[], length: number): AchievementEvaluation {
+/**
+ * A streak is earned on the day it first reaches its length. Its progress is
+ * the streak still going: the run of recorded days ending on the last finished
+ * day, or nothing once a day has been missed, so what it says is left really is.
+ */
+function evaluateStreak(id: AchievementId, days: readonly AchievementDayFacts[], length: number, throughDay?: string | null): AchievementEvaluation {
   const earnedDays: string[] = [];
-  let best = 0;
   let current = 0;
   let previous: string | null = null;
   for (const day of days) {
@@ -162,11 +168,12 @@ function evaluateStreak(id: AchievementId, days: readonly AchievementDayFacts[],
     }
     current = previous !== null && shiftIsoDate(previous, 1) === day.day ? current + 1 : 1;
     previous = day.day;
-    best = Math.max(best, current);
     // One streak counts once, on the day it first reaches the length.
     if (current === length) earnedDays.push(day.day);
   }
-  return { id, earnedDays, progress: { current: Math.min(best, length), target: length, unit: "days" } };
+  const lastDay = throughDay ?? days[days.length - 1]?.day ?? null;
+  const going = previous !== null && previous === lastDay ? current : 0;
+  return { id, earnedDays, progress: { current: Math.min(going, length), target: length, unit: "days" } };
 }
 
 function evaluateCumulativeFocus(days: readonly AchievementDayFacts[], archivedFocusSeconds: number): AchievementEvaluation {

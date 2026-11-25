@@ -108,7 +108,7 @@ export function mergeAchievementFacts(
     ? store.evaluatedThroughDay
     : range.endDay;
   const next: AchievementStore = { ...store, facts: nextFacts, archivedFocusSeconds, evaluatedThroughDay };
-  const earned = mergeEarned(store.earned, evaluateAchievements(storedFacts(next), { archivedFocusSeconds }));
+  const earned = mergeEarned(store.earned, evaluateAchievements(storedFacts(next), { archivedFocusSeconds, throughDay: evaluatedThroughDay }));
   // The first look shows what it found together; with nothing found, later
   // achievements arrive one at a time.
   const firstLookPending = store.evaluatedThroughDay === null ? Object.keys(earned).length > 0 && store.firstLookPending : store.firstLookPending;
@@ -150,7 +150,7 @@ export function storedFacts(store: AchievementStore): AchievementDayFacts[] {
 }
 
 export function evaluateStoredAchievements(store: AchievementStore): AchievementEvaluation[] {
-  return evaluateAchievements(storedFacts(store), { archivedFocusSeconds: store.archivedFocusSeconds });
+  return evaluateAchievements(storedFacts(store), { archivedFocusSeconds: store.archivedFocusSeconds, throughDay: store.evaluatedThroughDay });
 }
 
 function mergeEarned(

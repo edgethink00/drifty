@@ -30,21 +30,22 @@ export function remainingText(item: AchievementItem, t: Translate, language: Dis
 }
 
 /**
- * Achievements whose progress is a running total, so what is left really is
- * left. Every other bar measures the best so far (the best day, run, weekend
- * or streak), which today's work does not add to.
+ * Achievements whose progress carries on from here, a running total or a
+ * streak still going, so what is left really is left. Every other bar
+ * measures the best so far (the best day, run or weekend), which today's work
+ * does not add to.
  */
-const RUNNING_TOTAL: ReadonlySet<AchievementId> = new Set<AchievementId>(["focus100h"]);
+const CARRIES_ON: ReadonlySet<AchievementId> = new Set<AchievementId>(["focus100h", "streak7", "streak30"]);
 
-export function isRunningTotal(item: AchievementItem): boolean {
-  return RUNNING_TOTAL.has(item.definition.id);
+export function carriesOn(item: AchievementItem): boolean {
+  return CARRIES_ON.has(item.definition.id);
 }
 
-/** The word beside a bar: "38h to go" for a running total, "Best so far 6h 26m" for the rest. */
+/** The word beside a bar: "38h to go" or "16 days to go" where progress carries on, "Best so far 6h 26m" for the rest. */
 export function progressNote(item: AchievementItem, t: Translate, language: DisplayLanguage): string | null {
   const progress = item.progress;
   if (!progress) return null;
-  if (isRunningTotal(item)) return remainingText(item, t, language);
+  if (carriesOn(item)) return remainingText(item, t, language);
   const amount = progress.unit === "days" ? daysLabel(progress.current, t) : formatLocalizedCompactDurationFromSeconds(progress.current, language);
   return t("achievements.bestSoFar", { amount });
 }
