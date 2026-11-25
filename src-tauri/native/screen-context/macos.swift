@@ -587,6 +587,32 @@ func secureInputChildren(_ raw: AnyObject) throws -> [AXUIElement] {
           children.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { throw Refusal.unavailable }
     return children.map { unsafeBitCast($0, to: AXUIElement.self) }
 }
+// A web page can hold tens of thousands of elements (a long article, a mail
+// list), far past the walk's limit, so a web area is asked for its text fields
+// in one search instead of being walked. WebKit and Chromium answer it for the
+// whole page, frames from other sites and closed shadow roots included, in
+// milliseconds (native VM QA, 2026-11-26). nil means the area does not support
+// the search and is walked as before. A failed or malformed answer, or one that
+// fills the limit, refuses.
+let secureInputSearchLimit = 1024
+func webAreaHasSecureInput(_ area: AXUIElement) throws -> Bool? {
+    let query = ["AXSearchKey": "AXTextFieldSearchKey", "AXResultsLimit": secureInputSearchLimit,
+                 "AXDirection": "AXDirectionNext", "AXVisibleOnly": false,
+                 "AXImmediateDescendantsOnly": false] as CFDictionary
+    var result: CFTypeRef?
+    let status = AXUIElementCopyParameterizedAttributeValue(area, "AXUIElementsForSearchPredicate" as CFString, query, &result)
+    if status == .parameterizedAttributeUnsupported || status == .attributeUnsupported { return nil }
+    guard status == .success, let raw = result, CFGetTypeID(raw) == CFArrayGetTypeID(),
+          let found = raw as? [AnyObject], found.count < secureInputSearchLimit,
+          found.allSatisfy({ CFGetTypeID($0) == AXUIElementGetTypeID() }) else { throw Refusal.unavailable }
+    for field in found {
+        var subrole: CFTypeRef?
+        let status = AXUIElementCopyAttributeValue(unsafeBitCast(field, to: AXUIElement.self), kAXSubroleAttribute as CFString, &subrole)
+        guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
+        if (subrole as? String) == kAXSecureTextFieldSubrole { return true }
+    }
+    return false
+}
 func hasSecureInput(_ window: AXUIElement) throws -> Bool {
     var queue = [window], count = 0
     let attributes = [kAXRoleAttribute, kAXChildrenAttribute] as CFArray
@@ -602,6 +628,10 @@ func hasSecureInput(_ window: AXUIElement) throws -> Bool {
             let status = AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole)
             guard status == .success || status == .noValue || status == .attributeUnsupported else { throw Refusal.unavailable }
             if (subrole as? String) == kAXSecureTextFieldSubrole { return true }
+        }
+        if role == "AXWebArea", let secure = try webAreaHasSecureInput(element) {
+            if secure { return true }
+            continue
         }
         let children = try secureInputChildren(values[1])
         guard queue.count + children.count + count <= 4096 else { throw Refusal.unavailable }
