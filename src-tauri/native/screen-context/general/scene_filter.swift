@@ -128,6 +128,7 @@ func sceneBirth(_ pid: pid_t) throws -> UInt64 {
                 if id == "SidebarLibraryItemTab" { return }
                 if sceneString(node, kAXRoleAttribute) == "AXWebArea" {
                     let url = sceneAttribute(node, "AXURL")
+                    if isBrowserInterfacePage(url) { return }
                     pages.append(((url as? URL)?.absoluteString ?? url as? String ?? "", sceneString(node, "AXDescription")))
                     pageRegions.append(sceneRect(node))
                     return

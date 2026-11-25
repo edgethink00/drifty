@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check window matching, document identity and page clipping with synthetic values; no desktop access."""
+"""Check window matching, document identity, page clipping and Chrome's interface pages with synthetic values; no desktop access."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -9,11 +9,12 @@ parser.add_argument('--artifacts', type=Path, required=True)
 args = parser.parse_args()
 args.artifacts.mkdir(parents=True, mode=0o700)
 source = (Path(__file__).parents[1] / 'macos.swift').read_text()
+site_source = (Path(__file__).parents[1] / 'general' / 'scene_site.swift').read_text()
 
 
-def function(name):
-    start = source.index('func ' + name + '(')
-    return source[start:source.index('\n}\n', start) + 3]
+def function(name, text=source):
+    start = text.index('func ' + name + '(')
+    return text[start:text.index('\n}\n', start) + 3]
 
 
 driver = r'''
@@ -55,11 +56,23 @@ check("dock", browserPageClip(CGRect(x: 60, y: 70, width: 600, height: 400), pag
 // A page outside the visible part, or a sliver of one, refuses.
 check("outside", browserPageClip(window, page: CGRect(x: 700, y: 158, width: 300, height: 300)), nil)
 check("sliver", browserPageClip(window, page: CGRect(x: 60, y: 570, width: 600, height: 300)), nil)
+
+// Chrome's own interface pages on the top-chrome domain are not the window's
+// page, whether the accessibility value is a URL or a string.
+check("suggestions", isBrowserInterfacePage(URL(string: "chrome://omnibox-popup.top-chrome/") as CFTypeRef?), true)
+check("side panel", isBrowserInterfacePage("chrome://read-later.top-chrome/" as CFString), true)
+check("untrusted panel", isBrowserInterfacePage(URL(string: "chrome-untrusted://read-anything-side-panel.top-chrome/") as CFTypeRef?), true)
+// A page a tab can show, or a lookalike outside Chrome's schemes, is still a page.
+check("web page", isBrowserInterfacePage(URL(string: "https://docs.example.test/") as CFTypeRef?), false)
+check("web lookalike", isBrowserInterfacePage(URL(string: "https://evil.top-chrome/") as CFTypeRef?), false)
+check("settings tab", isBrowserInterfacePage(URL(string: "chrome://settings/") as CFTypeRef?), false)
+check("suffix only", isBrowserInterfacePage(URL(string: "chrome://top-chrome/") as CFTypeRef?), false)
+check("missing", isBrowserInterfacePage(nil), false)
 print("ok")
 '''
 program = args.artifacts / 'browser_window.swift'
 program.write_text('import CoreGraphics\nimport Foundation\n' + function('windowNameMatches') + function('windowDocument')
-                   + function('browserPageClip') + driver)
+                   + function('browserPageClip') + function('isBrowserInterfacePage', site_source) + driver)
 binary = args.artifacts / 'browser_window'
 subprocess.run(['xcrun', 'swiftc', '-O', str(program), '-o', str(binary)], check=True)
 result = subprocess.run([str(binary)], capture_output=True, text=True)
