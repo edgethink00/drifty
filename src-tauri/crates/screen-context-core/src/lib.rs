@@ -20,7 +20,7 @@ pub mod lease;
 mod memory_selection;
 mod model;
 pub use memory_selection::{
-    document as memory_document, MemorySourceSelection, MAX_MEMORY_SOURCES,
+    document as memory_document, MemorySourceSelection, MAX_MEMORY_HOURS, MAX_MEMORY_SOURCES,
 };
 mod scene;
 pub mod scene_ai;
@@ -29,7 +29,7 @@ pub use scene::{
     SceneExclusionInventory, SceneForeground, SceneRegion, SceneTextScope, SceneWindowPrivacy,
 };
 mod preferences;
-pub use preferences::CapturePreferences;
+pub use preferences::{CapturePreferences, ImageRetention, STORAGE_LIMITS_GB};
 pub mod native;
 pub mod process;
 mod scheduler;

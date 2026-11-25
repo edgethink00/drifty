@@ -54,6 +54,16 @@ impl std::fmt::Debug for ActivityDeletionEffects {
         f.write_str("ActivityDeletionEffects([redacted])")
     }
 }
+impl ActivityDeletionEffects {
+    /// The deleted activities' record ids; none when the receipt overflowed.
+    pub fn record_ids(&self) -> impl Iterator<Item = &str> {
+        self.ids.iter().map(String::as_str)
+    }
+    /// Too many activities to list: every screen of the profile goes.
+    pub fn overflow(&self) -> bool {
+        self.overflow
+    }
+}
 impl Drop for ActivityDeletionEffects {
     fn drop(&mut self) {
         for mut id in std::mem::take(&mut self.ids) {

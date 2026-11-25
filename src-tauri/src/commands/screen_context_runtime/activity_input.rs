@@ -20,7 +20,9 @@ pub(super) struct ScreenImage {
 
 pub(super) fn image(evidence: &drifty_screen_context_core::ReviewEvidence) -> Option<ScreenImage> {
     let frame = evidence.frame.as_ref()?;
-    Some(ScreenImage { media_type: "image/png", data: STANDARD.encode(frame.bytes()),
+    // Classification and memory send the captured PNG; a screen saved as WebP is converted back.
+    let png = frame.png_bytes()?;
+    Some(ScreenImage { media_type: "image/png", data: STANDARD.encode(&*png),
         observed_at_ms: evidence.metadata.observed_at_ms })
 }
 

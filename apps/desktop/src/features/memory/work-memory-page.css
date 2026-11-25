@@ -1769,3 +1769,19 @@
   .work-memory-table__time { display: none; }
 }
 
+
+/* An original whose screen image is gone: the text memory still keeps. */
+.memory-original-text__body {
+  max-height: min(48vh, 420px);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border-radius: var(--radius-md);
+  background: var(--surface-strong);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

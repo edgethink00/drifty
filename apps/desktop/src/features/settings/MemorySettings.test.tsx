@@ -8,10 +8,10 @@ import { useMemoryMarkdownExport } from "../memory/memoryExport";
 import { MemorySettings } from "./MemorySettings";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
-type Options = { recording?: boolean; allowedApps?: string[]; general?: boolean; memoryApps?: string[]; sites?: string[]; enabled?: boolean; keys?: { anthropic: boolean; cloud: boolean }; supported?: boolean; engine?: Record<string, unknown> };
-function setup({ recording = true, allowedApps = ["slack"], general = false, memoryApps = [], sites = [], enabled = false, keys = { anthropic: true, cloud: false }, supported = true, engine = {} }: Options = {},
+type Options = { recording?: boolean; allowedApps?: string[]; general?: boolean; memoryApps?: string[]; sites?: string[]; enabled?: boolean; keys?: { anthropic: boolean; cloud: boolean }; supported?: boolean; engine?: Record<string, unknown>; hours?: number };
+function setup({ recording = true, allowedApps = ["slack"], general = false, memoryApps = [], sites = [], enabled = false, keys = { anthropic: true, cloud: false }, supported = true, engine = {}, hours = 24 }: Options = {},
   links: { onOpenAiSettings?: () => void; onOpenScreenRecording?: () => void; onOpenExclusions?: () => void } = {}) {
-  let preferences = { enabled, retentionHours: 24, workSites: sites, apps: memoryApps };
+  let preferences = { enabled, retentionHours: hours, workSites: sites, apps: memoryApps };
   let apps = [...allowedApps];
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
     let value: unknown;
@@ -104,8 +104,8 @@ describe("Settings › Automatic memory", () => {
     // With Pro there, the key's description drops the hint that Pro needs no key.
     expect(screen.getByText("Your connected Anthropic account is charged.")).toBeTruthy();
     // Changing the retention keeps the choice.
-    fireEvent.change(screen.getByLabelText("Keep original screens"), { target: { value: "6" } });
-    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { retentionHours: 6, ownKey: true } }));
+    fireEvent.change(screen.getByLabelText("Keep what was read"), { target: { value: "168" } });
+    await waitFor(() => expect(lastConfigured(invoke)).toMatchObject({ preferences: { retentionHours: 168, ownKey: true } }));
     cleanup();
     // While memory is off the choice is saved for the next start, without turning it on.
     const off = setup({ keys: { anthropic: true, cloud: true } });
@@ -141,9 +141,19 @@ describe("Settings › Automatic memory", () => {
   });
   it("passes work sites saved by an earlier version back unchanged", async () => {
     const { invoke } = setup({ enabled: true, sites: ["github.com"] });
-    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "6" } });
+    fireEvent.change(await screen.findByLabelText("Keep what was read"), { target: { value: "720" } });
     await waitFor(() => expect(lastConfigured(invoke)).toEqual({ acknowledgeExternalText: true,
-      preferences: { enabled: true, retentionHours: 6, workSites: ["github.com"], apps: [] }, leaseId: lease }));
+      preferences: { enabled: true, retentionHours: 720, workSites: ["github.com"], apps: [] }, leaseId: lease }));
+  });
+  it("offers 24 hours, 7 days, 30 days and unlimited, keeping an earlier shorter choice", async () => {
+    setup({ enabled: true });
+    const select = await screen.findByLabelText("Keep what was read") as HTMLSelectElement;
+    expect([...select.options].map((option) => option.textContent)).toEqual(["24 hours", "7 days", "30 days", "Unlimited"]);
+    cleanup();
+    setup({ enabled: true, hours: 6 });
+    const earlier = await screen.findByLabelText("Keep what was read") as HTMLSelectElement;
+    await waitFor(() => expect(earlier.value).toBe("6"));
+    expect([...earlier.options].map((option) => option.textContent)).toEqual(["6 hours", "24 hours", "7 days", "30 days", "Unlimited"]);
   });
   it("reads every supported app without a choice, also when recording captures the whole screen", async () => {
     const { invoke } = setup({ general: true });
@@ -157,11 +167,11 @@ describe("Settings › Automatic memory", () => {
   });
   it("changes retention in place while on and keeps it local while off", async () => {
     const { invoke } = setup({ enabled: true });
-    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "6" } });
-    await waitFor(() => expect((lastConfigured(invoke) as { preferences: { retentionHours: number } }).preferences.retentionHours).toBe(6));
+    fireEvent.change(await screen.findByLabelText("Keep what was read"), { target: { value: "0" } });
+    await waitFor(() => expect((lastConfigured(invoke) as { preferences: { retentionHours: number } }).preferences.retentionHours).toBe(0));
     cleanup();
     const off = setup();
-    fireEvent.change(await screen.findByLabelText("Keep original screens"), { target: { value: "1" } });
+    fireEvent.change(await screen.findByLabelText("Keep what was read"), { target: { value: "168" } });
     expect(configured(off.invoke)).toHaveLength(0);
   });
   it("deletes everything only after the final confirmation", async () => {

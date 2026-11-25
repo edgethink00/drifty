@@ -30,9 +30,14 @@ export function decodeScreenPreferences(raw: unknown): ScreenCapturePreferences 
   const interval = integer(v.intervalSeconds); if (interval !== 10 && interval !== 30) throw new Error(INVALID);
   const scope = v.scope === undefined ? undefined : choice(v.scope, ["selected_apps", "active_display_scene"] as const);
   if (scope === "active_display_scene" && (v.allowedApps.length !== 0 || v.visibleTextEnabled !== false)) throw new Error(INVALID);
+  const retention = v.retention === undefined ? undefined : choice(v.retention, ["day", "week", "month", "unlimited"] as const);
+  const maxStorageGb = v.maxStorageGb === undefined ? undefined : integer(v.maxStorageGb);
+  if (maxStorageGb !== undefined && ![1, 5, 10, 20, 50].includes(maxStorageGb)) throw new Error(INVALID);
   return { ...(scope === undefined ? {} : { scope }),
     ...(v.generalNoticePending === undefined ? {} : { generalNoticePending: bool(v.generalNoticePending) }), enabled: bool(v.enabled), replayEnabled: bool(v.replayEnabled), visibleTextEnabled: bool(v.visibleTextEnabled),
-    ocrEnabled: bool(v.ocrEnabled), allowedApps: v.allowedApps.map((a) => text(a, 32)), intervalSeconds: interval };
+    ocrEnabled: bool(v.ocrEnabled), allowedApps: v.allowedApps.map((a) => text(a, 32)), intervalSeconds: interval,
+    ...(retention === undefined ? {} : { retention }),
+    ...(maxStorageGb === undefined ? {} : { maxStorageGb: maxStorageGb as 1 | 5 | 10 | 20 | 50 }) };
 }
 export function decodeScreenStatus(raw: unknown): ScreenContextStatus {
   const v = object(raw);
@@ -44,7 +49,8 @@ export function decodeScreenStatus(raw: unknown): ScreenContextStatus {
       const app = object(a); return { id: text(app.id, 32), name: text(app.name, 64) };
     }), paused: bool(v.paused), running: bool(v.running), preparing: bool(v.preparing), accepted: integer(v.accepted),
     dropped: integer(v.dropped), lastFailure: v.lastFailure === null ? null : choice(v.lastFailure, FAILURES),
-    lastAcceptedAtMs: v.lastAcceptedAtMs === null ? null : integer(v.lastAcceptedAtMs) };
+    lastAcceptedAtMs: v.lastAcceptedAtMs === null ? null : integer(v.lastAcceptedAtMs),
+    ...(v.storedBytes === undefined || v.storedBytes === null ? {} : { storedBytes: integer(v.storedBytes) }) };
 }
 function cursor(raw: unknown): ScreenEvidenceCursor {
   const v = object(raw); return { instance: id(v.instance), revision: integer(v.revision), observedAtMs: integer(v.observedAtMs), id: id(v.id),

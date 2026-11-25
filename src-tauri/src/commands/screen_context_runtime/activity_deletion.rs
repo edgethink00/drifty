@@ -59,7 +59,20 @@ impl ScreenContextRuntime {
             return change(false).map(|(data, _)| data);
         };
         let pending = owner.begin_activity_deletion().map_err(|_| unavailable())?;
+        // Automatic memory keeps text past its screens. It hears about the deletion before
+        // it happens (as everything, until the receipt says which activities went).
+        let memory_entry = super::memory::deletions::record(app, serde_json::json!({"kind":"activities","pending":true}))
+            .map_err(|_| unavailable())?;
         let (data, effects) = change(true)?;
+        if let (Some(seq), Some(effects)) = (memory_entry, effects.as_ref()) {
+            let entry = if effects.overflow() {
+                serde_json::json!({"kind":"all"})
+            } else {
+                serde_json::json!({"kind":"activities","ids":effects.record_ids().collect::<Vec<_>>()})
+            };
+            // A failure leaves the pending entry, which memory treats as everything.
+            let _ = super::memory::deletions::complete(app, seq, entry);
+        }
         let cleanup_complete = effects
             .and_then(|effects| {
                 let mut keys = NativeProfileKeys::new(&app.config().identifier).ok()?;

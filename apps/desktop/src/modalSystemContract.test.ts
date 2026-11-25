@@ -31,6 +31,7 @@ const animatedModalPanelFiles = [
   "./features/history/HistoryView.tsx",
   "./features/leaderboard/LeaderboardScreen.tsx",
   "./features/leaderboard/RankEmbedsModal.tsx",
+  "./features/memory/MemoryOriginalText.tsx",
   "./features/onboarding/AutomaticCloseConfirmDialog.tsx",
   "./features/personal-api/PersonalApiKeyDeleteDialog.tsx",
   "./features/personal-api/PersonalApiKeyDialog.tsx",
@@ -86,6 +87,7 @@ const sharedModalSurfaces = [
   ["Delete project", "./features/projects/ProjectDeleteConfirmation.tsx", /className="auth-modal modal-shell project-delete-modal"\s+data-modal-variant="compact"/],
   ["Screen replay viewer", "./features/screen-context/ScreenReplayViewer.tsx", /className="auth-modal modal-shell screen-replay"\s+data-modal-variant="workspace"/],
   ["Screen recording delete", "./features/settings/ScreenRecordingDeleteModal.tsx", /className="auth-modal modal-shell screen-recording-delete"\s+data-modal-variant="compact"/],
+  ["Memory original text", "./features/memory/MemoryOriginalText.tsx", /className="auth-modal modal-shell memory-original-text" data-modal-variant="standard"/],
   ["New project", "./features/projects/NewProjectDialog.tsx", /className="auth-modal modal-shell new-project-dialog"\s+data-modal-variant="standard"/],
   ["Debug log", "./features/settings/DebugLogModal.tsx", /className="auth-modal modal-shell debug-log-modal"\s+data-modal-variant="workspace"/],
   ["OpenRouter models", "./features/settings/AiSetupModelDialogs.tsx", /className="auth-modal modal-shell model-picker-modal" data-modal-variant="standard"/],
@@ -210,7 +212,7 @@ describe("modal system v2 contract", () => {
   });
 
   it("classifies every shared production modal surface under one explicit variant", () => {
-    expect(sharedModalSurfaces).toHaveLength(45);
+    expect(sharedModalSurfaces).toHaveLength(46);
 
     for (const [name, path, pattern] of sharedModalSurfaces) {
       expect(read(path), `${name} should use its modal-shell variant`).toMatch(pattern);
@@ -356,6 +358,7 @@ describe("dialog key hints", () => {
     ["./features/history/HistoryView.tsx", ["escape"]],
     ["./features/settings/DeleteHistoryModal.tsx", ["escape", "modEnter"]],
     ["./features/settings/ScreenRecordingDeleteModal.tsx", ["escape"]],
+    ["./features/memory/MemoryOriginalText.tsx", ["escape"]],
     ["./features/settings/ExcludedAppHistoryConfirmation.tsx", ["escape"]],
     ["./features/device-sync/DeviceSyncPurgeConfirmation.tsx", ["escape"]],
     ["./features/settings/DeleteManagedModelModal.tsx", ["escape"]],
