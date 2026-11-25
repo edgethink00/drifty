@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { achievementBadgeStage, type AchievementBadgeStage } from "../../achievementBadge";
-import { medalStyleKey, readMedalStyle } from "../../medalStyle";
+import { medalStyleKey, parseMedalStyleKey } from "../../medalStyle";
 import { useAchievementBadgeUrl, useActiveMedalStyle } from "../../medalStyleImages";
 import type { AchievementItem } from "../../useAchievements";
 
@@ -58,7 +58,7 @@ export function C15SpinMedal({ item, engraving, className = "c15-medal" }: SpinP
         try {
           handle = mountLiveMedal(canvas, {
             art: { id, group, state: stage === "locked" ? "locked" : stage === "concealed" ? "concealed" : "earned", detail: true, tier: STAGE_TIER[stage] },
-            style: readMedalStyle(Object.fromEntries(["form", "palette", "metal", "mark"].map((key, index) => [key, styleKey.split(".")[index]]))),
+            style: parseMedalStyleKey(styleKey),
             engraving: engraved ? engraved.split("\n") : [],
             onReady: () => { if (!cancelled) setLive(true); },
           });

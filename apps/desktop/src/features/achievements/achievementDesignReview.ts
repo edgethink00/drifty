@@ -4,7 +4,7 @@ import type { AchievementDefinition, AchievementId } from "./achievementCatalog"
 import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
-import { DEFAULT_MEDAL_STYLE, readMedalStyle, type MedalStyle } from "./medalStyle";
+import { CHOSEN_MEDAL_STYLE, DEFAULT_MEDAL_STYLE, parseMedalStyleKey, readMedalStyle, type MedalStyle } from "./medalStyle";
 
 const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v19";
 
@@ -131,10 +131,8 @@ function initialState(): ReviewState {
     // ?achievementFrame=<id> wins; an older saved blocks switch still counts.
     frame: [search.get("achievementFrame"), saved.frame].find(isAchievementListFrame)
       ?? (typeof saved.boxed === "boolean" ? (saved.boxed ? "parts" : "none") : PRODUCTION_ACHIEVEMENT_FRAME),
-    // ?achievementMedal=form.palette.metal.mark wins over the saved design.
-    medal: search.has("achievementMedal")
-      ? readMedalStyle(Object.fromEntries(["form", "palette", "metal", "mark"].map((key, index) => [key, search.get("achievementMedal")?.split(".")[index]])))
-      : readMedalStyle(saved.medal),
+    // ?achievementMedal=form.palette.metal.mark.art wins over the saved design; the review opens on the chosen one.
+    medal: search.has("achievementMedal") ? parseMedalStyleKey(search.get("achievementMedal"), CHOSEN_MEDAL_STYLE) : readMedalStyle(saved.medal, CHOSEN_MEDAL_STYLE),
     // ?achievementLayout=<id> on the page address wins over the saved choice.
     layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
       ?? PRODUCTION_ACHIEVEMENT_LAYOUT,

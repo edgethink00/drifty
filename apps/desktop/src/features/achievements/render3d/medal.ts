@@ -2,7 +2,7 @@ import * as THREE from "three";
 import type { AchievementGroup, AchievementId } from "../achievementCatalog";
 import type { AchievementArtProps } from "../achievementArt";
 import { DEFAULT_MEDAL_STYLE, type MedalForm, type MedalMetal, type MedalPalette, type MedalStyle } from "../medalStyle";
-import { glyphTubes } from "./glyph3d";
+import { markGeometry } from "./marks";
 import { BADGE_COLORS, GOLD } from "./palette";
 import type { BadgeStage } from "./studio";
 
@@ -200,9 +200,17 @@ export function buildMedal({ id, group, state, tier }: AchievementArtProps, styl
           : style.mark === "ink" ? new THREE.MeshPhysicalMaterial({ color: 0x222220, roughness: 0.9 })
             : new THREE.MeshPhysicalMaterial({ color: 0xfbf9f5, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, sheen: 0.5, sheenColor: new THREE.Color(0xffffff), emissive: 0xffffff, emissiveIntensity: 0.06 });
   const flat = earned && (style.mark === "engraved" || style.mark === "ink");
-  const mark = new THREE.Mesh(glyphTubes(state === "concealed" ? "hidden" : id, 1.02 * (form.field / 0.8), earned ? 0.088 : 0.074, 0), markMaterial);
-  mark.scale.z = !earned ? 0.5 : flat ? 0.12 : 1;
-  mark.position.z = !earned ? fieldTop - 0.005 : flat ? fieldTop + 0.002 : fieldTop + 0.025;
+  const { geometry: markShape, standing } = markGeometry(style.art, state === "concealed" ? "hidden" : id, 1.02 * (form.field / 0.8), earned);
+  const mark = new THREE.Mesh(markShape, markMaterial);
+  if (standing) {
+    // A relief stands from the field: lower when unstruck, barely raised when cut or printed.
+    mark.scale.z = !earned ? 0.6 : flat ? 0.18 : 1;
+    mark.position.z = fieldTop - 0.004;
+  } else {
+    // Tubes lie half sunk in the field.
+    mark.scale.z = !earned ? 0.5 : flat ? 0.12 : 1;
+    mark.position.z = !earned ? fieldTop - 0.005 : flat ? fieldTop + 0.002 : fieldTop + 0.025;
+  }
   group3d.add(mark);
 
   group3d.rotation.set(-0.08, 0.3, 0);
