@@ -819,3 +819,126 @@
   font-size: var(--text-sm);
   line-height: 1.45;
 }
+
+/* ---- Popup (opened-row review style "popup") ---- */
+:where(.c15-pop) {
+  --c15-cal-cell: 0.6875rem;
+  --c15-cal-gap: 0.1875rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: min(34rem, calc(100vw - 4rem));
+  max-height: calc(100vh - 4rem);
+  overflow: auto;
+}
+
+:where(.c15-pop) .c15-pop__head {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-5);
+  padding-right: var(--space-6);
+}
+
+:where(.c15-pop) .c15-pop__medal { --c15-medal: 7rem; width: 7rem; height: 7rem; }
+:where(.c15-pop) .c15-pop__medal img { width: 100%; height: 100%; object-fit: contain; }
+
+:where(.c15-pop) .c15-pop__title { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+:where(.c15-pop) .c15-pop__group { margin: 0; color: var(--text-soft); font-size: var(--text-xs); line-height: 1.4; }
+:where(.c15-pop) .c15-pop__name { margin: 0; color: var(--text); font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 600; line-height: 1.25; }
+:where(.c15-pop) .c15-pop__condition { margin: 0; color: var(--text-soft); font-size: var(--text-md); line-height: 1.45; }
+:where(.c15-pop) .c15-pop__share { margin: var(--space-1) 0 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
+:where(.c15-pop) :is(.c15-pop__name, .c15-pop__condition, .c15-pop__share):lang(ko) { word-break: keep-all; }
+
+:where(.c15-pop) .c15-pop__part { display: flex; flex-direction: column; gap: var(--space-3); }
+:where(.c15-pop) .c15-pop__label { margin: 0; color: var(--text-soft); font-family: var(--font-sans); font-size: var(--text-sm); font-weight: 500; line-height: 1.4; }
+:where(.c15-pop) .c15-pop__note { margin: 0; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.45; }
+
+/* The three metals as the medals themselves; the one held sits on a plate. */
+:where(.c15-pop) .c15-pop__ladder { display: flex; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+:where(.c15-pop) .c15-pop__rung {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 6rem;
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border-radius: var(--radius-md);
+}
+:where(.c15-pop) .c15-pop__rung[data-current="true"] { background: color-mix(in srgb, var(--text) 5%, transparent); }
+:where(.c15-pop) .c15-pop__rung-medal { width: 3.5rem; height: 3.5rem; margin-bottom: var(--space-1); }
+:where(.c15-pop) .c15-pop__rung-medal img { width: 100%; height: 100%; object-fit: contain; }
+:where(.c15-pop) .c15-pop__rung-name { color: var(--text-muted); font-size: var(--text-sm); line-height: 1.3; }
+:where(.c15-pop) .c15-pop__rung-at { color: var(--text-faint); font-size: var(--text-xs); line-height: 1.3; font-variant-numeric: tabular-nums; }
+:where(.c15-pop) .c15-pop__rung[data-reached="true"] .c15-pop__rung-name { color: var(--text); }
+:where(.c15-pop) .c15-pop__rung[data-current="true"] .c15-pop__rung-name { font-weight: 600; }
+
+/* Half a year of weeks, Monday on top; earned days filled. */
+:where(.c15-pop) .c15-cal { display: flex; flex-direction: column; gap: var(--space-1); }
+:where(.c15-pop) .c15-cal__months,
+:where(.c15-pop) .c15-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--c15-cal-weeks), var(--c15-cal-cell));
+  column-gap: var(--c15-cal-gap);
+}
+:where(.c15-pop) .c15-cal__months { color: var(--text-faint); font-size: var(--text-2xs); line-height: 1.2; }
+:where(.c15-pop) .c15-cal__months span { white-space: nowrap; }
+:where(.c15-pop) .c15-cal__grid { grid-auto-flow: column; grid-template-rows: repeat(7, var(--c15-cal-cell)); row-gap: var(--c15-cal-gap); }
+:where(.c15-pop) .c15-cal__cell {
+  display: block;
+  width: var(--c15-cal-cell);
+  height: var(--c15-cal-cell);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+}
+:where(.c15-pop) .c15-cal__cell.is-future { background: transparent; }
+:where(.c15-pop) .c15-cal__cell.is-earned { background: var(--accent); cursor: pointer; }
+:where(.c15-pop) .c15-cal__cell.is-earned:hover { background: var(--text); }
+:where(.c15-pop) .c15-cal__cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Recent days with what each reached. */
+:where(.c15-pop) .c15-pop__days { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+:where(.c15-pop) .c15-pop__day {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, max-content) minmax(3.5rem, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+:where(.c15-pop) .c15-pop__day:hover { background: color-mix(in srgb, var(--text) 5%, transparent); }
+:where(.c15-pop) .c15-pop__day-nth { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+:where(.c15-pop) .c15-pop__day-figure { color: var(--text-soft); text-align: right; }
+
+:where(.c15-pop) .c15-pop__progress { display: flex; flex-direction: column; gap: var(--space-2); }
+:where(.c15-pop) .c15-pop__progress-text { color: var(--text); font-size: var(--text-md); font-weight: 500; }
+:where(.c15-pop) .c15-pop__best { margin: 0; }
+:where(.c15-pop) .c15-pop__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+}
+:where(.c15-pop) .c15-pop__link:hover { color: var(--text); }
+:where(.c15-pop) .c15-pop__preview { display: flex; align-items: center; gap: var(--space-3); margin: 0; color: var(--text-soft); font-size: var(--text-sm); }
+:where(.c15-pop) .c15-pop__preview-medal { width: 2.75rem; height: 2.75rem; flex: none; }
+:where(.c15-pop) .c15-pop__preview-medal img { width: 100%; height: 100%; object-fit: contain; }
+:where(.c15-pop) .c15-pop__day:focus-visible,
+:where(.c15-pop) .c15-pop__link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -9,6 +9,7 @@ import {
   type AchievementProgress,
 } from "./achievementCatalog";
 import { achievementHistory, type AchievementHistory } from "./achievementHistory";
+import { bestDay } from "./achievementDayMeasure";
 import type { AchievementRarity } from "./achievementRarity";
 import { REVIEW_RARITY, useAchievementReviewState } from "./achievementDesignReview";
 import {
@@ -18,6 +19,7 @@ import {
   mergeAchievementFacts,
   nextAchievementRange,
   readAchievementStore,
+  storedFacts,
   unannouncedAchievements,
   writeAchievementStore,
   type AchievementStore,
@@ -32,6 +34,10 @@ export type AchievementItem = {
   readonly rarity: AchievementRarity | null;
   /** Every time it was earned, read-only; absent where an item is put together without its evaluation. */
   readonly history?: AchievementHistory | null;
+  /** The kept daily summaries of the history days, read-only, for the figure each day reached. */
+  readonly historyFacts?: Readonly<Record<string, AchievementDayFacts>>;
+  /** The kept day that came closest, for achievements judged on one day's time. */
+  readonly best?: { readonly day: string; readonly value: number } | null;
 };
 
 export type AchievementsStatus = "idle" | "loading" | "ready" | "error";
@@ -57,15 +63,25 @@ export function buildAchievementItems(
   rarity: Readonly<Partial<Record<AchievementId, AchievementRarity>>> = {},
 ): AchievementItem[] {
   const evaluations = new Map(evaluateStoredAchievements(store).map((evaluation) => [evaluation.id, evaluation]));
+  const facts = storedFacts(store);
+  const byDay = new Map(facts.map((entry) => [entry.day, entry]));
   return ACHIEVEMENT_DEFINITIONS.map((definition) => {
     const earned = store.earned[definition.id] ?? null;
     const evaluation = evaluations.get(definition.id);
+    const history = achievementHistory(definition, earned, evaluation?.earnedDays ?? []);
+    const historyFacts: Record<string, AchievementDayFacts> = {};
+    for (const day of history?.days ?? []) {
+      const entry = byDay.get(day);
+      if (entry) historyFacts[day] = entry;
+    }
     return {
       definition,
       earned,
       progress: evaluation?.progress ?? null,
       rarity: rarity[definition.id] ?? null,
-      history: achievementHistory(definition, earned, evaluation?.earnedDays ?? []),
+      history,
+      historyFacts,
+      best: bestDay(definition.id, facts),
     };
   });
 }

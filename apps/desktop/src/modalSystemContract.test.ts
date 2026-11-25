@@ -12,6 +12,7 @@ function read(relativePath: string): string {
  * because adding a modal broke no test. */
 const animatedModalPanelFiles = [
   "./features/achievements/AchievementUnlockDialog.tsx",
+  "./features/achievements/layouts/c15/C15Popup.tsx",
   "./features/auth/AccountDeletionModal.tsx",
   "./features/auth/AuthModal.tsx",
   "./features/billing/PromoHandoffAccountDialog.tsx",

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ModalPresence } from "../../../../components/ModalPresence";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import type { TranslationKey } from "../../../localization/translations";
 import type { AchievementId } from "../../achievementCatalog";
@@ -6,10 +7,12 @@ import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { remainingText } from "../../achievementProgress";
 import { achievementRowParts } from "../../achievementRows";
+import { useActiveAchievementOpenStyle } from "../../achievementDesignReview";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
 import { C15Open } from "./C15Open";
+import { C15Popup } from "./C15Popup";
 import { rowFact } from "./c15Copy";
 
 const SKELETON_ROWS = 5;
@@ -27,13 +30,15 @@ type RowProps = {
   /** Set when the row leads the list as a goal under way. */
   readonly entry?: AlmostThereEntry;
   readonly open: boolean;
+  /** The row opens the achievement's popup instead of expanding in place. */
+  readonly popup?: boolean;
   readonly isNew: boolean;
   readonly onToggle: (id: AchievementId) => void;
   readonly onOpenDay: (day: string) => void;
 };
 
 /** One achievement: the big medal, name over condition, one strong fact on the right; opens in place. */
-function Row({ item, entry, open, isNew, onToggle, onOpenDay }: RowProps) {
+function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: RowProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const id = definition.id;
@@ -54,7 +59,8 @@ function Row({ item, entry, open, isNew, onToggle, onOpenDay }: RowProps) {
       <button
         type="button"
         className="c15-row"
-        aria-expanded={open}
+        aria-expanded={popup ? undefined : open}
+        aria-haspopup={popup ? "dialog" : undefined}
         aria-controls={open ? openId : undefined}
         aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
         onClick={() => onToggle(id)}
@@ -128,19 +134,24 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
   const { status, items, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
   const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "most" }), [items]);
   const [openId, setOpenId] = useState<AchievementId | null>(null);
+  const [popupId, setPopupId] = useState<AchievementId | null>(null);
+  const popup = useActiveAchievementOpenStyle() === "popup";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
 
   const toggle = (id: AchievementId) => {
-    setOpenId((current) => (current === id ? null : id));
+    if (popup) setPopupId(id);
+    else setOpenId((current) => (current === id ? null : id));
     choose(id);
   };
+  const popupItem = popup && popupId ? items.find((item) => item.definition.id === popupId) ?? null : null;
   const row = (item: AchievementItem, entry?: AlmostThereEntry) => (
     <Row
       key={item.definition.id}
       item={item}
       entry={entry}
-      open={openId === item.definition.id}
+      open={!popup && openId === item.definition.id}
+      popup={popup}
       isNew={isNew(item)}
       onToggle={toggle}
       onOpenDay={onOpenDay}
@@ -188,6 +199,9 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
       <p className="c15-footnote" role={status === "loading" ? "status" : undefined}>
         {status === "loading" ? t("achievements.loading") : t("achievements.note")}
       </p>
+      <ModalPresence>
+        {popupItem ? <C15Popup item={popupItem} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
+      </ModalPresence>
     </div>
   );
 }
