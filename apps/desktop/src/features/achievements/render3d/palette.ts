@@ -17,7 +17,9 @@ export const BADGE_COLORS: Record<AchievementId, number> = {
   comeback: 0x3fae78,
 };
 
-export const GOLD = 0xeac46e;
+/** The coin's metals: silver at first, rose gold from ten times. */
+export const SILVER = 0xc4c8ce;
+export const ROSE_GOLD = 0xe4a58e;
 
 /**
  * The muted palette's enamel colour as a CSS hex, for things drawn in the

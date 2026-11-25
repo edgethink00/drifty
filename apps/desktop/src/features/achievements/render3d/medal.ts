@@ -1,9 +1,8 @@
 import * as THREE from "three";
 import type { AchievementGroup, AchievementId } from "../achievementCatalog";
 import type { AchievementArtProps } from "../achievementArt";
-import { DEFAULT_MEDAL_STYLE, type MedalForm, type MedalMetal, type MedalPalette, type MedalStyle } from "../medalStyle";
-import { markGeometry } from "./marks";
-import { BADGE_COLORS, GOLD } from "./palette";
+import { reliefMark } from "./marks";
+import { BADGE_COLORS, ROSE_GOLD, SILVER } from "./palette";
 import type { BadgeStage } from "./studio";
 
 function roundedPolygon(sides: number, radius: number, corner: number, rotation = 0): THREE.Shape {
@@ -83,134 +82,67 @@ export function guilloche(group: AchievementGroup): THREE.CanvasTexture {
   return texture;
 }
 
-/** One colour for each group, for the "group" palette. */
-const GROUP_COLORS: Readonly<Record<AchievementGroup, number>> = {
-  focus: 0x2f9a8a,
-  rhythm: 0xe0a03a,
-  consistency: 0x8a63c9,
-  unexpected: 0xd8644f,
-};
-
-/** The enamel colour of a medal in the chosen palette, derived from its own colour except for "group". */
-export function enamelColor(id: AchievementId, group: AchievementGroup, palette: MedalPalette): THREE.Color {
-  if (palette === "group") return new THREE.Color(GROUP_COLORS[group]);
+/** The enamel colour: the achievement's own colour, muted (half the saturation, a touch lighter, never past 62% light). */
+export function enamelColor(id: AchievementId): THREE.Color {
   const color = new THREE.Color(BADGE_COLORS[id]);
   const hsl = { h: 0, s: 0, l: 0 };
   color.getHSL(hsl);
-  switch (palette) {
-    case "muted": return color.setHSL(hsl.h, hsl.s * 0.5, Math.min(0.62, hsl.l * 0.88 + 0.05));
-    case "pastel": return color.setHSL(hsl.h, Math.min(0.55, hsl.s * 0.7), 0.76);
-    case "jewel": return color.setHSL(hsl.h, Math.min(1, hsl.s * 1.25 + 0.1), hsl.l * 0.62);
-    default: return color;
-  }
+  return color.setHSL(hsl.h, hsl.s * 0.5, Math.min(0.62, hsl.l * 0.88 + 0.05));
 }
 
-/** The rim's metal: silver at first and gold from ten times, in the chosen finish. */
-function metalMaterial(metal: MedalMetal, gold: boolean): THREE.MeshPhysicalMaterial {
-  const spec: Readonly<Record<MedalMetal, { silver: number; gold: number; roughness: number; clearcoat: number }>> = {
-    polished: { silver: 0xbcc2ca, gold: GOLD, roughness: 0.22, clearcoat: 0.4 },
-    satin: { silver: 0xb4b9c0, gold: 0xdcbb6c, roughness: 0.55, clearcoat: 0 },
-    rose: { silver: 0xc4c8ce, gold: 0xe4a58e, roughness: 0.2, clearcoat: 0.4 },
-    gunmetal: { silver: 0x4b5058, gold: GOLD, roughness: 0.3, clearcoat: 0.3 },
-    platinum: { silver: 0xe4e6e8, gold: 0xead7a6, roughness: 0.18, clearcoat: 0.5 },
-  };
-  const chosen = spec[metal];
-  const roughness = metal === "polished" ? (gold ? 0.16 : 0.28) : chosen.roughness;
-  return new THREE.MeshPhysicalMaterial({ color: gold ? chosen.gold : chosen.silver, metalness: 1, roughness, clearcoat: chosen.clearcoat, clearcoatRoughness: 0.12 });
+/** The coin's metal: silver at first, rose gold from ten times. */
+function metalMaterial(roseGold: boolean): THREE.MeshPhysicalMaterial {
+  return new THREE.MeshPhysicalMaterial({ color: roseGold ? ROSE_GOLD : SILVER, metalness: 1, roughness: 0.2, clearcoat: 0.4, clearcoatRoughness: 0.12 });
 }
 
-/** The proportions of each form: the backing plate, the rim, the enamel field and where the mark sits on it. */
-type FormSpec = {
-  readonly backDepth: number;
-  readonly backBevel: number;
-  readonly backSegments: number;
-  /** The rim's inner edge, as a share of the outline; null for a form without a raised rim. */
-  readonly rimInner: number | null;
-  readonly rimDepth: number;
-  readonly field: number;
-  readonly fieldZ: number;
-  readonly fieldDepth: number;
-  readonly fieldBevel: number;
-  readonly fieldBevelSize: number;
-  readonly fieldSegments: number;
-};
-
-const FORMS: Readonly<Record<MedalForm, FormSpec>> = {
-  struck: { backDepth: 0.1, backBevel: 0.05, backSegments: 8, rimInner: 0.8, rimDepth: 0.12, field: 0.8, fieldZ: 0.02, fieldDepth: 0.04, fieldBevel: 0.015, fieldBevelSize: 0.015, fieldSegments: 4 },
-  coin: { backDepth: 0.24, backBevel: 0.07, backSegments: 10, rimInner: 0.88, rimDepth: 0.1, field: 0.88, fieldZ: 0.06, fieldDepth: 0.03, fieldBevel: 0.01, fieldBevelSize: 0.01, fieldSegments: 3 },
-  dome: { backDepth: 0.1, backBevel: 0.05, backSegments: 8, rimInner: 0.84, rimDepth: 0.08, field: 0.78, fieldZ: 0.02, fieldDepth: 0.02, fieldBevel: 0.16, fieldBevelSize: 0.1, fieldSegments: 14 },
-  pin: { backDepth: 0.04, backBevel: 0.025, backSegments: 6, rimInner: 0.93, rimDepth: 0.05, field: 0.93, fieldZ: 0.0, fieldDepth: 0.03, fieldBevel: 0.006, fieldBevelSize: 0.006, fieldSegments: 2 },
-  plate: { backDepth: 0.12, backBevel: 0.1, backSegments: 1, rimInner: null, rimDepth: 0, field: 0.8, fieldZ: 0.075, fieldDepth: 0.02, fieldBevel: 0.008, fieldBevelSize: 0.008, fieldSegments: 2 },
-};
+/** The coin's proportions: a thick backing plate, a narrow raised rim, the enamel field set into it. */
+const COIN = { backDepth: 0.24, backBevel: 0.07, rimInner: 0.88, rimDepth: 0.1, field: 0.88, fieldZ: 0.06, fieldDepth: 0.03, fieldBevel: 0.01 } as const;
 
 /**
- * Drifty's achievement badge: a struck metal award with a raised rim, an
- * engine-turned enamel field in the achievement's colour and the mark
- * standing up from it in thick white glaze, so it reads at any size. The rim
- * is silver at first, gold from ten times, with an inner gold ring from
- * fifty. Until earned it is an unstruck blank in matte grey. The dev review
- * can vary its form, palette, metal and mark (medalStyle.ts); the default is
- * the medal as shipped.
+ * Drifty's achievement medal (owner choice 2026-11-26): a thick coin with a
+ * narrow raised rim, an engine-turned enamel field in the achievement's muted
+ * colour, and its pictogram raised in relief from the field in the rim's
+ * metal. The metal is silver at first and rose gold from ten times, with an
+ * inner rose-gold band from fifty. Until earned it is an unstruck blank in
+ * matte grey.
  */
-export function buildMedal({ id, group, state, tier }: AchievementArtProps, style: MedalStyle = DEFAULT_MEDAL_STYLE): BadgeStage {
+export function buildMedal({ id, group, state, tier }: AchievementArtProps): BadgeStage {
   const earned = state === "earned";
-  const gold = earned && tier >= 3;
-  const form = FORMS[style.form];
-  const metal = earned ? metalMaterial(style.metal, gold) : new THREE.MeshPhysicalMaterial({ color: 0xb6bac0, metalness: 0.45, roughness: 0.62 });
-  const color = enamelColor(id, group, style.palette);
+  const roseGold = earned && tier >= 3;
+  const metal = earned ? metalMaterial(roseGold) : new THREE.MeshPhysicalMaterial({ color: 0xb6bac0, metalness: 0.45, roughness: 0.62 });
+  const color = enamelColor(id);
   const enamel = new THREE.MeshPhysicalMaterial(earned
-    ? {
-      color, emissive: color, emissiveIntensity: 0.16, roughness: style.form === "dome" ? 0.08 : 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03,
-      bumpMap: style.form === "dome" ? null : guilloche(group), bumpScale: 0.9, iridescence: style.form === "dome" ? 0.35 : 0.2, iridescenceIOR: 1.3,
-    }
+    ? { color, emissive: color, emissiveIntensity: 0.16, roughness: 0.3, metalness: 0.1, clearcoat: 1, clearcoatRoughness: 0.03, bumpMap: guilloche(group), bumpScale: 0.9, iridescence: 0.2, iridescenceIOR: 1.3 }
     : { color: 0xd0d3d7, roughness: 0.82 });
   const group3d = new THREE.Group();
 
-  const back = new THREE.Mesh(new THREE.ExtrudeGeometry(outline(group, 1), { depth: form.backDepth, bevelEnabled: true, bevelThickness: form.backBevel, bevelSize: form.backBevel, bevelSegments: form.backSegments, curveSegments: 64 }), metal);
-  back.position.z = -form.backDepth;
+  const back = new THREE.Mesh(new THREE.ExtrudeGeometry(outline(group, 1), { depth: COIN.backDepth, bevelEnabled: true, bevelThickness: COIN.backBevel, bevelSize: COIN.backBevel, bevelSegments: 10, curveSegments: 64 }), metal);
+  back.position.z = -COIN.backDepth;
   group3d.add(back);
 
-  if (form.rimInner !== null) {
-    const ring = outline(group, 1);
-    ring.holes.push(outline(group, form.rimInner) as unknown as THREE.Path);
-    const rim = new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: form.rimDepth, bevelEnabled: true, bevelThickness: form.rimDepth * 0.5, bevelSize: Math.min(0.035, (1 - form.rimInner) * 0.18), bevelSegments: 10, curveSegments: 64 }), metal);
-    group3d.add(rim);
-  }
+  const ring = outline(group, 1);
+  ring.holes.push(outline(group, COIN.rimInner) as unknown as THREE.Path);
+  const rim = new THREE.Mesh(new THREE.ExtrudeGeometry(ring, { depth: COIN.rimDepth, bevelEnabled: true, bevelThickness: COIN.rimDepth * 0.5, bevelSize: (1 - COIN.rimInner) * 0.18, bevelSegments: 10, curveSegments: 64 }), metal);
+  group3d.add(rim);
 
-  const field = new THREE.Mesh(new THREE.ExtrudeGeometry(outline(group, form.field), { depth: form.fieldDepth, bevelEnabled: true, bevelThickness: form.fieldBevel, bevelSize: form.fieldBevelSize, bevelSegments: form.fieldSegments, curveSegments: 64 }), enamel);
-  field.position.z = form.fieldZ;
+  const field = new THREE.Mesh(new THREE.ExtrudeGeometry(outline(group, COIN.field), { depth: COIN.fieldDepth, bevelEnabled: true, bevelThickness: COIN.fieldBevel, bevelSize: COIN.fieldBevel, bevelSegments: 3, curveSegments: 64 }), enamel);
+  field.position.z = COIN.fieldZ;
   group3d.add(field);
-  const fieldTop = form.fieldZ + form.fieldDepth + form.fieldBevel;
+  const fieldTop = COIN.fieldZ + COIN.fieldDepth + COIN.fieldBevel;
 
   if (earned && tier >= 5) {
-    const inner = outline(group, form.field - 0.06);
-    inner.holes.push(outline(group, form.field - 0.1) as unknown as THREE.Path);
+    const inner = outline(group, COIN.field - 0.06);
+    inner.holes.push(outline(group, COIN.field - 0.1) as unknown as THREE.Path);
     const band = new THREE.Mesh(new THREE.ExtrudeGeometry(inner, { depth: 0.02, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.008, bevelSegments: 3, curveSegments: 64 }), metal);
     band.position.z = fieldTop - 0.015;
     group3d.add(band);
   }
 
-  // The mark: raised in white glaze, raised in the rim's metal, raised in a deeper shade of the enamel,
-  // cut into the field (a dark inlay barely above it) or printed flat in ink.
-  const markMaterial = !earned
-    ? new THREE.MeshPhysicalMaterial({ color: 0xe6e8eb, roughness: 0.7 })
-    : style.mark === "metal" ? metalMaterial(style.metal, gold)
-      : style.mark === "tone" ? new THREE.MeshPhysicalMaterial({ color: color.clone().multiplyScalar(0.62), roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05 })
-        : style.mark === "engraved" ? new THREE.MeshPhysicalMaterial({ color: color.clone().multiplyScalar(0.38), roughness: 0.65 })
-          : style.mark === "ink" ? new THREE.MeshPhysicalMaterial({ color: 0x222220, roughness: 0.9 })
-            : new THREE.MeshPhysicalMaterial({ color: 0xfbf9f5, roughness: 0.2, clearcoat: 1, clearcoatRoughness: 0.04, sheen: 0.5, sheenColor: new THREE.Color(0xffffff), emissive: 0xffffff, emissiveIntensity: 0.06 });
-  const flat = earned && (style.mark === "engraved" || style.mark === "ink");
-  const { geometry: markShape, standing } = markGeometry(style.art, state === "concealed" ? "hidden" : id, 1.02 * (form.field / 0.8), earned);
-  const mark = new THREE.Mesh(markShape, markMaterial);
-  if (standing) {
-    // A relief stands from the field: lower when unstruck, barely raised when cut or printed.
-    mark.scale.z = !earned ? 0.6 : flat ? 0.18 : 1;
-    mark.position.z = fieldTop - 0.004;
-  } else {
-    // Tubes lie half sunk in the field.
-    mark.scale.z = !earned ? 0.5 : flat ? 0.12 : 1;
-    mark.position.z = !earned ? fieldTop - 0.005 : flat ? fieldTop + 0.002 : fieldTop + 0.025;
-  }
+  // The pictogram stands from the field in the rim's metal; lower and matte on a blank.
+  const markMaterial = earned ? metalMaterial(roseGold) : new THREE.MeshPhysicalMaterial({ color: 0xe6e8eb, roughness: 0.7 });
+  const mark = new THREE.Mesh(reliefMark(state === "concealed" ? "hidden" : id, 1.02 * (COIN.field / 0.8)), markMaterial);
+  mark.scale.z = earned ? 1 : 0.6;
+  mark.position.z = fieldTop - 0.004;
   group3d.add(mark);
 
   group3d.rotation.set(-0.08, 0.3, 0);
@@ -219,7 +151,7 @@ export function buildMedal({ id, group, state, tier }: AchievementArtProps, styl
     frame: 1.3,
     lift: 0.08,
     shadow: { y: -1.22, width: 2.2, depth: 0.5, strength: 0.28 },
-    backFace: -(form.backDepth + form.backBevel) - 0.002,
+    backFace: -(COIN.backDepth + COIN.backBevel) - 0.002,
     engraveColor: metal.color.clone().multiplyScalar(0.55).getHex(),
   };
 }

@@ -7,8 +7,7 @@ import { useLocalization } from "../../../localization/LocalizationContext";
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { Translate } from "../../../localization/translate";
 import type { TranslationKey } from "../../../localization/translations";
-import type { AchievementBadgeStage } from "../../achievementBadge";
-import { useAchievementBadgeUrl } from "../../medalStyleImages";
+import { achievementBadgeUrl, type AchievementBadgeStage } from "../../achievementBadge";
 import { achievementCondition, achievementName, formatAchievementDay, raritySentence, shownRarity, timesLabel } from "../../achievementCopy";
 import type { AchievementDayFacts } from "../../achievementFacts";
 import { dayMeasure, dayMeasureKind, type DayMeasureKind } from "../../achievementDayMeasure";
@@ -20,8 +19,6 @@ import { medalEngraving, medalTint } from "./c15Copy";
 
 type PopupProps = {
   readonly item: AchievementItem;
-  /** Where the medal sits: beside the title, or large above it. */
-  readonly look?: "side" | "stage";
   readonly onClose: () => void;
   readonly onOpenDay: (day: string) => void;
 };
@@ -51,7 +48,7 @@ function dayFigure(item: AchievementItem, facts: AchievementDayFacts | undefined
  * how many times. The metal is left to the medal itself; nothing names it. Everything here is new
  * beyond the row, which already shows the name, condition, count and share.
  */
-export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps) {
+export function C15Popup({ item, onClose, onOpenDay }: PopupProps) {
   const { effectiveLanguage, t } = useLocalization();
   const titleId = useId();
   useModalDismiss(onClose);
@@ -71,8 +68,7 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
   const share = rarity ? t("achievements.rarity.detail", { percent: formatRarityPercent(rarity.percent, effectiveLanguage) }) : null;
   const few = rarity ? raritySentence(rarity, t, effectiveLanguage, "tab") : null;
   const previewStage: AchievementBadgeStage = definition.repeatable || definition.weight < 5 ? "silver" : "gold";
-  const previewUrl = useAchievementBadgeUrl(definition, previewStage, true);
-  const preview = !earned && !concealed ? previewUrl : undefined;
+  const preview = !earned && !concealed ? achievementBadgeUrl(definition.id, previewStage, true) : undefined;
   const engraving = medalEngraving(item, t, effectiveLanguage);
 
   return (
@@ -81,7 +77,7 @@ export function C15Popup({ item, look = "side", onClose, onOpenDay }: PopupProps
         className="auth-modal modal-shell c15-pop"
         data-modal-variant="standard"
         data-state={earned ? "earned" : "locked"}
-        data-look={look}
+        data-look="stage"
         lang={effectiveLanguage}
         role="dialog"
         aria-modal="true"

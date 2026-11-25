@@ -3,8 +3,7 @@ import { ModalCloseButton } from "../../components/ModalCloseButton";
 import { useModalDismiss } from "../../lib/useModalDismiss";
 import { useOverlayDismiss } from "../../lib/useOverlayDismiss";
 import { useLocalization } from "../localization/LocalizationContext";
-import { useActiveAchievementLayout, type AchievementLayoutId } from "./achievementDesignReview";
-import { ACHIEVEMENT_LAYOUT_REGISTRY } from "./layouts/registry";
+import { c15Layout } from "./layouts/c15";
 import type { AchievementItem } from "./useAchievements";
 
 export type AchievementUnlockDialogProps = {
@@ -14,8 +13,6 @@ export type AchievementUnlockDialogProps = {
   readonly firstLook: boolean;
   readonly onClose: () => void;
   readonly onView: () => void;
-  /** Draw this composition's card instead of the active one's. */
-  readonly layout?: AchievementLayoutId;
 };
 
 /** Order newly earned achievements so the most notable leads the card. */
@@ -25,14 +22,12 @@ export function orderNewAchievements(items: readonly AchievementItem[]): Achieve
 }
 
 /** Opens with the app when achievements arrived since it was last shown. */
-export function AchievementUnlockDialog({ items, firstLook, onClose, onView, layout }: AchievementUnlockDialogProps) {
+export function AchievementUnlockDialog({ items, firstLook, onClose, onView }: AchievementUnlockDialogProps) {
   const { effectiveLanguage, t } = useLocalization();
   const titleId = useId();
   useModalDismiss(onClose);
   const overlayDismiss = useOverlayDismiss(onClose);
-  const active = useActiveAchievementLayout();
-  const { Card, cardLayout } = ACHIEVEMENT_LAYOUT_REGISTRY[layout ?? active];
-  const cardOwner = cardLayout ?? layout ?? active;
+  const { Card, dialogVariant } = c15Layout;
   const ordered = orderNewAchievements(items);
   const lead = ordered[0];
   if (!lead) return null;
@@ -43,8 +38,8 @@ export function AchievementUnlockDialog({ items, firstLook, onClose, onView, lay
     <div className="auth-modal__overlay" {...overlayDismiss}>
       <section
         className="auth-modal modal-shell achievement-unlock"
-        data-modal-variant={ACHIEVEMENT_LAYOUT_REGISTRY[cardOwner].dialogVariant ?? "compact"}
-        data-layout={cardOwner}
+        data-modal-variant={dialogVariant ?? "compact"}
+        data-layout="c15"
         data-kind={showFirstLook ? "first-look" : others.length > 0 ? "several" : "single"}
         lang={effectiveLanguage}
         role="dialog"

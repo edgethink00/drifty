@@ -4,52 +4,9 @@ import type { AchievementDefinition, AchievementId } from "./achievementCatalog"
 import type { AchievementHistory } from "./achievementHistory";
 import type { AchievementRarity } from "./achievementRarity";
 import type { EarnedAchievement } from "./achievementStore";
-import { CHOSEN_MEDAL_STYLE, DEFAULT_MEDAL_STYLE, parseMedalStyleKey, readMedalStyle, type MedalStyle } from "./medalStyle";
 
-// v20: the settled choices (layout, popup, blocks, medal design) are no longer offered, so older saved picks are dropped.
-const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v20";
-
-/** Compositions of the achievements screens the dev review can switch between, in picker order. */
-export const ACHIEVEMENT_LAYOUTS = ["c12", "c13", "c14", "c15", "c16"] as const;
-
-export type AchievementLayoutId = (typeof ACHIEVEMENT_LAYOUTS)[number];
-
-/** Short labels the review page shows in its layout picker. */
-export const ACHIEVEMENT_LAYOUT_LABELS: Readonly<Record<AchievementLayoutId, string>> = {
-  c12: "구성 12: 한 줄 원장",
-  c13: "구성 13: 두 줄 읽기 폭",
-  c14: "구성 14: 기록 띠 줄",
-  c15: "구성 15: 큰 메달 목록",
-  c16: "구성 16: 조용한 체크리스트",
-};
-
-/** The composition people see outside the dev review. */
-export const PRODUCTION_ACHIEVEMENT_LAYOUT: AchievementLayoutId = "c15";
-
-export function isAchievementLayout(value: unknown): value is AchievementLayoutId {
-  return typeof value === "string" && (ACHIEVEMENT_LAYOUTS as readonly string[]).includes(value);
-}
-
-/** How much an opened row shows, in picker order. */
-export const ACHIEVEMENT_OPEN_STYLES = ["full", "brief", "line", "popup", "stage"] as const;
-
-export type AchievementOpenStyle = (typeof ACHIEVEMENT_OPEN_STYLES)[number];
-
-/** Short labels the review page shows in its picker. */
-export const ACHIEVEMENT_OPEN_STYLE_LABELS: Readonly<Record<AchievementOpenStyle, string>> = {
-  full: "펼치기 1: 전체 (지금)",
-  brief: "펼치기 2: 짧게, 날짜는 더 보기로",
-  line: "펼치기 3: 한 줄",
-  popup: "팝업 1: 메달 옆",
-  stage: "팝업 2: 메달 위 크게",
-};
-
-/** What people see outside the dev review. */
-export const PRODUCTION_ACHIEVEMENT_OPEN_STYLE: AchievementOpenStyle = "stage";
-
-export function isAchievementOpenStyle(value: unknown): value is AchievementOpenStyle {
-  return typeof value === "string" && (ACHIEVEMENT_OPEN_STYLES as readonly string[]).includes(value);
-}
+// v21: only example holdings and rarity are reviewed now; older saved picks are dropped.
+const REVIEW_STORAGE_KEY = "drifty.achievements.designReview.v21";
 
 /**
  * How much of the set the dev review draws as earned, in picker order: the
@@ -89,7 +46,7 @@ export const REVIEW_HOLDING_COUNT: Readonly<Partial<Record<AchievementReviewHold
 
 /**
  * Dev-server design review only: ?achievementReview=1 turns on example rarity
- * figures, an everything-earned view and card previews, driven from the
+ * figures, example holdings (none to all earned) and card previews, driven from the
  * review page around the app (AchievementReviewBridge). import.meta.env.DEV is
  * false in production builds, so the review never reaches people.
  */
@@ -103,42 +60,21 @@ type ReviewState = {
   readonly mockRarity: boolean;
   /** How much of the set is drawn as earned. */
   readonly holding: AchievementReviewHolding;
-  /** Offer a sort menu over the earned part (c15). */
-  readonly sortMenu: boolean;
-  /** How the c15 list is framed in blocks. */
-  readonly frame: AchievementListFrame;
-  /** The medal's design: form, palette, metal and mark. */
-  readonly medal: MedalStyle;
-  /** The composition being reviewed. */
-  readonly layout: AchievementLayoutId;
-  /** How much an opened row shows. */
-  readonly open: AchievementOpenStyle;
 };
 
 function initialState(): ReviewState {
-  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record", sortMenu: false, frame: PRODUCTION_ACHIEVEMENT_FRAME, medal: DEFAULT_MEDAL_STYLE, layout: PRODUCTION_ACHIEVEMENT_LAYOUT, open: PRODUCTION_ACHIEVEMENT_OPEN_STYLE };
-  let saved: Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean } = {};
+  if (!isAchievementDesignReview()) return { mockRarity: false, holding: "record" };
+  let saved: Partial<ReviewState> = {};
   try {
-    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState> & { readonly allEarned?: boolean; readonly boxed?: boolean };
+    saved = JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY) ?? "{}") as Partial<ReviewState>;
   } catch {
     saved = {};
   }
   const search = new URLSearchParams(window.location.search);
   return {
     mockRarity: typeof saved.mockRarity === "boolean" ? saved.mockRarity : true,
-    // ?achievementHolding=<id> wins; an older saved "all earned" choice still counts.
-    holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? (saved.allEarned === true ? "all" : "record"),
-    sortMenu: search.has("achievementSort") ? search.get("achievementSort") === "1" : saved.sortMenu === true,
-    // ?achievementFrame=<id> wins; an older saved blocks switch still counts.
-    frame: [search.get("achievementFrame"), saved.frame].find(isAchievementListFrame)
-      ?? (typeof saved.boxed === "boolean" ? (saved.boxed ? "parts" : "none") : PRODUCTION_ACHIEVEMENT_FRAME),
-    // ?achievementMedal=form.palette.metal.mark.art wins over the saved design; the review opens on the chosen one.
-    medal: search.has("achievementMedal") ? parseMedalStyleKey(search.get("achievementMedal"), CHOSEN_MEDAL_STYLE) : readMedalStyle(saved.medal, CHOSEN_MEDAL_STYLE),
-    // ?achievementLayout=<id> on the page address wins over the saved choice.
-    layout: [new URLSearchParams(window.location.search).get("achievementLayout"), saved.layout].find(isAchievementLayout)
-      ?? PRODUCTION_ACHIEVEMENT_LAYOUT,
-    open: [new URLSearchParams(window.location.search).get("achievementOpen"), saved.open].find(isAchievementOpenStyle)
-      ?? PRODUCTION_ACHIEVEMENT_OPEN_STYLE,
+    // ?achievementHolding=<id> wins over the saved choice.
+    holding: [search.get("achievementHolding"), saved.holding].find(isAchievementReviewHolding) ?? "record",
   };
 }
 
@@ -167,48 +103,6 @@ function subscribe(listener: () => void) {
 
 export function useAchievementReviewState(): ReviewState {
   return useSyncExternalStore(subscribe, current, current);
-}
-
-/** The composition to draw: the reviewed one during the dev review, else the production one. */
-export function useActiveAchievementLayout(): AchievementLayoutId {
-  const { layout } = useAchievementReviewState();
-  return isAchievementDesignReview() ? layout : PRODUCTION_ACHIEVEMENT_LAYOUT;
-}
-
-/** How much an opened row shows: the reviewed style during the dev review, else the production one. */
-export function useActiveAchievementOpenStyle(): AchievementOpenStyle {
-  const { open } = useAchievementReviewState();
-  return isAchievementDesignReview() ? open : PRODUCTION_ACHIEVEMENT_OPEN_STYLE;
-}
-
-/**
- * How the c15 list sits in blocks, in picker order: not at all, one block for
- * each part (as the Usage tab sets its parts), a card for each achievement
- * set off by a faint fill as Search Console sets its cards, or the same cards
- * drawn with a hairline border.
- */
-export const ACHIEVEMENT_LIST_FRAMES = ["none", "parts", "cards", "cardsLine"] as const;
-
-export type AchievementListFrame = (typeof ACHIEVEMENT_LIST_FRAMES)[number];
-
-export const ACHIEVEMENT_LIST_FRAME_LABELS: Readonly<Record<AchievementListFrame, string>> = {
-  none: "상자 없음",
-  parts: "묶음마다 상자",
-  cards: "업적마다 상자 (채움)",
-  cardsLine: "업적마다 상자 (테두리)",
-};
-
-export function isAchievementListFrame(value: unknown): value is AchievementListFrame {
-  return typeof value === "string" && (ACHIEVEMENT_LIST_FRAMES as readonly string[]).includes(value);
-}
-
-/** How people see the c15 list framed. */
-export const PRODUCTION_ACHIEVEMENT_FRAME: AchievementListFrame = "cards";
-
-/** The c15 list's frame: the reviewed choice during the dev review, else the production one. */
-export function useAchievementListFrame(): AchievementListFrame {
-  const { frame } = useAchievementReviewState();
-  return isAchievementDesignReview() ? frame : PRODUCTION_ACHIEVEMENT_FRAME;
 }
 
 /**

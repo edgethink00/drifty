@@ -1,5 +1,4 @@
 import type { ComponentType } from "react";
-import type { AchievementLayoutId } from "../achievementDesignReview";
 import type { AchievementsTabModel } from "../useAchievementsTab";
 import type { AchievementItem } from "../useAchievements";
 
@@ -35,13 +34,6 @@ export type AchievementLayoutCardProps = {
 export type AchievementLayout = {
   readonly Tab: ComponentType<AchievementLayoutTabProps>;
   readonly Card: ComponentType<AchievementLayoutCardProps>;
-  /**
-   * Set when Tab is borrowed from another layout: the tabpanel then carries
-   * that layout's id in data-layout so its scoped CSS applies.
-   */
-  readonly tabLayout?: AchievementLayoutId;
-  /** Same for Card: the dialog shell carries the card owner's id. */
-  readonly cardLayout?: AchievementLayoutId;
   /** The shared modal-shell size; compact unless the card needs more room. */
   readonly dialogVariant?: "compact" | "standard" | "workspace" | "expressive";
 };

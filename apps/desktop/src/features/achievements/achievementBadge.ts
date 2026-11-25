@@ -2,10 +2,11 @@ import type { AchievementId } from "./achievementCatalog";
 import type { AchievementItem } from "./useAchievements";
 
 /**
- * Drifty's achievement medal: a struck metal award in the achievement's
- * colour, rendered in 3D ahead of time (scripts/bake-achievement-badges.mjs)
- * and shipped as images. Its metal tells how often it has been earned:
- * silver at first, gold from ten times, a double gold rim from fifty.
+ * Drifty's achievement medal: a thick coin in the achievement's muted colour
+ * with its pictogram raised in metal, rendered in 3D ahead of time
+ * (scripts/bake-achievement-badges.mjs) and shipped as images. Its metal tells
+ * how often it has been earned without naming it: silver at first, rose gold
+ * from ten times (the "gold" stage), an inner band from fifty ("ring").
  */
 export const ACHIEVEMENT_BADGE_STAGES = ["locked", "concealed", "silver", "gold", "ring"] as const;
 export type AchievementBadgeStage = typeof ACHIEVEMENT_BADGE_STAGES[number];

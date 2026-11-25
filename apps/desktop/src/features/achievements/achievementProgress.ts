@@ -1,8 +1,6 @@
 import { formatLocalizedCompactDurationFromSeconds } from "../../lib/formatting";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import type { Translate } from "../localization/translate";
-import type { TranslationKey } from "../localization/translations";
-import { GOLD_FROM_COUNT, RING_FROM_COUNT } from "./achievementBadge";
 import type { AchievementId } from "./achievementCatalog";
 import { daysLabel } from "./achievementCopy";
 import type { AchievementItem } from "./useAchievements";
@@ -59,11 +57,3 @@ export function closestAchievements(items: readonly AchievementItem[], limit = 2
     .slice(0, limit);
 }
 
-/** How far a repeatable medal is from its next metal: gold at ten times, a double rim at fifty. */
-export function nextMedal(item: AchievementItem): { readonly key: TranslationKey; readonly remaining: number; readonly share: number } | null {
-  const count = item.earned?.count ?? 0;
-  if (!item.earned || !item.definition.repeatable) return null;
-  if (count < GOLD_FROM_COUNT) return { key: "achievements.medal.toGold", remaining: GOLD_FROM_COUNT - count, share: count / GOLD_FROM_COUNT };
-  if (count < RING_FROM_COUNT) return { key: "achievements.medal.toRing", remaining: RING_FROM_COUNT - count, share: (count - GOLD_FROM_COUNT) / (RING_FROM_COUNT - GOLD_FROM_COUNT) };
-  return null;
-}

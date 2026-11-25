@@ -39,21 +39,6 @@
   white-space: nowrap;
 }
 
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__eyebrow {
-  min-height: 1.5rem;
-  margin: 0;
-  padding: 2px var(--modal-close-gutter) 0 0;
-  color: var(--text-soft);
-  font-size: var(--type-caption-size);
-  line-height: 1.4;
-}
-
-/* Over a centred medal the word sits on the same axis, clear of the close button on both sides. */
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__eyebrow--centred {
-  padding-inline: var(--modal-close-gutter);
-  text-align: center;
-}
-
 /* Single: the medal is the moment. A 12.5rem box shows a 160px medal. */
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__stage {
   display: grid;
@@ -102,15 +87,6 @@
   text-wrap: pretty;
 }
 
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__when {
-  margin: var(--space-4) 0 0;
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  line-height: 1.45;
-  font-variant-numeric: tabular-nums;
-}
-
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__rarity {
   display: flex;
   flex-direction: column;
@@ -157,8 +133,6 @@
   margin-top: 0;
   font-size: var(--text-2xl);
 }
-
-:where(.achievement-unlock[data-layout="c15"]) .c15-card__story--lead .c15-card__when { margin-top: var(--space-2); }
 
 :where(.achievement-unlock[data-layout="c15"]) .c15-card__rows { margin-top: var(--space-4); }
 
@@ -301,7 +275,6 @@
   :where(.achievement-unlock[data-layout="c15"]) .c15-card__hero--lead { --c15-medal: 7rem; }
   :where(.achievement-unlock[data-layout="c15"]) .c15-cardrow { --c15-row-medal: 3.25rem; padding: 6px 0; }
   :where(.achievement-unlock[data-layout="c15"]) .c15-cardrows--look .c15-cardrow { --c15-row-medal: 3.75rem; padding: var(--space-2) 0; }
-  :where(.achievement-unlock[data-layout="c15"]) .c15-card__when { margin-top: var(--space-3); }
   :where(.achievement-unlock[data-layout="c15"]) .c15-card__actions { margin-top: var(--space-4); }
 }
 

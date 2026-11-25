@@ -1,27 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocalization } from "../localization/LocalizationContext";
 import {
-  ACHIEVEMENT_LAYOUTS,
-  ACHIEVEMENT_LAYOUT_LABELS,
-  ACHIEVEMENT_OPEN_STYLES,
-  ACHIEVEMENT_OPEN_STYLE_LABELS,
   ACHIEVEMENT_REVIEW_HOLDINGS,
   ACHIEVEMENT_REVIEW_HOLDING_LABELS,
-  ACHIEVEMENT_LIST_FRAMES,
-  ACHIEVEMENT_LIST_FRAME_LABELS,
-  isAchievementLayout,
-  isAchievementListFrame,
-  isAchievementOpenStyle,
   isAchievementReviewHolding,
   setAchievementReviewState,
   useAchievementReviewState,
-  type AchievementLayoutId,
-  type AchievementListFrame,
-  type AchievementOpenStyle,
   type AchievementReviewHolding,
 } from "./achievementDesignReview";
 import { achievementBadgeStage, achievementBadgeUrl } from "./achievementBadge";
-import { MEDAL_STYLE_AXES, readMedalStyle, type MedalStyle } from "./medalStyle";
 import { achievementName, asEarnedForReview } from "./AchievementsPanel";
 import { AchievementUnlockDialog } from "./AchievementUnlockDialog";
 import type { AchievementItem } from "./useAchievements";
@@ -38,7 +25,7 @@ type Preview = "single" | "several" | "firstLook";
 
 type Inbound =
   | { readonly action: "hello" }
-  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; readonly sortMenu?: unknown; readonly boxed?: unknown; readonly frame?: unknown; readonly medal?: unknown; readonly layout?: unknown; readonly open?: unknown } }
+  | { readonly action: "set"; readonly patch: { readonly allEarned?: unknown; readonly holding?: unknown; readonly mockRarity?: unknown; } }
   | { readonly action: "preview"; readonly kind: Preview }
   | { readonly action: "openTab" };
 
@@ -81,11 +68,7 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       canSingle: rarest !== undefined,
       canSeveral: earned.length >= 2,
       canFirstLook: earned.length >= 2,
-      layouts: ACHIEVEMENT_LAYOUTS.map((id) => ({ id, label: ACHIEVEMENT_LAYOUT_LABELS[id] })),
-      opens: ACHIEVEMENT_OPEN_STYLES.map((id) => ({ id, label: ACHIEVEMENT_OPEN_STYLE_LABELS[id] })),
       holdings: ACHIEVEMENT_REVIEW_HOLDINGS.map((id) => ({ id, label: ACHIEVEMENT_REVIEW_HOLDING_LABELS[id] })),
-      frames: ACHIEVEMENT_LIST_FRAMES.map((id) => ({ id, label: ACHIEVEMENT_LIST_FRAME_LABELS[id] })),
-      medalAxes: MEDAL_STYLE_AXES.map((axis) => ({ key: axis.key, label: axis.label, options: axis.options.map(([id, label]) => ({ id, label })) })),
       medals: items.map(asEarnedForReview).map((item) => ({
         id: item.definition.id,
         name: achievementName(item, t),
@@ -113,18 +96,11 @@ export function AchievementReviewBridge({ items: recorded, onOpenTab }: { readon
       else if (message.action === "openTab") { setPreview(null); onOpenTab(); }
       else if (message.action === "preview") setPreview(message.kind);
       else {
-        const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; sortMenu?: boolean; frame?: AchievementListFrame; medal?: MedalStyle; layout?: AchievementLayoutId; open?: AchievementOpenStyle } = {};
+        const patch: { holding?: AchievementReviewHolding; mockRarity?: boolean; } = {};
         // An older review page sends "all earned" as a switch.
         if (typeof message.patch.allEarned === "boolean") patch.holding = message.patch.allEarned ? "all" : "record";
         if (isAchievementReviewHolding(message.patch.holding)) patch.holding = message.patch.holding;
         if (typeof message.patch.mockRarity === "boolean") patch.mockRarity = message.patch.mockRarity;
-        if (typeof message.patch.sortMenu === "boolean") patch.sortMenu = message.patch.sortMenu;
-        if (typeof message.patch.boxed === "boolean") patch.frame = message.patch.boxed ? "parts" : "none";
-        if (isAchievementListFrame(message.patch.frame)) patch.frame = message.patch.frame;
-        // A design patch changes only the axes it names.
-        if (message.patch.medal !== undefined) patch.medal = readMedalStyle(message.patch.medal, latest.current.state.medal);
-        if (isAchievementLayout(message.patch.layout)) patch.layout = message.patch.layout;
-        if (isAchievementOpenStyle(message.patch.open)) patch.open = message.patch.open;
         setAchievementReviewState(patch);
       }
     }

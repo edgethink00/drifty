@@ -6,15 +6,10 @@ import type { AchievementId } from "../../achievementCatalog";
 import type { AlmostThereEntry } from "../../achievementCollection";
 import { achievementCondition, achievementName, timesLabel } from "../../achievementCopy";
 import { progressNote } from "../../achievementProgress";
-import { achievementRowParts, type EarnedRowOrder } from "../../achievementRows";
-import { isAchievementDesignReview, useAchievementListFrame, useAchievementReviewState, useActiveAchievementOpenStyle } from "../../achievementDesignReview";
-import { shownRarity } from "../../achievementCopy";
-import { SettingsSelect } from "../../../settings/SettingsSelect";
-import "../../../dashboard/timeline-zoom.css";
+import { achievementRowParts } from "../../achievementRows";
 import type { AchievementItem } from "../../useAchievements";
 import type { AchievementLayoutTabProps } from "../types";
 import { C15Medal } from "./C15Medal";
-import { C15Open } from "./C15Open";
 import { C15Popup } from "./C15Popup";
 import { medalTint, rowFact } from "./c15Copy";
 
@@ -32,16 +27,12 @@ type RowProps = {
   readonly item: AchievementItem;
   /** Set when the row leads the list as a goal under way. */
   readonly entry?: AlmostThereEntry;
-  readonly open: boolean;
-  /** The row opens the achievement's popup instead of expanding in place. */
-  readonly popup?: boolean;
   readonly isNew: boolean;
-  readonly onToggle: (id: AchievementId) => void;
-  readonly onOpenDay: (day: string) => void;
+  readonly onOpen: (id: AchievementId) => void;
 };
 
-/** One achievement: the big medal, name over condition, one strong fact on the right; opens in place. */
-function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: RowProps) {
+/** One achievement as a card: the big medal, name over condition, one strong fact on the right; opens its popup. */
+function Row({ item, entry, isNew, onOpen }: RowProps) {
   const { effectiveLanguage, t } = useLocalization();
   const { definition, earned } = item;
   const id = definition.id;
@@ -51,22 +42,18 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
   // With rarity on the right edge, a repeat's count moves beside the name so it is never lost.
   const times = earned && definition.repeatable && earned.count > 1 && fact?.kind === "rarity" ? timesLabel(earned.count, t) : null;
   const left = entry ? progressNote(item, t, effectiveLanguage) : null;
-  const openId = "c15-open-" + id;
   return (
     <li
       className="c15-item"
       data-state={earned ? "earned" : "locked"}
-      data-open={open ? "true" : undefined}
       data-almost-there-id={entry ? id : undefined}
     >
       <button
         type="button"
         className="c15-row"
-        aria-expanded={popup ? undefined : open}
-        aria-haspopup={popup ? "dialog" : undefined}
-        aria-controls={open ? openId : undefined}
+        aria-haspopup="dialog"
         aria-label={t(earned ? "achievements.tileEarned" : "achievements.tileLocked", { name })}
-        onClick={() => onToggle(id)}
+        onClick={() => onOpen(id)}
       >
         <C15Medal item={item} className="c15-medal c15-row__medal" />
         <span className="c15-row__text">
@@ -100,7 +87,6 @@ function Row({ item, entry, open, popup = false, isNew, onToggle, onOpenDay }: R
         </span>
         <Chevron />
       </button>
-      {open ? <C15Open item={item} id={openId} headingId={openId + "-name"} isNew={isNew} onOpenDay={onOpenDay} /> : null}
     </li>
   );
 }
@@ -136,43 +122,24 @@ function C15Loading({ label }: { readonly label: string }) {
 export function C15Tab({ model }: AchievementLayoutTabProps) {
   const { t } = useLocalization();
   const { status, items, failedEmpty, choose, isNew, onOpenDay, onRetry } = model;
-  // Dev review only for now: a sort menu over the earned part, to judge whether one earns its place.
-  const sortMenu = useAchievementReviewState().sortMenu && isAchievementDesignReview();
-  const [order, setOrder] = useState<EarnedRowOrder>("most");
-  const earnedOrder = sortMenu ? order : "most";
-  const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: earnedOrder }), [items, earnedOrder]);
-  const hasRarity = useMemo(() => items.some((item) => shownRarity(item) !== null), [items]);
-  const [openId, setOpenId] = useState<AchievementId | null>(null);
+  const parts = useMemo(() => achievementRowParts(items, { almost: Infinity, earned: "most" }), [items]);
   const [popupId, setPopupId] = useState<AchievementId | null>(null);
-  const openStyle = useActiveAchievementOpenStyle();
-  const frame = useAchievementListFrame();
-  const popup = openStyle === "popup" || openStyle === "stage";
 
   if (model.loading) return <C15Loading label={t("achievements.loading")} />;
 
-  const toggle = (id: AchievementId) => {
-    if (popup) setPopupId(id);
-    else setOpenId((current) => (current === id ? null : id));
+  const open = (id: AchievementId) => {
+    setPopupId(id);
     choose(id);
   };
-  const popupItem = popup && popupId ? items.find((item) => item.definition.id === popupId) ?? null : null;
+  const popupItem = popupId ? items.find((item) => item.definition.id === popupId) ?? null : null;
   const row = (item: AchievementItem, entry?: AlmostThereEntry) => (
-    <Row
-      key={item.definition.id}
-      item={item}
-      entry={entry}
-      open={!popup && openId === item.definition.id}
-      popup={popup}
-      isNew={isNew(item)}
-      onToggle={toggle}
-      onOpenDay={onOpenDay}
-    />
+    <Row key={item.definition.id} item={item} entry={entry} isNew={isNew(item)} onOpen={open} />
   );
   const later = [...parts.notYet, ...parts.hidden];
   const anyLater = parts.almost.length + later.length > 0;
 
   return (
-    <div className="c15" data-boxed={frame === "parts" ? "" : undefined} data-cards={frame === "cards" ? "fill" : frame === "cardsLine" ? "line" : undefined}>
+    <div className="c15">
       {failedEmpty ? (
         <div className="c15-failed" role="alert">
           <p>{t("achievements.error")}</p>
@@ -189,27 +156,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
 
       {parts.earned.length > 0 ? (
         <section className="c15-part" aria-labelledby="c15-part-earned">
-          <div className="c15-part__head">
-            <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
-            {sortMenu && parts.earned.length > 1 ? (
-              // The app's compact menu capsule, the one the calendar's time zoom uses.
-              <div className="seg timeline-zoom c15-sort" role="group" aria-label={t("achievements.c15.sort.label")}>
-                <SettingsSelect<EarnedRowOrder>
-                  ariaLabel={t("achievements.c15.sort.label")}
-                  className="timeline-zoom__menu"
-                  value={order}
-                  options={[
-                    { value: "most", label: t("achievements.c15.sort.most") },
-                    { value: "recent", label: t("achievements.c15.sort.recent") },
-                    ...(hasRarity ? [{ value: "rarest" as const, label: t("achievements.c15.sort.rarest") }] : []),
-                  ]}
-                  onChange={setOrder}
-                  placement="below"
-                  menuSize="content"
-                />
-              </div>
-            ) : null}
-          </div>
+          <h2 id="c15-part-earned" className="c15-part__label">{t("achievements.c15.part.earned")}</h2>
           <ol className="c15-list">{parts.earned.map((item) => row(item))}</ol>
         </section>
       ) : null}
@@ -228,7 +175,7 @@ export function C15Tab({ model }: AchievementLayoutTabProps) {
       {/* Only while the latest days are still being worked out; otherwise the list ends with its last row. */}
       {status === "loading" ? <p className="c15-footnote" role="status">{t("achievements.loading")}</p> : null}
       <ModalPresence>
-        {popupItem ? <C15Popup item={popupItem} look={openStyle === "stage" ? "stage" : "side"} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
+        {popupItem ? <C15Popup item={popupItem} onClose={() => setPopupId(null)} onOpenDay={onOpenDay} /> : null}
       </ModalPresence>
     </div>
   );

@@ -1,8 +1,6 @@
 import * as THREE from "three";
 import type { AchievementArtProps } from "../achievementArt";
-import type { MedalStyle } from "../medalStyle";
 import { buildMedal, outline } from "./medal";
-import { GOLD } from "./palette";
 import { studioScene } from "./studio";
 
 /**
@@ -16,8 +14,6 @@ import { studioScene } from "./studio";
  */
 export type LiveMedalOptions = {
   readonly art: AchievementArtProps;
-  /** The design axes the dev review chose; the shipped medal when left out. */
-  readonly style?: MedalStyle;
   /** Lines engraved on the back, or none for a blank back. */
   readonly engraving: readonly string[];
   /** Called once the first frame is on screen, so the still image can step aside. */
@@ -107,7 +103,7 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
   key.position.set(-3, 5, 4);
   scene.add(key);
 
-  const stage = buildMedal(options.art, options.style);
+  const stage = buildMedal(options.art);
   stage.object.rotation.set(0, 0, 0);
   const pivot = new THREE.Group();
   pivot.add(stage.object);
@@ -115,12 +111,11 @@ export function mountLiveMedal(canvas: HTMLCanvasElement, options: LiveMedalOpti
 
   const { art } = options;
   if (options.engraving.length > 0 && art.state === "earned") {
-    const gold = art.tier >= 3;
     const letters = engravingTexture(options.engraving, getComputedStyle(canvas).fontFamily || "sans-serif");
     const back = new THREE.Mesh(
       new THREE.ShapeGeometry(outline(art.group, 0.9), 48),
       new THREE.MeshPhysicalMaterial({
-        color: stage.engraveColor ?? (gold ? new THREE.Color(GOLD).multiplyScalar(0.62) : 0x7d848d),
+        color: stage.engraveColor ?? 0x7d848d,
         metalness: 1,
         roughness: 0.62,
         transparent: true,

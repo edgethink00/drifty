@@ -54,7 +54,7 @@ export function achievementRowParts(
   items: readonly AchievementItem[],
   { almost = 3, earned = "recent" }: { readonly almost?: number; readonly earned?: EarnedRowOrder } = {},
 ): AchievementRowParts {
-  const leading = almost > 0 ? almostThere(items, { limit: almost, medals: false }) : [];
+  const leading = almost > 0 ? almostThere(items, { limit: almost }) : [];
   const leadingIds = new Set(leading.map((entry) => entry.item.definition.id));
   const catalogue = new Map(items.map((item, index) => [item.definition.id, index]));
   return {

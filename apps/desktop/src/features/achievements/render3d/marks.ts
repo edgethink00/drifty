@@ -1,22 +1,14 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import type { AchievementGlyphName } from "../AchievementGlyph";
-import type { MedalArt } from "../medalStyle";
-import { glyphTubes } from "./glyph3d";
 
 /*
- * The marks at a medal's centre, drawn for the medal rather than borrowed from
- * the screen icons. Everything is authored on the icons' 24-unit grid with the
- * origin at the centre and y up, then scaled so 24 units span size.
- *
- *   relief   filled pictograms standing flat from the field, as a struck coin's design does
- *   seal     the relief smaller, inside a fine ring, like a stamp
- *   geo      no pictures: arcs, dots and ticks that hint at what was done
- *   numeral  the achievement's number, set in a plain geometric figure; geo where there is none
+ * The pictograms at a medal's centre, drawn for the medal as filled shapes
+ * that stand from the field like a struck coin's design, rather than the
+ * screen's line icons. Authored on the icons' 24-unit grid, centred, y up.
  */
 
 type Point = readonly [number, number];
-type Stroke = readonly Point[];
 
 const TAU = Math.PI * 2;
 
@@ -27,11 +19,7 @@ function arc(cx: number, cy: number, r: number, from: number, to: number, steps 
   });
 }
 
-function ring(cx: number, cy: number, r: number, steps = 48): Point[] {
-  return arc(cx, cy, r, 0, TAU, steps);
-}
-
-// ---- Filled shapes for relief and seal ----
+// ---- Filled shapes ----
 
 function circleShape(cx: number, cy: number, r: number): THREE.Shape {
   const shape = new THREE.Shape();
@@ -197,84 +185,7 @@ function reliefShapes(name: AchievementGlyphName): THREE.Shape[] {
   }
 }
 
-// ---- Strokes for geo and numeral ----
-
-/** No pictures: each mark as arcs, dots and ticks. */
-function geoStrokes(name: AchievementGlyphName): Stroke[] {
-  switch (name) {
-    case "firstFlow": return [ring(0, -3, 1.6, 16), arc(0, -3, 6.2, -Math.PI * 0.15, Math.PI * 0.85)];
-    case "flow90": return [arc(0, 0, 7.6, Math.PI / 2, Math.PI / 2 - Math.PI * 1.5, 48), ring(0, 7.6, 0.01, 1), ring(0, 0, 1.4, 16)];
-    case "flow180": return [ring(0, 0, 8, 56), ring(0, 0, 5.2, 40), ring(0, 0, 2.4, 20)];
-    case "focusDay8h": return [ring(0, 0, 4, 32), ...RAYS(8, 6.6, 8.8)];
-    case "earlyStart": return [[[-9, -3], [9, -3]], arc(0, -3, 5.6, 0, Math.PI, 28), [[0, 4.8], [0, 4.8]]];
-    case "nightOwl": {
-      const outer = arc(0, 0, 8, Math.PI * 0.32, Math.PI * 1.85, 40);
-      return [outer, arc(3.6, 3, 6.6, Math.PI * 0.05, Math.PI * 1.06, 36)];
-    }
-    case "weekendShift": return [ring(-3.6, 1.6, 2.4, 20), ring(3.6, 1.6, 2.4, 20), [[-7, -4], [7, -4]]];
-    case "streak7": return Array.from({ length: 7 }, (_, index) => { const a = Math.PI - (index / 6) * Math.PI; return [[Math.cos(a) * 7.6, Math.sin(a) * 7.6 - 2.4], [Math.cos(a) * 7.6, Math.sin(a) * 7.6 - 2.4]] as Stroke; }).concat([[[-3, -5.4], [3, -5.4]]]);
-    case "streak30": return [...RAYS(30, 7.2, 9), ring(0, 0, 1.4, 16)];
-    case "focus100h": return [[[0, 8.6], [8.6, 0], [0, -8.6], [-8.6, 0], [0, 8.6]], [[0, 4.6], [4.6, 0], [0, -4.6], [-4.6, 0], [0, 4.6]]];
-    case "driftDay": return [sine(-9, 9, 0, 3, 1.5, 48)];
-    case "noDriftDay": return [ring(0, 0, 8, 56), [[0, 0], [0, 0]]];
-    case "comeback": return [arc(0, -1, 6, Math.PI * 1.1, -Math.PI * 0.35, 36), [[5.6, -6.2], [4.6, -3.2], [7.6, -2.4]]];
-    default: return Array.from({ length: 8 }, (_, index) => { const a = (index / 8) * TAU; return [[Math.cos(a) * 7, Math.sin(a) * 7], [Math.cos(a) * 7, Math.sin(a) * 7]] as Stroke; }).concat([ring(0, 0, 0.01, 1)]);
-  }
-}
-
-/** A plain geometric figure set on a 5 by 9 cell, origin at its lower left. */
-const FIGURES: Readonly<Record<string, readonly Stroke[]>> = {
-  "0": [[...arc(2.5, 6.5, 2.5, 0, Math.PI, 14), ...arc(2.5, 2.5, 2.5, Math.PI, TAU, 14), [5, 6.5]]],
-  "1": [[[1, 7.4], [2.9, 9], [2.9, 0]]],
-  "2": [[...arc(2.5, 6.6, 2.4, Math.PI * 0.95, -Math.PI * 0.18, 16), [0.1, 0], [5, 0]]],
-  "3": [[...arc(2.4, 6.9, 2.1, Math.PI * 0.9, -Math.PI * 0.5, 16)], [...arc(2.4, 2.5, 2.4, Math.PI * 0.5, -Math.PI * 0.9, 18)]],
-  "5": [[[4.7, 9], [0.8, 9], [0.4, 5], ...arc(2.5, 2.7, 2.6, Math.PI * 0.72, -Math.PI * 0.9, 20)]],
-  "7": [[[0, 9], [5, 9], [1.8, 0]]],
-  "8": [ring(2.5, 6.9, 2.1, 24), ring(2.5, 2.4, 2.5, 28)],
-  "9": [[...ring(2.5, 6.4, 2.5, 28)], [[5, 6.4], [3.6, 0]]],
-  h: [[[0.3, 9], [0.3, 0]], [[0.3, 3.4], ...arc(2.5, 3.4, 2.2, Math.PI, 0, 14), [4.7, 0]]],
-};
-
-const NUMBERS: Readonly<Partial<Record<AchievementGlyphName, string>>> = {
-  firstFlow: "25", flow90: "90", flow180: "180", focusDay8h: "8h", streak7: "7", streak30: "30", focus100h: "100",
-};
-
-function numeralStrokes(text: string): Stroke[] {
-  const gap = 1.8;
-  const width = text.length * 5 + (text.length - 1) * gap;
-  const scale = Math.min(1.25, 16 / width);
-  const x0 = (-width * scale) / 2;
-  const y0 = (-9 * scale) / 2;
-  return [...text].flatMap((char, index) => (FIGURES[char] ?? []).map((stroke) => stroke.map(([x, y]) => [x0 + (x + index * (5 + gap)) * scale, y0 + y * scale] as const)));
-}
-
 // ---- Geometry ----
-
-function tubes(strokes: readonly Stroke[], scale: number, radius: number): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
-  const up = new THREE.Vector3(0, 1, 0);
-  for (const stroke of strokes) {
-    const points = stroke.map(([x, y]) => new THREE.Vector2(x * scale, y * scale));
-    for (const point of points) {
-      const joint = new THREE.SphereGeometry(radius, 14, 10);
-      joint.translate(point.x, point.y, 0);
-      parts.push(joint);
-    }
-    for (let index = 1; index < points.length; index += 1) {
-      const a = points[index - 1]!;
-      const b = points[index]!;
-      const length = a.distanceTo(b);
-      if (length < 1e-4) continue;
-      const segment = new THREE.CylinderGeometry(radius, radius, length, 14, 1, true);
-      segment.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(up, new THREE.Vector3(b.x - a.x, b.y - a.y, 0).normalize()));
-      segment.translate((a.x + b.x) / 2, (a.y + b.y) / 2, 0);
-      parts.push(segment);
-    }
-  }
-  const merged = mergeGeometries(parts.map((part) => part.toNonIndexed()));
-  parts.forEach((part) => part.dispose());
-  return merged ?? new THREE.BufferGeometry();
-}
 
 function relief(shapes: readonly THREE.Shape[], scale: number, depth: number): THREE.BufferGeometry {
   const parts = shapes.map((shape) => {
@@ -287,30 +198,7 @@ function relief(shapes: readonly THREE.Shape[], scale: number, depth: number): T
   return merged ?? new THREE.BufferGeometry();
 }
 
-/**
- * The mark's geometry for a design: tubes lie centred on z = 0 (half above
- * the field when set on it); reliefs stand from z = 0 upward.
- */
-export function markGeometry(art: MedalArt, name: AchievementGlyphName, size: number, earned: boolean): { readonly geometry: THREE.BufferGeometry; readonly standing: boolean } {
-  const scale = size / 24;
-  const radius = (earned ? 0.088 : 0.074) * (size / 1.02);
-  switch (art) {
-    case "relief":
-      return { geometry: relief(reliefShapes(name), scale * 0.95, 0.07), standing: true };
-    case "seal": {
-      const inner = relief(reliefShapes(name), scale * 0.62, 0.06);
-      const band = tubes([ring(0, 0, 10.4, 72)], scale, radius * 0.5);
-      band.translate(0, 0, 0.03);
-      const merged = mergeGeometries([inner, band]);
-      return { geometry: merged ?? inner, standing: true };
-    }
-    case "geo":
-      return { geometry: tubes(geoStrokes(name), scale, radius * 0.8), standing: false };
-    case "numeral": {
-      const number = NUMBERS[name];
-      return { geometry: tubes(number ? numeralStrokes(number) : geoStrokes(name), scale, radius * 0.9), standing: false };
-    }
-    default:
-      return { geometry: glyphTubes(name, size, radius, 0), standing: false };
-  }
+/** The achievement's pictogram as a relief standing from z = 0 upward, scaled so 24 units span size. */
+export function reliefMark(name: AchievementGlyphName, size: number): THREE.BufferGeometry {
+  return relief(reliefShapes(name), (size / 24) * 0.95, 0.07);
 }

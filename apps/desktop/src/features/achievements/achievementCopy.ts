@@ -2,8 +2,7 @@ import { localeForDisplayLanguage } from "../../lib/formatting";
 import type { DisplayLanguage } from "../localization/languagePreference";
 import type { Translate } from "../localization/translate";
 import type { TranslationKey } from "../localization/translations";
-import { achievementBadgeStage, type AchievementBadgeStage } from "./achievementBadge";
-import { achievementTier, formatRarityBasis, formatRarityPercent, type AchievementRarity } from "./achievementRarity";
+import { formatRarityBasis, formatRarityPercent, type AchievementRarity } from "./achievementRarity";
 import type { AchievementItem } from "./useAchievements";
 
 export function achievementName(item: AchievementItem, t: Translate): string {
@@ -41,17 +40,6 @@ export function daysLabel(count: number, t: Translate): string {
   return count === 1 ? t("achievements.dayOne") : t("achievements.days", { count });
 }
 
-const MEDAL_NAMES: Partial<Record<AchievementBadgeStage, TranslationKey>> = {
-  silver: "achievements.medal.silver",
-  gold: "achievements.medal.gold",
-  ring: "achievements.medal.ring",
-};
-
-export function medalName(item: AchievementItem, t: Translate): string | null {
-  const key = item.earned ? MEDAL_NAMES[achievementBadgeStage(item)] : undefined;
-  return key ? t(key) : null;
-}
-
 /** Rarity that may be shown: none without a share of users, and none for a hidden achievement until it is earned. */
 export function shownRarity(item: AchievementItem): AchievementRarity | null {
   if (!item.rarity) return null;
@@ -87,11 +75,3 @@ export function raritySentence(rarity: AchievementRarity, t: Translate, language
   });
 }
 
-export function rarityTierName(item: AchievementItem, rarity: AchievementRarity, t: Translate): string {
-  return t(("achievements.tier." + achievementTier(item.definition, rarity)) as TranslationKey);
-}
-
-/** Rare, very rare and legendary achievements set their tier in gold; common ones stay quiet. */
-export function rarityIsNotable(item: AchievementItem, rarity: AchievementRarity): boolean {
-  return achievementTier(item.definition, rarity) >= 3;
-}
