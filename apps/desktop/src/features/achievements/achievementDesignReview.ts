@@ -38,10 +38,10 @@ export const ACHIEVEMENT_SUMMARY_STYLE_LABELS: Readonly<Record<AchievementSummar
   large: "요약 1: 큰 제목 (지금)",
   quiet: "요약 2: 작은 머리말",
   section: "요약 3: 얻은 업적 제목에 합침",
-  rare: "요약 4: 드문 업적만",
+  rare: "요약 4: 드문 업적, 없으면 비움",
   stats: "요약 5: 숫자 칸",
   none: "요약 6: 없음",
-  rareOrQuiet: "요약 7: 드문 업적, 없으면 작은 머리말",
+  rareOrQuiet: "요약 7: 드문 업적, 없으면 업적 개수만",
 };
 
 /** The summary people see outside the dev review. */

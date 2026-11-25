@@ -26,11 +26,12 @@ function rareHeld(items: readonly AchievementItem[]) {
 }
 
 /**
- * c15 says rarity in plain words: no tier ladder. With rarity known the line
- * counts only the rare ones ("rare 2"); without it, medal metals as before.
+ * c15 says rarity in plain words: no tier ladder and no medal metals (the
+ * medals already show their metal). The only part is how many held ones are
+ * rare, and only when rarity is known.
  */
 function plainParts(summary: AchievementSummary, items: readonly AchievementItem[], t: Translate): readonly AchievementSummaryPart[] {
-  if (summary.kind !== "rarity") return summary.parts;
+  if (summary.kind !== "rarity") return [];
   const rare = rareHeld(items).length;
   return rare > 0 ? [{ key: "rare", name: t("achievements.c15.summary.rare"), count: rare }] : [];
 }
@@ -47,12 +48,12 @@ type SummaryProps = {
 export function C15Summary({ summary, items, className, withoutCount = false }: SummaryProps) {
   const { t } = useLocalization();
   const parts = plainParts(summary, items, t);
+  if (withoutCount && parts.length === 0) return null;
   return (
     <div className={className} data-tier-summary={summary.kind ?? "none"}>
       {withoutCount ? null : <p className="c15-summary__count">{summary.held}</p>}
       {parts.length > 0 ? (
         <p className="c15-summary__tiers">
-          {summary.kind === "medal" ? <span className="c15-sr">{summary.partsLabel}</span> : null}
           {parts.map(({ key, name, count }) => (
             <span key={key} className="c15-hold">
               <span className="c15-hold__name">{name}</span>
@@ -122,8 +123,8 @@ export function C15StatsSummary({ items, summary }: { readonly items: readonly A
 
 /**
  * Summary style "rareOrQuiet": the rarest held achievements as medal chips when
- * rarity is known and at least one is rare; otherwise the quiet count line, so
- * the top of the list is never empty and never shows both.
+ * rarity is known and at least one is rare; otherwise only the quiet count
+ * ("7 achievements"), never both.
  */
 export function C15RareOrQuietSummary({ items, summary }: { readonly items: readonly AchievementItem[]; readonly summary: AchievementSummary }) {
   return rareHeld(items).length > 0
