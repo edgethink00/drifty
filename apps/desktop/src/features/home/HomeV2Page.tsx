@@ -14,6 +14,7 @@ import { itemsForReviewHolding } from "../achievements/useAchievementsTab";
 import { BASELINE_WEEKS, DEEP_FOCUS_MIN_SECONDS, buildHomeModel, type HomeHour, type HomeModel } from "./homeModel";
 import { formatClock, formatDuration, formatShortDuration, topCard, type HomeCard, type HomeLang } from "./homeCards";
 import { FLOW_VARIANTS, FlowHome, type FlowVariant } from "./homeFlow";
+import { FlowDsHome } from "./homeFlowDs";
 import "./home-v2.css";
 import "./home-flow.css";
 
@@ -57,8 +58,8 @@ const WEEKDAY_SHORT = { ko: ["일", "월", "화", "수", "목", "금", "토"], e
 const WEEKDAY_LONG = { ko: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"], en: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] };
 const weekdayOf = (day: string, lang: HomeLang) => WEEKDAY_LONG[lang][new Date(day + "T12:00:00").getDay()];
 
-export type HomeVariant = "rows" | "rings" | "two" | FlowVariant;
-const VARIANTS: readonly HomeVariant[] = ["rows", "rings", "two", ...FLOW_VARIANTS];
+export type HomeVariant = "rows" | "rings" | "two" | FlowVariant | "flow6";
+const VARIANTS: readonly HomeVariant[] = ["rows", "rings", "two", ...FLOW_VARIANTS, "flow6"];
 
 function previewParams(): { readonly variant: HomeVariant; readonly clock: string | null } {
   if (typeof window === "undefined") return { variant: "rows", clock: null };
@@ -364,6 +365,9 @@ export function HomeV2Page({ loadHistory, recentSegments, classificationOptions,
 
   if (!model) {
     return <div className="page hv"><p className="hv-empty">{failed === key ? c.failed : c.loading}</p></div>;
+  }
+  if (variant === "flow6") {
+    return <FlowDsHome model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;
   }
   if (variant.startsWith("flow")) {
     return <FlowHome variant={variant as FlowVariant} model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;

@@ -1,0 +1,77 @@
+/* F6: F5 from the app's own parts (owner review 2026-11-27). Every value
+   below is a shared token; the only local rules place existing parts. */
+.hf { --hf-card: color-mix(in srgb, var(--text) 3%, var(--surface)); min-width: 0; }
+:root[data-theme="dark"] .hf { --hf-card: color-mix(in srgb, var(--text) 4.5%, var(--surface)); }
+.hf ~ * { display: none !important; }
+
+.hf-grid { display: grid; grid-template-columns: minmax(0, 1fr) 18.5rem; gap: var(--block-gap); align-items: stretch; padding-bottom: var(--space-6); }
+.hf-main { display: flex; flex-direction: column; gap: var(--block-gap); min-width: 0; }
+
+/* A block is the achievements card: grey fill, no border, shared corner and inset. */
+.hf-block { min-width: 0; padding: var(--block-pad-top) var(--block-pad) var(--block-pad); border-radius: var(--block-radius); background: var(--hf-card); }
+.hf-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-3); }
+.hf-head__meta { color: var(--text-soft); font-size: var(--text-xs); line-height: var(--block-title-leading); font-variant-numeric: tabular-nums; }
+
+/* Text roles, as the achievement rows set them. */
+.hf-name { color: var(--text); font-size: var(--text-md); font-weight: 600; line-height: 1.35; }
+.hf-sub { overflow: hidden; color: var(--text-soft); font-size: var(--text-sm); line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.hf-figure { color: var(--text); font-family: var(--font-display); font-size: var(--text-xl); font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Drifty */
+.hf-voice__title { margin: 0; color: var(--text); font-family: var(--font-display); font-size: var(--text-2xl); font-weight: var(--type-display-title-weight); line-height: 1.35; text-wrap: pretty; }
+.hf-voice__body { margin: var(--space-2) 0 0; color: var(--text-soft); font-size: var(--text-md); line-height: 1.6; text-wrap: pretty; }
+.hf-voice__actions { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
+.hf-ask { flex: 1; display: flex; align-items: center; gap: var(--space-2); min-width: 0; height: 2rem; padding-left: var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); }
+.hf-ask:focus-within { border-color: color-mix(in srgb, var(--text) 30%, var(--line)); }
+.hf-ask input { flex: 1; min-width: 0; padding: 0; border: 0; background: none; font: inherit; font-size: var(--text-sm); color: var(--text); outline: none; }
+.hf-ask input::placeholder { color: var(--text-soft); }
+.hf-ask .app-btn { height: calc(2rem - 2px); border-radius: 0 calc(var(--radius-sm) - 1px) calc(var(--radius-sm) - 1px) 0; }
+
+/* The day */
+.hf-day__top { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-4); }
+.hf-status { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-soft); font-size: var(--text-sm); }
+.hf-list { margin: 0; padding: 0; list-style: none; }
+.hf-list li + li { border-top: 1px solid var(--line); }
+.hf-list__none { padding: var(--space-2) 0; color: var(--text-soft); font-size: var(--text-sm); }
+.hf-row { appearance: none; display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); width: 100%; padding: var(--space-2) 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.hf-row:hover .hf-row__title { color: var(--text); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.hf-row__time { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-soft); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.hf-row__what { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.hf-row__what > :first-child { flex: none; }
+.hf-row__title { overflow: hidden; color: var(--text); font-size: var(--text-md); text-overflow: ellipsis; white-space: nowrap; }
+.hf-row__dur { color: var(--text-soft); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+
+/* Next achievement, as an achievement row. */
+.hf-next { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding-block: var(--space-3); }
+.hf-next__medal { display: block; width: 2.75rem; height: 2.75rem; }
+.hf-next__medal img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.hf-next__text { display: grid; gap: 2px; min-width: 0; }
+
+/* Right card: parts split by one hairline. */
+.hf-side { display: flex; flex-direction: column; padding: 0; }
+.hf-side__part { display: grid; gap: var(--space-3); padding: var(--block-pad-top) var(--block-pad) var(--block-pad); }
+.hf-side__part + .hf-side__part { border-top: 1px solid var(--line); }
+button.hf-side__part { appearance: none; width: 100%; border-left: 0; border-right: 0; border-bottom: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.hf-side__part:first-child + button.hf-side__part, .hf-side__part + button.hf-side__part { border-top: 1px solid var(--line); }
+
+/* Your Day's donut, placed in the card without its own panel chrome. */
+.hf-ring { cursor: pointer; }
+.hf-ring .flow-compact-split-chart__panel { padding: 0; border: 0; background: none; box-shadow: none; }
+
+.hf-metric { appearance: none; display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.hf-metric__dial { width: 2rem; height: 2rem; }
+.hf-metric__text { display: grid; gap: 2px; min-width: 0; }
+.hf-donut { display: block; width: 100%; height: 100%; }
+.hf-donut .flow-compact-productivity-circle__segment { cursor: inherit; }
+.hf-donut .flow-compact-productivity-circle__segment:hover { filter: none; stroke-width: 18; }
+
+/* The Insights week columns, in the card's last part, taking the rest of its height. */
+.hf-week { flex: 1 1 auto; grid-template-rows: auto minmax(0, 1fr); }
+.hf-week .hf-head { margin-bottom: 0; }
+.hf-week__plot { display: block; height: auto; min-height: 8rem; }
+.hf-week__today .wt-daylabel { color: var(--text); font-weight: 600; }
+
+
+/* Loop 1: one row height whatever icon the row carries. */
+.hf-row { min-height: 2.5rem; }
+.hf-row__what > :first-child { width: 20px; height: 20px; }
