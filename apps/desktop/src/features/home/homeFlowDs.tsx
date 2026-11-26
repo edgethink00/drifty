@@ -36,6 +36,7 @@ const COPY = {
     productivity: "오늘 생산성", goal: "목표", quality: "집중 품질", left: (d: string) => d + " 남음", done: "달성",
     longest: (d: string) => "가장 긴 집중 " + d, qualityNotYet: "25분 넘게 집중하면 보여요",
     week: "최근 7일 집중", weekMet: (n: number) => n + "일 목표 달성", goalLine: (d: string) => d,
+    weekAvg: "하루 평균",
     next: "다음 업적", open: "보기", ask: "Drifty에게 묻기", send: "보내기", example: (q: string) => "Drifty에게 묻기 · 예: " + q,
     examples: { morning: "어제 정리해 줘", midday: "왜 평소보다 느려?", evening: "오늘 정리해 줘" },
     weekdays: ["일", "월", "화", "수", "목", "금", "토"], weekdaysLong: ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"],
@@ -47,6 +48,7 @@ const COPY = {
     productivity: "Productivity today", goal: "Goal", quality: "Focus quality", left: (d: string) => d + " to go", done: "Met",
     longest: (d: string) => "Longest " + d, qualityNotYet: "Shows after 25 minutes of focus",
     week: "Focus, last 7 days", weekMet: (n: number) => "Goal met " + n + (n === 1 ? " day" : " days"), goalLine: (d: string) => d,
+    weekAvg: "Daily average",
     next: "Next achievement", open: "Open", ask: "Ask Drifty", send: "Send", example: (q: string) => "Ask Drifty · e.g. " + q,
     examples: { morning: "Recap yesterday", midday: "Why am I behind usual?", evening: "Wrap up today" },
     weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], weekdaysLong: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
@@ -134,6 +136,8 @@ export function FlowDsHome({ model, lang, appIcons, achievements, onOpenDay, onO
   ];
   const top = Math.max(model.goalSeconds, ...model.week.map((entry) => entry.focus)) * 1.1;
   const last = model.week.length - 1;
+  const pastDays = model.week.slice(0, -1).filter((entry) => entry.focus > 0);
+  const weekAverage = pastDays.length > 0 ? pastDays.reduce((sum, entry) => sum + entry.focus, 0) / pastDays.length : 0;
   const primary = card.actions.find((action) => action.kind === "ask");
 
   return (
@@ -205,6 +209,7 @@ export function FlowDsHome({ model, lang, appIcons, achievements, onOpenDay, onO
           </div>
           <button type="button" className="hf-side__part hf-week" onClick={onOpenWeek}>
             <Title text={c.week} meta={c.weekMet(model.goalMetDays)} />
+            <span className="hf-week__avg"><span className="hf-figure">{formatDuration(weekAverage, lang)}</span><span className="hf-sub">{c.weekAvg}</span></span>
             <span className="wt-plot hf-week__plot">
               <span className="wt-grid hf-week__grid" aria-hidden="true">
                 <span className="wt-gridline" style={{ top: (1 - model.goalSeconds / top) * 100 + "%" }}><span className="wt-gridlabel">{formatShortDuration(model.goalSeconds)}</span></span>
@@ -214,7 +219,7 @@ export function FlowDsHome({ model, lang, appIcons, achievements, onOpenDay, onO
                   <span key={entry.day} className={"wt-col" + (index === last ? " hf-week__today" : "")}>
                     <span className="wt-bars-zone">
                       <span className="wt-bar" style={{ height: (entry.focus > 0 ? Math.max(2, (entry.focus / top) * 100) : 0) + "%" }} aria-label={c.weekdaysLong[new Date(entry.day + "T12:00:00").getDay()] + " " + formatDuration(entry.focus, lang)} role="img">
-                        <span className="wt-seg" style={{ height: "100%", background: "var(--flow-tone-focus)" }} />
+                        <span className="wt-seg hf-week__seg" style={{ height: "100%" }} />
                       </span>
                     </span>
                     <span className="wt-daylabel">{c.weekdays[new Date(entry.day + "T12:00:00").getDay()]}</span>
