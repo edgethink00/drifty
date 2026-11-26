@@ -1020,9 +1020,43 @@
   opacity: 1;
 }
 
-.chat-picker .settings-select-control__option.is-disabled:has(.settings-select-control__option-status--warning) {
+.chat-picker--connection .settings-select-control__option.is-disabled {
   cursor: not-allowed;
-  opacity: 0.54;
+}
+
+.chat-picker--connection .settings-select-control__option.is-disabled :is(.chat-picker__icon, [data-select-label]) {
+  opacity: 0.64;
+}
+
+.chat-picker--connection .settings-select-control__option.is-disabled .settings-select-control__option-status {
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  font-weight: 400;
+}
+
+.chat-picker--connection .settings-select-control__option-action {
+  margin-right: var(--space-1);
+  border-color: var(--line-strong);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--type-caption-size);
+  font-weight: 500;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.chat-picker--connection .settings-select-control__option-action:hover:not(:disabled) {
+  background: var(--surface-strong);
+  color: var(--text);
+}
+
+.chat-picker--connection .settings-select-control__option-action:disabled {
+  opacity: 0.66;
+  pointer-events: none;
 }
 
 .chat-send {

@@ -817,6 +817,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   // Read again when the person may have just signed in from Terminal.
   const [statusVersion, setStatusVersion] = useState(0);
   const [statusChecking, setStatusChecking] = useState(false);
+  const recheckConnection = () => setStatusVersion((version) => version + 1);
   useEffect(() => {
     let cancelled = false;
     setStatusChecking(true);
@@ -1277,15 +1278,24 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
     const missing = value !== "cloud" && status !== null && !availability(value)?.installed;
     const needsSignIn = value !== "cloud" && signedOut(value);
+    const label = value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud;
     return {
       value,
-      label: value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud,
+      label,
       description: missing ? undefined : copy.connectionDescription(value),
       icon: <ConnectionIcon connection={value} />,
       statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
-      statusTone: missing || needsSignIn ? "warning" : undefined,
+      statusTone: needsSignIn ? "warning" : undefined,
       disabled: missing,
-      muted: missing,
+      actions: missing ? [{
+        key: "recheck",
+        label: `${copy.checkAgain}: ${label}`,
+        text: copy.checkAgain,
+        busyText: copy.checkingConnection,
+        busy: statusChecking,
+        disabled: statusChecking,
+        onAction: recheckConnection,
+      }] : undefined,
     };
   });
   const cliProvider: ChatProvider | null = connection === "cloud" ? null : connection;
@@ -1583,7 +1593,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 ) : null}
                 <SettingsSelect<ChatConnection>
                   ariaLabel={copy.connection}
-                  className="chat-picker"
+                  className="chat-picker chat-picker--connection"
                   placement="below"
                   value={connection}
                   options={connectionOptions}
@@ -1633,7 +1643,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                     type="button"
                     className="chat-recheck"
                     disabled={statusChecking}
-                    onClick={() => setStatusVersion((version) => version + 1)}
+                    onClick={recheckConnection}
                   >
                     <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M13.2 6A5.3 5.3 0 0 0 4 3.6L2.8 4.8M2.8 4.8V2.4M2.8 4.8h2.4M2.8 10A5.3 5.3 0 0 0 12 12.4l1.2-1.2m0 0v2.4m0-2.4h-2.4" />

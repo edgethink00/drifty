@@ -739,6 +739,34 @@ describe("Chat page", () => {
     expect(screen.getByRole("combobox", { name: "Connection" }).textContent).toBe("Codex");
   });
 
+  it("rechecks an uninstalled CLI from the open menu without changing the active connection", async () => {
+    const { client: baseClient } = fakeClient();
+    const getStatus = vi.fn(async () => READY)
+      .mockResolvedValueOnce(READY)
+      .mockResolvedValueOnce(READY)
+      .mockResolvedValueOnce(BOTH_INSTALLED);
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, getStatus }} /></LocalizationTestProvider>);
+    await waitFor(() => expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(false));
+
+    const menu = within(openPicker("Connection"));
+    const recheck = () => menu.getByRole("button", { name: "Check again: Claude Code" });
+    const claude = () => menu.getByRole<HTMLButtonElement>("option", { name: "Claude Code" });
+    const chooser = screen.getByRole("combobox", { name: "Connection" });
+    expect(claude().disabled).toBe(true);
+    expect(claude().querySelector(".settings-select-control__option-status--warning")).toBeNull();
+    await act(async () => { fireEvent.click(recheck()); });
+    expect(claude().disabled).toBe(true);
+    expect(chooser.textContent).toBe("Codex");
+
+    await act(async () => { fireEvent.click(recheck()); });
+    expect(getStatus).toHaveBeenCalledTimes(3);
+    expect(claude().disabled).toBe(false);
+    expect(chooser.textContent).toBe("Codex");
+    expect(menu.queryByRole("button", { name: "Check again: Claude Code" })).toBeNull();
+    fireEvent.click(claude());
+    expect(chooser.textContent).toBe("Claude Code");
+  });
+
   it("restores the saved CLI's composer once a recheck detects the install", async () => {
     window.localStorage.setItem(CHAT_CONNECTION_STORAGE_KEY, "claude");
     const { client: baseClient } = fakeClient();
