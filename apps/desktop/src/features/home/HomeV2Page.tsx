@@ -366,7 +366,7 @@ export function HomeV2Page({ loadHistory, recentSegments, classificationOptions,
     return <div className="page hv"><p className="hv-empty">{failed === key ? c.failed : c.loading}</p></div>;
   }
   if (variant.startsWith("flow")) {
-    return <FlowHome variant={variant as FlowVariant} model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;
+    return <FlowHome variant={variant as FlowVariant} model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;
   }
   const items = metrics(model, c, lang);
   const card = topCard(model, lang);

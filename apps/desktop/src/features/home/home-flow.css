@@ -108,3 +108,46 @@ button.wf-stats__part:hover { background: color-mix(in srgb, var(--text) 2.5%, t
 .wf-ask input::placeholder { color: var(--text-soft); }
 .wf-ask button { appearance: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-xs); background: var(--text); color: var(--canvas); cursor: pointer; }
 
+/* F5 (owner go 2026-11-27): F1 read in Drifty's own style. No serif; the
+   right card carries the focus donut with goal and focus quality as small
+   rings, and the last 7 days. */
+.wf--flow5 { --wf-serif: var(--font-display); }
+.wf--flow5 .wf-banner__title { font-size: 1.4375rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.35; }
+.wf--flow5 .wf-grid { grid-template-columns: minmax(0, 1fr) 18.5rem; }
+.wf-ring { display: block; width: 100%; height: 100%; overflow: visible; }
+.wf-ring__track { fill: none; stroke: color-mix(in srgb, var(--text) 8%, var(--wf-card)); }
+.wf-ring__arc { fill: none; stroke-linecap: round; }
+.wf-ring__arc.is-focus { stroke: var(--flow-tone-focus); }
+.wf-ring__arc.is-drift { stroke: var(--flow-tone-drift); }
+.wf-ring__arc.is-neutral { stroke: color-mix(in srgb, var(--flow-tone-neutral) 60%, var(--wf-card)); }
+.wf-ringpart { gap: var(--space-4); }
+.wf-ringpart button { appearance: none; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.wf-ringpart__hero { padding: 0; display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: center; gap: var(--space-4); }
+.wf-ringpart__dial { position: relative; width: 5.5rem; aspect-ratio: 1; }
+.wf-ringpart__pct { position: absolute; inset: 0; display: grid; place-content: center; grid-auto-flow: column; align-items: baseline; color: var(--text); font-family: var(--font-display); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.wf-ringpart__pct small { margin-left: 1px; color: var(--text-soft); font-size: 0.6875rem; font-weight: 600; letter-spacing: 0; }
+.wf-ringpart__lead { display: grid; gap: 2px; min-width: 0; }
+.wf-ringpart__lead .wf-small:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wf-ringpart__lead b { color: var(--text); font-family: var(--font-display); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.wf-ringpart__rows { display: grid; }
+.wf-ringrow { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); width: 100%; padding: 0.625rem 0; }
+.wf-ringrow:first-child { box-shadow: inset 0 1px 0 var(--line); }
+.wf-ringrow + .wf-ringrow { box-shadow: inset 0 1px 0 var(--line); }
+.wf-ringrow__dial { width: 1.75rem; height: 1.75rem; }
+.wf-ringrow__text { display: grid; gap: 1px; min-width: 0; }
+.wf-ringrow__name { color: var(--text); font-size: var(--text-sm); font-weight: 600; }
+.wf-ringrow__value { color: var(--text); font-family: var(--font-display); font-size: 1.125rem; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.wf-ringrow__value small { margin-left: 1px; color: var(--text-soft); font-size: 0.6875rem; font-weight: 600; }
+.wf-ringrow:hover .wf-ringrow__name, .wf-ringpart__hero:hover b { color: var(--accent-strong); }
+.wf-weekpart { gap: var(--space-3); }
+.wf-weekpart__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.wf-weekpart__title { color: var(--text); font-size: var(--text-sm); font-weight: 600; }
+.wf-weekpart__plot { position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); height: 5.75rem; margin-top: var(--space-3); border-bottom: 1px solid var(--line-strong); }
+.wf-weekpart__col { position: relative; display: flex; align-items: flex-end; justify-content: center; }
+.wf-weekpart__col i { width: 62%; max-width: 1.375rem; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--text) 13%, var(--wf-card)); }
+.wf-weekpart__col.is-today i { background: var(--flow-tone-focus); }
+.wf-weekpart__col em { position: absolute; z-index: 2; padding-bottom: 1px; background: var(--wf-card); left: -6px; right: -6px; color: var(--accent-strong); font-size: 0.6875rem; font-style: normal; font-weight: 650; text-align: center; font-variant-numeric: tabular-nums; }
+.wf-weekpart__goal { position: absolute; left: 0; right: 0; z-index: 1; border-top: 1px dashed color-mix(in srgb, var(--text) 32%, transparent); }
+.wf-weekpart__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin-top: -4px; }
+.wf-weekpart__days span { color: var(--text-soft); font-size: 0.6875rem; text-align: center; }
+.wf-weekpart__days span.is-today { color: var(--text); font-weight: 650; }

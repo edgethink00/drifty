@@ -10,8 +10,8 @@ import { itemsForReviewHolding } from "../achievements/useAchievementsTab";
 import type { AchievementItem } from "../achievements/useAchievements";
 import { C15Medal } from "../achievements/layouts/c15/C15Medal";
 import { medalTint } from "../achievements/layouts/c15/c15Copy";
-import type { HomeModel, HomeSession, HomeWorkItem } from "./homeModel";
-import { formatClock, formatDuration, topCard, type HomeLang } from "./homeCards";
+import { DEEP_FOCUS_MIN_SECONDS, type HomeModel, type HomeSession, type HomeWorkItem } from "./homeModel";
+import { formatClock, formatDuration, formatShortDuration, topCard, type HomeLang } from "./homeCards";
 
 /*
  * Home after Wispr Flow's home (owner request 2026-11-26): a welcome title,
@@ -20,8 +20,8 @@ import { formatClock, formatDuration, topCard, type HomeLang } from "./homeCards
  * numbers lead in a serif. Blocks keep the achievements tab's grey fill.
  */
 
-export type FlowVariant = "flow1" | "flow2" | "flow3" | "flow4";
-export const FLOW_VARIANTS: readonly FlowVariant[] = ["flow1", "flow2", "flow3", "flow4"];
+export type FlowVariant = "flow1" | "flow2" | "flow3" | "flow4" | "flow5";
+export const FLOW_VARIANTS: readonly FlowVariant[] = ["flow1", "flow2", "flow3", "flow4", "flow5"];
 
 const COPY = {
   ko: {
@@ -33,6 +33,8 @@ const COPY = {
     ask: "Drifty에게 묻기", askExample: (q: string) => "예: " + q, send: "보내기", close: "닫기", open: "보기",
     longest: "가장 오래 한 일", next: "다음 업적", earned: "최근 얻은 업적",
     examples: { morning: "어제 정리해 줘", midday: "왜 평소보다 느려?", evening: "오늘 정리해 줘" },
+    prodLabel: "생산성", focusSub: (u: string | null, d: string) => u ? "평소 이 시각 " + u : "딴짓 " + d, goalName: "목표", qualityName: "집중 품질", qualityNotYet: "25분 넘게 집중하면", longestShort: (d: string) => "가장 긴 집중 " + d, leftShort: (d: string) => d + " 남음", doneShort: "달성",
+    week: "최근 7일 집중", weekMet: (n: number) => n + "일 목표 달성", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   },
   en: {
     welcome: "Welcome back",
@@ -43,6 +45,8 @@ const COPY = {
     ask: "Ask Drifty", askExample: (q: string) => "e.g. " + q, send: "Send", close: "Close", open: "Open",
     longest: "Longest today", next: "Next achievement", earned: "Recently earned",
     examples: { morning: "Recap yesterday", midday: "Why am I behind usual?", evening: "Wrap up today" },
+    prodLabel: "Productivity", focusSub: (u: string | null, d: string) => u ? "Usually " + u + " by now" : d + " drift", goalName: "Goal", qualityName: "Focus quality", qualityNotYet: "After 25 min of focus", longestShort: (d: string) => "Longest " + d, leftShort: (d: string) => d + " to go", doneShort: "Met",
+    week: "Focus, last 7 days", weekMet: (n: number) => "Goal met " + n + (n === 1 ? " day" : " days"), weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
 };
 type Copy = (typeof COPY)["ko"];
@@ -199,11 +203,95 @@ function AskBox({ c, phase, onAsk }: { readonly c: Copy; readonly phase: HomeMod
   );
 }
 
+type RingSegment = { readonly ratio: number; readonly tone: "focus" | "drift" | "neutral" };
+/** The focus donut, drawn as the Your Day donut is: focus, drift and neutral around one track. */
+function FocusRing({ segments, width }: { readonly segments: readonly RingSegment[]; readonly width: number }) {
+  const r = 50 - width / 2 - 1;
+  const C = 2 * Math.PI * r;
+  const shown = segments.filter((segment) => segment.ratio > 0.004);
+  const gap = shown.length > 1 ? 0.014 : 0;
+  let start = 0;
+  return (
+    <svg className="wf-ring" viewBox="0 0 100 100" aria-hidden="true">
+      <g transform="rotate(-90 50 50)">
+        <circle className="wf-ring__track" cx="50" cy="50" r={r} strokeWidth={width} />
+        {shown.map((segment) => {
+          const arc = <circle key={segment.tone} className={"wf-ring__arc is-" + segment.tone} cx="50" cy="50" r={r} strokeWidth={width} strokeDasharray={Math.max(0, Math.min(1, segment.ratio) - gap) * C + " " + C} strokeDashoffset={-start * C} />;
+          start += Math.min(1, segment.ratio);
+          return arc;
+        })}
+      </g>
+    </svg>
+  );
+}
+
+/** Today's three figures: the focus donut leads with productivity; goal and focus quality follow as rows with small rings. */
+function RingPart({ model, lang, c, onOpen }: { readonly model: HomeModel; readonly lang: HomeLang; readonly c: Copy; readonly onOpen: () => void }) {
+  const tracked = Math.max(1, model.now.tracked);
+  const has = model.now.tracked > 0;
+  const goalShare = Math.min(1, model.now.focus / model.goalSeconds);
+  const remaining = model.goalSeconds - model.now.focus;
+  const qualityReady = model.now.focus >= DEEP_FOCUS_MIN_SECONDS;
+  const quality = qualityReady ? model.deepFocusSeconds / model.now.focus : 0;
+  const longest = model.pattern.longestFocus;
+  const rows = [
+    { key: "goal", name: c.goalName, value: String(Math.round(goalShare * 100)), unit: "%", sub: remaining > 0 ? c.leftShort(formatDuration(remaining, lang)) : c.doneShort, ratio: goalShare },
+    { key: "quality", name: c.qualityName, value: qualityReady ? String(Math.round(quality * 100)) : "\u2014", unit: qualityReady ? "%" : "", sub: qualityReady && longest ? c.longestShort(formatDuration(longest.seconds, lang)) : c.qualityNotYet, ratio: quality },
+  ];
+  return (
+    <div className="wf-stats__part wf-ringpart">
+      <button type="button" className="wf-ringpart__hero" onClick={onOpen}>
+        <span className="wf-ringpart__dial">
+          <FocusRing width={11} segments={[{ ratio: model.now.focus / tracked, tone: "focus" }, { ratio: model.now.drift / tracked, tone: "drift" }, { ratio: model.now.neutral / tracked, tone: "neutral" }]} />
+          <span className="wf-ringpart__pct">{has ? Math.round((model.now.focus / tracked) * 100) : "\u2014"}{has ? <small>%</small> : null}</span>
+        </span>
+        <span className="wf-ringpart__lead">
+          <span className="wf-small">{c.prodLabel}</span>
+          <b>{model.now.focus < 60 ? "\u2014" : formatDuration(model.now.focus, lang)}</b>
+          <span className="wf-small">{c.focusSub(model.baseline.days > 0 && model.baseline.focus > 0 ? formatDuration(model.baseline.focus, lang) : null, formatDuration(model.now.drift, lang))}</span>
+        </span>
+      </button>
+      <div className="wf-ringpart__rows">
+        {rows.map((row) => (
+          <button key={row.key} type="button" className="wf-ringrow" onClick={onOpen}>
+            <span className="wf-ringrow__dial"><FocusRing width={16} segments={[{ ratio: row.ratio, tone: "focus" }]} /></span>
+            <span className="wf-ringrow__text"><span className="wf-ringrow__name">{row.name}</span><span className="wf-small">{row.sub}</span></span>
+            <span className="wf-ringrow__value">{row.value}{row.unit ? <small>{row.unit}</small> : null}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** The last 7 days, small: past days grey, today olive, one dashed goal line, weekday under each bar. */
+function WeekPart({ model, c, onOpen }: { readonly model: HomeModel; readonly c: Copy; readonly onOpen: () => void }) {
+  const top = Math.max(model.goalSeconds, ...model.week.map((day) => day.focus)) * 1.1;
+  const last = model.week.length - 1;
+  return (
+    <button type="button" className="wf-stats__part wf-weekpart" onClick={onOpen}>
+      <span className="wf-weekpart__head"><span className="wf-weekpart__title">{c.week}</span><span className="wf-small">{c.weekMet(model.goalMetDays)}</span></span>
+      <span className="wf-weekpart__plot" aria-hidden="true">
+        <i className="wf-weekpart__goal" style={{ bottom: (model.goalSeconds / top) * 100 + "%" }} />
+        {model.week.map((day, index) => (
+          <span key={day.day} className={"wf-weekpart__col" + (index === last ? " is-today" : "")}>
+            {index === last && day.focus >= 60 ? <em style={{ bottom: "calc(" + (day.focus / top) * 100 + "% + 3px)" }}>{formatShortDuration(day.focus)}</em> : null}
+            <i style={{ height: (day.focus > 0 ? Math.max(3, (day.focus / top) * 100) : 0) + "%" }} />
+          </span>
+        ))}
+      </span>
+      <span className="wf-weekpart__days" aria-hidden="true">
+        {model.week.map((day, index) => <span key={day.day} className={index === last ? "is-today" : undefined}>{c.weekdays[new Date(day.day + "T12:00:00").getDay()]}</span>)}
+      </span>
+    </button>
+  );
+}
+
 /** The stats card on the right, in parts split by hairlines, as Flow's is. */
-function StatsCard({ model, lang, c, appIcons, achievements, parts, onOpenDay, onOpenAchievements, onAsk }: {
+function StatsCard({ model, lang, c, appIcons, achievements, parts, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
   readonly model: HomeModel; readonly lang: HomeLang; readonly c: Copy; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
-  readonly parts: readonly ("stats" | "goal" | "longest" | "next" | "ask")[];
-  readonly onOpenDay: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
+  readonly parts: readonly ("stats" | "goal" | "longest" | "next" | "ask" | "ring" | "week")[];
+  readonly onOpenDay: () => void; readonly onOpenWeek: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
 }) {
   const { t } = useLocalization();
   const { next } = useAchievementRows(achievements);
@@ -216,6 +304,8 @@ function StatsCard({ model, lang, c, appIcons, achievements, parts, onOpenDay, o
   return (
     <aside className="wf-block wf-stats">
       {parts.map((part) => {
+        if (part === "ring") return <RingPart key={part} model={model} lang={lang} c={c} onOpen={onOpenDay} />;
+        if (part === "week") return <WeekPart key={part} model={model} c={c} onOpen={onOpenWeek} />;
         if (part === "stats") return (
           <button key={part} type="button" className="wf-stats__part wf-nums" onClick={onOpenDay}>
             <span><b>{model.now.focus < 60 ? "\u2014" : <>{hours > 0 ? <>{hours}<small>{lang === "ko" ? "시간 " : "h "}</small></> : null}{minutes}<small>{lang === "ko" ? "분" : "m"}</small></>}</b> {c.focusTime}</span>
@@ -251,9 +341,9 @@ function StatsCard({ model, lang, c, appIcons, achievements, parts, onOpenDay, o
   );
 }
 
-export function FlowHome({ variant, model, lang, appIcons, achievements, onOpenDay, onOpenAchievements, onAsk }: {
+export function FlowHome({ variant, model, lang, appIcons, achievements, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
   readonly variant: FlowVariant; readonly model: HomeModel; readonly lang: HomeLang; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
-  readonly onOpenDay: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
+  readonly onOpenDay: () => void; readonly onOpenWeek: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
 }) {
   const c = COPY[lang];
   // Before today has a stretch, the list opens on yesterday, as Flow opens on its latest day.
@@ -266,6 +356,7 @@ export function FlowHome({ variant, model, lang, appIcons, achievements, onOpenD
     : yesterday ? <DayList day={yesterday.day} sessions={yesterday.sessions} lang={lang} c={c} appIcons={appIcons} onOpen={onOpenDay} limit={6} /> : null;
   const parts = variant === "flow2" ? (["stats", "goal", "longest"] as const)
     : variant === "flow3" ? (["stats", "next", "ask"] as const)
+    : variant === "flow5" ? (["ring", "week"] as const)
     : (["stats", "goal", "longest"] as const);
   return (
     <div className={"page wf wf--" + variant}>
@@ -285,7 +376,7 @@ export function FlowHome({ variant, model, lang, appIcons, achievements, onOpenD
           ) : null}
           {list}
         </div>
-        <StatsCard model={model} lang={lang} c={c} appIcons={appIcons} achievements={achievements} parts={parts} onOpenDay={onOpenDay} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />
+        <StatsCard model={model} lang={lang} c={c} appIcons={appIcons} achievements={achievements} parts={parts} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />
       </div>
     </div>
   );
