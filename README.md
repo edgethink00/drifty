@@ -57,7 +57,6 @@ a separate setting that stays off unless you turn it on. The
 | `packages/charts` | Chart components |
 | `src-tauri` | Tauri 2 shell, Rust commands and native macOS and Windows code |
 | `services/tracker-python` | Activity capture and local storage |
-| `browser-extension` | Archived Chrome extension experiment; the app does not use it |
 | `integrations/skills` | Agent skill for reading Drifty records |
 
 Drifty Cloud's server (accounts, billing, cloud AI, sync and leaderboard) and
@@ -95,6 +94,11 @@ npm test              # web, Python and Rust tests
 A source build uses the same app identifier as the official app, so quit the
 official Drifty before running one. Windows source builds work but are not
 documented here yet.
+
+## Roadmap
+
+- [x] Automatic time tracking on Mac and Windows
+- [ ] Document Windows source builds
 
 ## Community
 
