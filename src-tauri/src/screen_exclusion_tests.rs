@@ -58,6 +58,7 @@ denied_screen_commands!(
     screen_context_ai_confirm_review,
     screen_context_ai_turn_off,
     screen_context_configure,
+    screen_context_acknowledge_scope,
     screen_context_list_evidence,
     screen_context_list_activity_evidence,
     screen_context_activity_text,

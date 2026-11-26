@@ -1537,6 +1537,7 @@ pub fn run() {
             commands::screen_context_ai_turn_off,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_configure,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_acknowledge_scope,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_list_evidence,
@@ -1544,6 +1545,7 @@ pub fn run() {
             commands::screen_context_list_activity_evidence,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_activity_text,
+            #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_activity_input,
             #[cfg(not(drifty_screen_context_excluded))]
             commands::screen_context_read_evidence,
