@@ -33,7 +33,7 @@ const COPY = {
     ask: "Drifty에게 묻기", askExample: (q: string) => "예: " + q, send: "보내기", close: "닫기", open: "보기",
     longest: "가장 오래 한 일", next: "다음 업적", earned: "최근 얻은 업적",
     examples: { morning: "어제 정리해 줘", midday: "왜 평소보다 느려?", evening: "오늘 정리해 줘" },
-    prodLabel: "생산성", focusSub: (u: string | null, d: string) => u ? "평소 이 시각 " + u : "딴짓 " + d, goalName: "목표", qualityName: "집중 품질", qualityNotYet: "25분 넘게 집중하면", longestShort: (d: string) => "가장 긴 집중 " + d, leftShort: (d: string) => d + " 남음", doneShort: "달성",
+    prodLabel: "생산성", todayTitle: "오늘", todayFocus: "집중", focusSub: (u: string | null, d: string) => u ? "평소 " + u : "딴짓 " + d, goalName: "목표", qualityName: "집중 품질", qualityNotYet: "25분 넘게 집중하면", longestShort: (d: string) => "가장 긴 집중 " + d, leftShort: (d: string) => d + " 남음", doneShort: "달성",
     week: "최근 7일 집중", weekMet: (n: number) => n + "일 목표 달성", weekdays: ["일", "월", "화", "수", "목", "금", "토"],
   },
   en: {
@@ -45,7 +45,7 @@ const COPY = {
     ask: "Ask Drifty", askExample: (q: string) => "e.g. " + q, send: "Send", close: "Close", open: "Open",
     longest: "Longest today", next: "Next achievement", earned: "Recently earned",
     examples: { morning: "Recap yesterday", midday: "Why am I behind usual?", evening: "Wrap up today" },
-    prodLabel: "Productivity", focusSub: (u: string | null, d: string) => u ? "Usually " + u + " by now" : d + " drift", goalName: "Goal", qualityName: "Focus quality", qualityNotYet: "After 25 min of focus", longestShort: (d: string) => "Longest " + d, leftShort: (d: string) => d + " to go", doneShort: "Met",
+    prodLabel: "Productivity", todayTitle: "Today", todayFocus: "Focus", focusSub: (u: string | null, d: string) => u ? "Usually " + u : d + " drift", goalName: "Goal", qualityName: "Focus quality", qualityNotYet: "After 25 min of focus", longestShort: (d: string) => "Longest " + d, leftShort: (d: string) => d + " to go", doneShort: "Met",
     week: "Focus, last 7 days", weekMet: (n: number) => "Goal met " + n + (n === 1 ? " day" : " days"), weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
   },
 };
@@ -240,13 +240,14 @@ function RingPart({ model, lang, c, onOpen }: { readonly model: HomeModel; reado
   ];
   return (
     <div className="wf-stats__part wf-ringpart">
+      <span className="wf-parthead"><span className="wf-parthead__title">{c.todayTitle}</span></span>
       <button type="button" className="wf-ringpart__hero" onClick={onOpen}>
         <span className="wf-ringpart__dial">
-          <FocusRing width={11} segments={[{ ratio: model.now.focus / tracked, tone: "focus" }, { ratio: model.now.drift / tracked, tone: "drift" }, { ratio: model.now.neutral / tracked, tone: "neutral" }]} />
-          <span className="wf-ringpart__pct">{has ? Math.round((model.now.focus / tracked) * 100) : "\u2014"}{has ? <small>%</small> : null}</span>
+          <FocusRing width={9} segments={[{ ratio: model.now.focus / tracked, tone: "focus" }, { ratio: model.now.drift / tracked, tone: "drift" }, { ratio: model.now.neutral / tracked, tone: "neutral" }]} />
+          <span className="wf-ringpart__pct"><b>{has ? Math.round((model.now.focus / tracked) * 100) : "\u2014"}{has ? <small>%</small> : null}</b><em>{c.prodLabel}</em></span>
         </span>
         <span className="wf-ringpart__lead">
-          <span className="wf-small">{c.prodLabel}</span>
+          <span className="wf-small">{c.todayFocus}</span>
           <b>{model.now.focus < 60 ? "\u2014" : formatDuration(model.now.focus, lang)}</b>
           <span className="wf-small">{c.focusSub(model.baseline.days > 0 && model.baseline.focus > 0 ? formatDuration(model.baseline.focus, lang) : null, formatDuration(model.now.drift, lang))}</span>
         </span>
@@ -254,7 +255,7 @@ function RingPart({ model, lang, c, onOpen }: { readonly model: HomeModel; reado
       <div className="wf-ringpart__rows">
         {rows.map((row) => (
           <button key={row.key} type="button" className="wf-ringrow" onClick={onOpen}>
-            <span className="wf-ringrow__dial"><FocusRing width={16} segments={[{ ratio: row.ratio, tone: "focus" }]} /></span>
+            <span className="wf-ringrow__dial"><FocusRing width={14} segments={[{ ratio: row.ratio, tone: "focus" }]} /></span>
             <span className="wf-ringrow__text"><span className="wf-ringrow__name">{row.name}</span><span className="wf-small">{row.sub}</span></span>
             <span className="wf-ringrow__value">{row.value}{row.unit ? <small>{row.unit}</small> : null}</span>
           </button>
@@ -270,7 +271,7 @@ function WeekPart({ model, c, onOpen }: { readonly model: HomeModel; readonly c:
   const last = model.week.length - 1;
   return (
     <button type="button" className="wf-stats__part wf-weekpart" onClick={onOpen}>
-      <span className="wf-weekpart__head"><span className="wf-weekpart__title">{c.week}</span><span className="wf-small">{c.weekMet(model.goalMetDays)}</span></span>
+      <span className="wf-parthead"><span className="wf-parthead__title">{c.week}</span><span className="wf-parthead__meta">{c.weekMet(model.goalMetDays)}</span></span>
       <span className="wf-weekpart__plot" aria-hidden="true">
         <i className="wf-weekpart__goal" style={{ bottom: (model.goalSeconds / top) * 100 + "%" }} />
         {model.week.map((day, index) => (

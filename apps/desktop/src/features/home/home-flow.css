@@ -151,3 +151,59 @@ button.wf-stats__part:hover { background: color-mix(in srgb, var(--text) 2.5%, t
 .wf-weekpart__days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin-top: -4px; }
 .wf-weekpart__days span { color: var(--text-soft); font-size: 0.6875rem; text-align: center; }
 .wf-weekpart__days span.is-today { color: var(--text); font-weight: 650; }
+/* F5, loop 1 (owner review 2026-11-27): one 15px inset in every block, the
+   right card ends with the list, one head style for parts inside a block,
+   row names at one size, the ring's figure says what it is. */
+.wf--flow5 .wf-banner { padding: 1.25rem var(--block-inset); }
+.wf--flow5 .wf-switch { padding: var(--block-inset); }
+.wf--flow5 .wf-row { padding-inline: var(--block-inset); }
+.wf--flow5 .wf-list__none { padding-inline: var(--block-inset); }
+.wf--flow5 .wf-grid { align-items: stretch; }
+.wf--flow5 .wf-main { padding-bottom: 0; }
+.wf--flow5 .wf-stats { display: flex; flex-direction: column; align-self: stretch; }
+.wf--flow5 .wf-stats__part { padding: var(--block-pad-top) var(--block-inset) var(--block-inset); gap: var(--space-3); }
+.wf-parthead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.wf-parthead__title { color: var(--text-soft); font-size: var(--text-xs); font-weight: 500; line-height: var(--block-title-leading); }
+.wf-parthead__meta { color: var(--text-soft); font-size: var(--text-xs); line-height: var(--block-title-leading); font-variant-numeric: tabular-nums; }
+.wf--flow5 .wf-weekpart { flex: 1 1 auto; display: flex; flex-direction: column; }
+.wf--flow5 .wf-weekpart__plot { flex: 1 1 auto; height: auto; min-height: 5.75rem; max-height: 11rem; margin-top: var(--space-4); }
+.wf--flow5 .wf-weekpart__days { margin-top: 6px; }
+.wf-ringpart__pct { gap: 2px; grid-auto-flow: row; justify-items: center; align-items: center; }
+.wf-ringpart__pct b { display: flex; align-items: baseline; font-weight: inherit; }
+.wf-ringpart__pct em { color: var(--text-soft); font-family: var(--font-sans); font-size: 0.625rem; font-style: normal; font-weight: 500; letter-spacing: 0; }
+.wf--flow5 .wf-ringrow { padding: 0; }
+.wf--flow5 .wf-ringrow + .wf-ringrow, .wf--flow5 .wf-ringrow:first-child { box-shadow: none; }
+.wf--flow5 .wf-ringpart__rows { gap: var(--space-3); padding-top: var(--space-1); }
+.wf--flow5 .wf-ringrow { grid-template-columns: 2rem minmax(0, 1fr) auto; }
+.wf--flow5 .wf-ringrow__dial { width: 2rem; height: 2rem; }
+.wf--flow5 .wf-ringrow__name { font-size: var(--text-md); }
+/* F5, loop 2: the donut takes the spare height instead of the week, which
+   keeps short bars; the week sits at the card's foot; the day list's head
+   matches the card's part heads. */
+.wf--flow5 .wf-ringpart { flex: 1 1 auto; justify-content: space-between; }
+.wf--flow5 .wf-ringpart__hero { grid-template-columns: 7.25rem minmax(0, 1fr); gap: var(--space-4); margin-top: var(--space-1); }
+.wf--flow5 .wf-ringpart__dial { width: 7.25rem; }
+.wf--flow5 .wf-ringpart__pct { font-size: 1.75rem; }
+.wf--flow5 .wf-ringpart__pct em { font-size: 0.6875rem; }
+.wf--flow5 .wf-ringpart__lead b { font-size: 1.25rem; }
+.wf--flow5 .wf-weekpart { flex: none; }
+.wf--flow5 .wf-weekpart__plot { flex: none; height: 6.25rem; min-height: 0; max-height: none; margin-top: var(--space-4); }
+.wf--flow5 .wf-day__head h2 { color: var(--text-soft); font-weight: 500; }
+.wf--flow5 .wf-day { margin-top: var(--space-3); }
+/* F5, loop 3: the donut part keeps its own height with even gaps; the week
+   part takes the rest and its plot grows up to a cap, sitting at the foot. */
+.wf--flow5 .wf-ringpart { flex: none; justify-content: flex-start; gap: var(--space-4); }
+.wf--flow5 .wf-ringpart__hero { grid-template-columns: 7.75rem minmax(0, 1fr); margin-top: 0; }
+.wf--flow5 .wf-ringpart__dial { width: 7.75rem; }
+.wf--flow5 .wf-ringpart__rows { gap: var(--space-3); padding-top: 0; }
+.wf--flow5 .wf-weekpart { flex: 1 1 auto; }
+.wf--flow5 .wf-weekpart__plot { flex: 1 1 auto; height: auto; min-height: 6.25rem; max-height: 10rem; margin-top: auto; }
+.wf--flow5 .wf-weekpart .wf-parthead { margin-bottom: var(--space-4); }
+/* F5, loop 4: no empty band in the week part; its plot fills to the foot with
+   wider bars so they read as a block of days rather than thin posts. */
+.wf--flow5 .wf-weekpart__plot { max-height: none; margin-top: 0; }
+.wf--flow5 .wf-weekpart__col i { width: 70%; max-width: 1.875rem; border-radius: 4px 4px 0 0; }
+
+/* F5, loop 5: the part is a grid, so justify-content shrank its rows to their
+   content on short days; stretch them back so figures meet the right edge. */
+.wf--flow5 .wf-ringpart { justify-content: stretch; }
