@@ -366,6 +366,12 @@ export function StoryScene({ step, theme, ko, platform, labels, language, driftC
   if (step === "recap" && recap?.lead === "kinds" && noFocusCardVariant() === "reading" && recap.examples.length > 0) {
     return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
   }
+  // Review prototype, the rebalanced story's middle card: titles Drifty read after a day opened by kind,
+  // otherwise the day by kind.
+  if (step === "breakdown" && recap) {
+    if (recap.lead === "kinds" && recap.examples.length > 0) return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
+    return <RecapDayScene recap={recap} lit="day" ko={ko} labels={labels} language={language} />;
+  }
   if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap}
     lit={step === "drift" ? "drift" : recap.lead === "kinds" ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}

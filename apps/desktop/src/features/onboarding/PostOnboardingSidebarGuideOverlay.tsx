@@ -20,7 +20,8 @@ import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
 import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
-import { noFocusCardText, noFocusCardVariant } from "./noFocusCardVariants";
+import { breakdownCardText, noFocusCardText, noFocusCardVariant, rebalancedFixHint } from "./noFocusCardVariants";
+import { isRebalancedIntroLayout } from "./postOnboardingSidebarGuide";
 import { storyKindsList } from "./storyCategories";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
@@ -69,6 +70,7 @@ type CardCopy = { readonly title: TranslationKey; readonly body: TranslationKey 
 function cardCopy(step: PostOnboardingSidebarGuideStep, windows: boolean): CardCopy {
   switch (step) {
     case "recap":
+    case "breakdown":
     case "drift":
     case "welcome": return { title: "postOnboarding.story.welcomeTitle", body: windows ? "postOnboarding.story.welcomeWindowsBody" : "postOnboarding.story.welcomeBody" };
     case "day": return { title: "postOnboarding.story.dayTitle", body: "postOnboarding.story.dayBody" };
@@ -170,7 +172,10 @@ const RECAP_KINDS_NAMED = 3;
  * card says so plainly instead of naming a source.
  */
 function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: DisplayLanguage): GuideText | null {
-  if (!recap || (step !== "recap" && step !== "drift")) return null;
+  if (!recap || (step !== "recap" && step !== "breakdown" && step !== "drift")) return null;
+  // Review prototype of the rebalanced story: a middle card on the day, and the drift card says where to correct.
+  if (step === "breakdown") return breakdownCardText(recap, language, t);
+  const fixHint = isRebalancedIntroLayout() ? rebalancedFixHint(language) : null;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   const browser = recap.importedOnly;
   if (step === "recap") {
@@ -213,19 +218,20 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       title: t(browser ? "postOnboarding.story.driftTitleBrowser" : "postOnboarding.story.driftTitle", { duration: duration(recap.driftSeconds) }),
       // A wrong verdict is the first thing a user wants to fix here; the card after the decision shows how.
       body: t("postOnboarding.story.driftBody", { source: recap.topDrift.source.label, duration: duration(recap.topDrift.seconds) })
-        + " " + t("postOnboarding.story.driftFixHint"),
+        + " " + (fixHint?.drift ?? t("postOnboarding.story.driftFixHint")),
     };
   }
+  const quietBody = browser
+    ? t("postOnboarding.story.driftNoneBodyBrowser")
+    : recap.driftSeconds > 0
+      ? t("postOnboarding.story.driftNoneBody", { duration: duration(recap.driftSeconds) })
+      : t("postOnboarding.story.driftZeroBody");
   return {
     // Today is still going, so it is not yet "a day" with almost no drift.
     title: t(browser ? "postOnboarding.story.driftNoneTitleBrowser"
       : recap.dayRelation === "today" ? "postOnboarding.story.driftNoneTitleToday" : "postOnboarding.story.driftNoneTitle"),
     // In the browser alone, "no drift" may only mean the drift happened in apps; say what comes next.
-    body: browser
-      ? t("postOnboarding.story.driftNoneBodyBrowser")
-      : recap.driftSeconds > 0
-        ? t("postOnboarding.story.driftNoneBody", { duration: duration(recap.driftSeconds) })
-        : t("postOnboarding.story.driftZeroBody"),
+    body: fixHint ? quietBody + " " + fixHint.quiet : quietBody,
   };
 }
 

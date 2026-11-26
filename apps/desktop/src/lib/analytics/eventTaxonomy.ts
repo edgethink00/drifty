@@ -72,7 +72,7 @@ export const ONBOARDING_STEPS = [
 ] as const;
 export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"] as const;
 /** The post-setup introduction: its cards, which sequence it opened on, and what happened to it. */
-export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "breakdown", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 /** The day a story intro tells, relative to the install day. */
 export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before"] as const;

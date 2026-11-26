@@ -256,7 +256,7 @@ import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImp
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
+import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, isRebalancedIntroLayout, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS, POST_ONBOARDING_STORY_REBALANCED_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -2014,7 +2014,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null; readonly decisionReason?: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }>({ resolved: false, recap: null });
   // What first-run preparation saw of the readable history; it only narrows a sample intro's label.
   const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
-  const introSequence = introStory.recap ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
+  const introSequence = introStory.recap
+    ? (isRebalancedIntroLayout() ? POST_ONBOARDING_STORY_REBALANCED_STEPS : POST_ONBOARDING_STORY_GUIDE_STEPS)
+    : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {

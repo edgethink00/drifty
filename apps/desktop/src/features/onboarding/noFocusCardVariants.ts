@@ -1,5 +1,5 @@
 import type { ActivityCategory } from "@drifty/domain";
-import { storyCategoryName } from "./storyCategories";
+import { storyCategoryName, storyKindsList } from "./storyCategories";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { TranslationKey } from "../localization/translations";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
@@ -132,5 +132,50 @@ export function readingRows(recap: FirstDayRecap): {
     }
   }
   return { rows: examples, pair: null };
+}
+
+
+const BREAKDOWN_COPY = {
+  ko: {
+    kindsTitle: "종류별로 나눠 보면 이래요",
+    kindsBody: "많은 순서대로 {list}이었어요.",
+    readingTitle: "Drifty는 페이지 제목까지 읽고 나눠요",
+    readingBody: "사이트 이름만 보고 나누지 않고, 페이지 제목을 보고 무엇을 하던 중인지 가려요.",
+    driftHint: "딴짓이 아니었다면 ‘분류’에서 바로잡을 수 있어요. 고치면 지난 기록에도 함께 적용돼요.",
+    quietHint: "분류가 내 일과 다르면 ‘분류’에서 바로잡을 수 있어요.",
+  },
+  en: {
+    kindsTitle: "Here it is by kind",
+    kindsBody: "From the most: {list}.",
+    readingTitle: "Drifty reads page titles, not only sites",
+    readingBody: "It looks at what a page is about to tell what you were doing there.",
+    driftHint: "If some of it wasn't drift, fix it in Classification. The fix applies to earlier records too.",
+    quietHint: "If a label doesn't fit your work, fix it in Classification.",
+  },
+} as const;
+
+/**
+ * Review prototype, the rebalanced story's middle card: the day by kind after a focus or overview
+ * opening, or, when the day already opened by kind, the titles Drifty read and how it sorted them.
+ */
+export function breakdownCardText(
+  recap: FirstDayRecap,
+  language: DisplayLanguage,
+  t: Translate,
+): { readonly title: string; readonly body: string } {
+  const copy = language === "ko" ? BREAKDOWN_COPY.ko : BREAKDOWN_COPY.en;
+  if (recap.lead !== "kinds") {
+    const kinds = recap.categories.slice(0, 3);
+    return { title: copy.kindsTitle, body: kinds.length > 0 ? fill(copy.kindsBody, { list: storyKindsList(kinds, language, t) }) : "" };
+  }
+  const reading = noFocusCardText("reading", recap, language, t);
+  const { pair } = readingRows(recap);
+  return { title: copy.readingTitle, body: pair && reading ? reading.body : copy.readingBody };
+}
+
+/** Review prototype: the drift card's correction line once the separate correcting card is gone. */
+export function rebalancedFixHint(language: DisplayLanguage): { readonly drift: string; readonly quiet: string } {
+  const copy = language === "ko" ? BREAKDOWN_COPY.ko : BREAKDOWN_COPY.en;
+  return { drift: copy.driftHint, quiet: copy.quietHint };
 }
 

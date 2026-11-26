@@ -11,7 +11,14 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_00
  */
 export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "account", "activity", "tracking", "handoff"] as const;
 export const POST_ONBOARDING_STORY_GUIDE_STEPS = ["recap", "drift", "account", "activity", "tracking", "handoff"] as const;
-const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+/**
+ * Review prototype of a rebalanced story (?driftyIntroLayout=rebalanced on the dev server): three cards
+ * on the user's own day (the opening card, the day by kind or the titles Drifty read, then the drift,
+ * which now also says where to correct a label) and the correcting card left out, so it stays six cards.
+ */
+export const POST_ONBOARDING_STORY_REBALANCED_STEPS = ["recap", "breakdown", "drift", "account", "tracking", "handoff"] as const;
+export const INTRO_LAYOUT_QUERY_PARAM = "driftyIntroLayout";
+const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "breakdown", "drift", "account", "activity", "tracking", "handoff"] as const;
 export type PostOnboardingGuideSequence = readonly PostOnboardingSidebarGuideStep[];
 /**
  * Cards everyone sees once, even after Skip: the drift decision ("account": the desktop cat and
@@ -26,6 +33,14 @@ const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideSte
 
 export type PostOnboardingSidebarGuideStep = typeof ALL_GUIDE_STEPS[number];
 
+/** Dev server only: whether the review asked for the rebalanced story. */
+export function isRebalancedIntroLayout(
+  search: string = typeof window === "undefined" ? "" : window.location.search,
+  isDevelopment: boolean = import.meta.env.DEV,
+): boolean {
+  return isDevelopment && new URLSearchParams(search).get(INTRO_LAYOUT_QUERY_PARAM) === "rebalanced";
+}
+
 /**
  * The step to show for a saved step in the given sequence. The two sequences have the same length,
  * so a step saved under the other one (the day's data arrived or went away) keeps its position.
@@ -37,7 +52,10 @@ export function postOnboardingGuideStepInSequence(
   if (sequence.includes(step)) return step;
   const sampleIndex = (POST_ONBOARDING_SIDEBAR_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
   const storyIndex = (POST_ONBOARDING_STORY_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
-  const index = Math.max(sampleIndex, storyIndex, 0);
+  const rebalancedIndex = (POST_ONBOARDING_STORY_REBALANCED_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
+  // The rebalanced story only places its own middle card; the others keep their position in the
+  // sequences that have them.
+  const index = Math.max(sampleIndex, storyIndex, sampleIndex < 0 && storyIndex < 0 ? rebalancedIndex : -1, 0);
   return sequence[Math.min(index, sequence.length - 1)] ?? sequence[0];
 }
 export type PostOnboardingSidebarGuideStatus = "active" | "completed" | "dismissed" | "expired";
