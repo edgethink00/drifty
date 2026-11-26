@@ -10,7 +10,8 @@ import {
   type SetStateAction,
 } from "react";
 import type { TrackerStatus } from "@drifty/domain";
-import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
+import { capturePostHogDailyEvent, capturePostHogEvent } from "../../lib/analytics/posthogClient";
+import { loadOnboardingGitHubStarAccount, markGitHubStarDone, starDriftyFromOnboarding } from "../github-star/githubStar";
 import { DEV_ONBOARDING_AUTH_BYPASS_ENABLED, DEV_ONBOARDING_AUTH_SKIP_ENABLED } from "../../appFeatureSwitches";
 import type { CloudTrialStartedNoticeModel } from "../billing/CloudTrialStartedNotice";
 import { canStartCloudTrial } from "../billing/billingEligibility";
@@ -156,6 +157,10 @@ export function useOnboardingFlow({
   const [petModeEnabled, setPetModeEnabled] = useState(restoredProgress?.petModeEnabled ?? false);
   const [browserHistoryBootstrapEnabled, setBrowserHistoryBootstrapEnabled] = useState(true);
   const [openAtLoginEnabled, setOpenAtLoginEnabled] = useState(restoredProgress?.openAtLoginEnabled ?? true);
+  // The gh account that would star Drifty, read from the step before Ready; on by default.
+  const [githubStarAccount, setGithubStarAccount] = useState<string | null>(null);
+  const [githubStarOnStart, setGithubStarOnStart] = useState(true);
+  const githubStarLookupStartedRef = useRef(false);
   const [accountSkippedForDev, setAccountSkippedForDev] = useState(false);
   const [step, setStep] = useState<OnboardingStep>(devInitialStep ?? restoredProgress?.step ?? (skipAccountStep ? "welcome" : "account"));
   // A fresh sign-in advances after the success state. A previously connected session waits for Continue.
@@ -381,6 +386,14 @@ export function useOnboardingFlow({
     workTypeOther,
   ]);
 
+  useEffect(() => {
+    if (githubStarLookupStartedRef.current || (step !== "permissions" && step !== "ready")) return;
+    githubStarLookupStartedRef.current = true;
+    void loadOnboardingGitHubStarAccount().then((account) => {
+      if (mountedRef.current) setGithubStarAccount(account);
+    });
+  }, [step]);
+
   async function completeOnboarding() {
     if (completionInFlightRef.current) return;
 
@@ -460,6 +473,12 @@ export function useOnboardingFlow({
           // Setup no longer asks about drift alerts, Automatic close or the cat; the intro reports
           // those choices on its onboarding_intro event.
         });
+        if (githubStarOfferAccount) {
+          capturePostHogEvent("github_star_prompt", { action: githubStarOnStart ? "clicked" : "dismissed", placement: "onboarding", method: "gh" });
+          // Unticked is a no: as with the corner card's Later, nothing asks again.
+          if (githubStarOnStart) void starDriftyFromOnboarding(githubStarOfferAccount);
+          else markGitHubStarDone();
+        }
       } else {
         completionInFlightRef.current = false;
         setIsCompleting(false);
@@ -553,6 +572,13 @@ export function useOnboardingFlow({
     && !billingEntitlementLoading && cloudDeviceRevokingId === null
     && billingEntitlement?.lockedReason !== "device_limit_reached"
     && (readyCloudCheckFailed || (!billingEntitlement?.canUseApp && !canStartCloudTrial(billingEntitlement)));
+  // Never on an organization's seat, as with the corner card, and not while Ready offers another AI.
+  const githubStarOfferAccount = githubStarAccount !== null && !readyCloudBlocked
+    && billingEntitlement?.entitlementOwner !== "organization" ? githubStarAccount : null;
+  useEffect(() => {
+    if (step !== "ready" || githubStarOfferAccount === null) return;
+    capturePostHogDailyEvent("github_star_prompt", "github_star_prompt:shown:onboarding", { action: "shown", placement: "onboarding", method: "gh" });
+  }, [githubStarOfferAccount, step]);
   const readyAlternativeChoice = localAlternativeUnsupported ? "byok" : readyAlternative;
   function continueWithReadyAlternative() {
     handleSetupChoice(readyAlternativeChoice);
@@ -618,6 +644,9 @@ export function useOnboardingFlow({
     mainActivities,
     mainActivityOther,
     openAtLoginEnabled,
+    githubStarAccount: githubStarOfferAccount,
+    githubStarOnStart,
+    setGithubStarOnStart,
     permissionSummaryLabel,
     screenRef,
     setDriftAlarmEnabled,

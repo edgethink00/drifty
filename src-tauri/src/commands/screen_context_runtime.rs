@@ -697,6 +697,10 @@ impl ScreenContextRuntime {
             state.preferences = CapturePreferences::default();
             state.preferences_invalid = true;
         }
+        // The saved period and storage limit apply before anything is captured or read.
+        store
+            .set_retention(state.preferences.retention_policy(), unix_millis().map_err(error_code)?)
+            .map_err(error_code)?;
         if !lease.is_current() {
             return Err(CHANGED.into());
         }
@@ -812,6 +816,7 @@ impl ScreenContextRuntime {
                 None => current.last_failure.map(failure_code),
             },
             last_accepted_at_ms: current.last_accepted_at_ms,
+            stored_bytes: state.opened.then(|| self.service(app, lease).ok()?.stored_bytes().ok()).flatten(),
         })
     }
     /// keep_apps: memory holds recording to its own app list, so a chosen app
@@ -890,6 +895,9 @@ impl ScreenContextRuntime {
                 let _ = service.set_policy(CapturePolicy::default());
                 return Err(error_code(error));
             }
+            service
+                .set_retention(preferences.retention_policy())
+                .map_err(error_code)?;
             state.preferences = preferences;
             state.preferences_invalid = false;
             state.last_request = None;
@@ -941,6 +949,8 @@ pub struct RuntimeStatus {
     dropped: u64,
     last_failure: Option<&'static str>,
     last_accepted_at_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stored_bytes: Option<u64>,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1147,7 +1157,7 @@ pub async fn screen_context_read_evidence(
                             expires_at_ms: evidence.metadata.expires_at_ms,
                             text_evidence: evidence.metadata.text.clone(),
                             frame_url: evidence.frame.map(|frame| {
-                                format!("data:image/png;base64,{}", STANDARD.encode(frame.bytes()))
+                                format!("data:{};base64,{}", frame.mime_type(), STANDARD.encode(frame.bytes()))
                             }),
                         }))
                     })
@@ -1336,6 +1346,16 @@ pub async fn screen_context_delete_evidence(
                     });
                 }
                 let service = runtime.service(&app, lease)?;
+                // Automatic memory keeps text past its screen, so it hears about this
+                // deletion first; without that record the deletion does not happen.
+                let scope = format!("app:{}", lease.scope().storage_namespace());
+                let entry = match (record_id, start_ms, end_ms) {
+                    (Some(id), None, None) => serde_json::json!({"kind":"record","id":id.to_string(),"scope":scope}),
+                    (None, None, None) => serde_json::json!({"kind":"all","scope":scope}),
+                    (None, Some(start), Some(end)) => serde_json::json!({"kind":"range","start_ms":start,"end_ms":end,"scope":scope}),
+                    _ => return Err("screen_context_invalid_range".into()),
+                };
+                memory::deletions::record(&app, entry)?;
                 let removal = match (record_id, start_ms, end_ms) {
                     (Some(id), None, None) => service.delete_record(id),
                     (None, None, None) => service.purge(),

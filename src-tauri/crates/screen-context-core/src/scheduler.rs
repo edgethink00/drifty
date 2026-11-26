@@ -568,6 +568,14 @@ impl ScreenContextService {
             store.save_preferences(value, now, &|| observation.is_current())
         })
     }
+    /// Apply a saved period and storage limit to the open store (see EvidenceStore::set_retention).
+    pub fn set_retention(&self, retention: crate::Retention) -> Result<Removal, Error> {
+        self.with_store(|store, now| store.set_retention(retention, now))
+    }
+    /// Disk space the saved screens use, as the storage limit counts it.
+    pub fn stored_bytes(&self) -> Result<u64, Error> {
+        self.with_store(|store, _| store.disk_bytes())
+    }
     pub fn new(backend: Arc<dyn CaptureBackend>) -> Result<Self, Error> {
         Self::construct(backend, false)
     }

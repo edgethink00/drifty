@@ -29,6 +29,7 @@ export const POSTHOG_EVENT_NAMES = [
   "app_error",
   "app_update",
   "github_star_prompt",
+  "achievement_action",
 ] as const;
 
 export type PostHogEventName = (typeof POSTHOG_EVENT_NAMES)[number];
@@ -153,8 +154,16 @@ export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_
 export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
 /** The Star on GitHub corner card and the Settings sidebar GitHub row. */
 export const GITHUB_STAR_PROMPT_ACTIONS = ["shown", "clicked", "dismissed"] as const;
-export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings"] as const;
+export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings", "onboarding"] as const;
 export const GITHUB_STAR_PROMPT_METHODS = ["gh", "browser"] as const;
+/**
+ * Insights › Achievements and the new-achievement card. Which achievement is
+ * never sent: holdings stay off analytics (privacy policy, "Achievement shares").
+ * The card's rarity is sent only as a coarse band, to judge the 30% card rule.
+ */
+export const ACHIEVEMENT_ACTIONS = ["card_shown", "card_opened_tab", "card_closed", "tab_opened", "detail_opened"] as const;
+export const ACHIEVEMENT_CARD_KINDS = ["single", "first_look"] as const;
+export const ACHIEVEMENT_RARITY_BANDS = ["under_1", "under_10", "under_30", "over_30", "unknown"] as const;
 /** Once per new install: how many days it took to reach 10 and 30 tracked hours. */
 export const USAGE_MILESTONE_IDS = ["tracked_10h", "tracked_30h"] as const;
 export const USAGE_MILESTONE_DAY_BUCKETS = ["0_7", "8_14", "15_30", "31_60", "61_90"] as const;
@@ -417,5 +426,10 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     action: GITHUB_STAR_PROMPT_ACTIONS,
     placement: GITHUB_STAR_PROMPT_PLACEMENTS,
     method: GITHUB_STAR_PROMPT_METHODS,
+  },
+  achievement_action: {
+    action: ACHIEVEMENT_ACTIONS,
+    card_kind: ACHIEVEMENT_CARD_KINDS,
+    rarity_band: ACHIEVEMENT_RARITY_BANDS,
   },
 } as const;

@@ -342,3 +342,26 @@ it("still reports an actual read failure in the viewer", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "View" }));
   expect((await screen.findByRole("alert")).textContent).toContain("The screen could not be loaded.");
 });
+
+it("keeps screens for the chosen period and storage limit, raising a limit too small for the period", async () => {
+  const { client, calls } = fixture({ initial: ON });
+  render(<ScreenRecordingDataRow client={client} />);
+  const period = await screen.findByRole("combobox", { name: "Keep screens for" });
+  expect(period.textContent).toContain("24 hours");
+  expect(screen.getByRole("combobox", { name: "Storage limit" }).textContent).toContain("1 GB");
+  fireEvent.click(period);
+  fireEvent.click(screen.getByRole("option", { name: "30 days" }));
+  await waitFor(() => expect(calls("screen_context_configure").slice(-1)[0]?.[1]).toMatchObject({
+    resume: false, preferences: { enabled: true, retention: "month", maxStorageGb: 20 } }));
+  fireEvent.click(await screen.findByRole("combobox", { name: "Storage limit" }));
+  fireEvent.click(screen.getByRole("option", { name: "50 GB" }));
+  await waitFor(() => expect(calls("screen_context_configure").slice(-1)[0]?.[1]).toMatchObject({ preferences: { retention: "month", maxStorageGb: 50 } }));
+  // A shorter period keeps a larger limit the person chose.
+  fireEvent.click(screen.getByRole("combobox", { name: "Keep screens for" }));
+  fireEvent.click(screen.getByRole("option", { name: "7 days" }));
+  await waitFor(() => expect(calls("screen_context_configure").slice(-1)[0]?.[1]).toMatchObject({ preferences: { retention: "week", maxStorageGb: 50 } }));
+  // The permission row's sentence follows the period.
+  cleanup();
+  render(<ScreenRecordingPermissionRow client={client} />);
+  await screen.findByText(/Deleted after 7 days\./);
+});

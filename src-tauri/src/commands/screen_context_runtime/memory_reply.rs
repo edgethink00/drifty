@@ -29,8 +29,15 @@ fn source_reply(source: &Value, live: &[Value]) -> Option<Value> {
         item["source_id"].is_string()
             && item["source_id"] == source["source_id"]
             && item["text"] == source["text"]
-    })?;
-    let mut reply = canonical.clone();
+    });
+    let mut reply = match canonical {
+        Some(canonical) => canonical.clone(),
+        // An extracted window memory kept after its screen left the store (its text can
+        // outlive the image). Screen deletions reached the engine before this request,
+        // and its own expiry is checked again here.
+        None => kept_source(source)?,
+    };
+    let canonical = reply.clone();
     for (numeric, readable) in [
         ("observed_at_ms", "observed_at_utc"),
         ("expires_at_ms", "expires_at_utc"),
@@ -43,6 +50,26 @@ fn source_reply(source: &Value, live: &[Value]) -> Option<Value> {
         reply[readable] = Value::String(date.to_rfc3339_opts(SecondsFormat::Millis, true));
     }
     Some(reply)
+}
+
+fn kept_source(source: &Value) -> Option<Value> {
+    if source["kept"] != Value::Bool(true) || !source["source_id"].is_string() || !source["text"].is_string() {
+        return None;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    if source["expires_at_ms"].as_i64()? <= now {
+        return None;
+    }
+    let mut kept = serde_json::Map::new();
+    for field in ["source_id", "app", "text", "observed_at_ms", "expires_at_ms"] {
+        kept.insert(field.to_owned(), source.get(field)?.clone());
+    }
+    for field in ["document", "source_type"] {
+        if let Some(value) = source.get(field) {
+            kept.insert(field.to_owned(), value.clone());
+        }
+    }
+    Some(Value::Object(kept))
 }
 
 pub(super) fn verified_reply(op: &str, result: &Value, live: &[Value]) -> Option<Value> {
@@ -204,6 +231,26 @@ mod tests {
         assert_eq!(reply["observed_at_utc"], "2026-10-29T08:21:47.123Z");
         assert_eq!(reply["expires_at_ms"], source()["expires_at_ms"]);
         assert_eq!(reply["app"], source()["app"]);
+    }
+
+    #[test]
+    fn a_kept_original_outlives_its_screen_until_its_own_expiry() {
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut kept = source();
+        kept["kept"] = json!(true);
+        kept["group"] = json!("engine-group");
+        kept["expires_at_ms"] = json!(now + 86_400_000);
+        let reply = verified_reply("memory_source", &kept, &[]).unwrap();
+        assert_eq!(reply["text"], source()["text"]);
+        assert!(reply.get("kept").is_none() && reply.get("group").is_none());
+        assert!(reply["expires_at_utc"].is_string());
+        let search = verified_reply("memory_search", &json!([{"memory":"Eli owns the review", "source":kept.clone()}]), &[]).unwrap();
+        assert_eq!(search.as_array().unwrap().len(), 1);
+        // Expired, or not marked as kept by the engine: nothing readable.
+        let mut expired = kept.clone();
+        expired["expires_at_ms"] = json!(now - 1);
+        assert_eq!(verified_reply("memory_source", &expired, &[]), Some(Value::Null));
+        assert_eq!(verified_reply("memory_source", &source(), &[]), Some(Value::Null));
     }
 
     #[test]

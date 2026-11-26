@@ -7,8 +7,20 @@ use zeroize::Zeroizing;
 pub const MAX_FRAME_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_FRAME_EDGE: u32 = 1920;
 pub const MAX_TEXT_CODEPOINTS: usize = 1600;
-pub const MAX_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
-pub const MAX_STORE_BYTES: u64 = 1024 * 1024 * 1024;
+/// Saved screens keep 24 hours and 1 GB unless the person chooses longer and more
+/// (owner decision 2026-11-26): 7 days, 30 days or until deleted, up to 50 GB.
+pub const DEFAULT_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+pub const DEFAULT_STORE_BYTES: u64 = 1024 * 1024 * 1024;
+/// "Until deleted" is a hundred years; the storage limit removes the oldest first.
+pub const MAX_RETENTION: Duration = Duration::from_secs(100 * 365 * 24 * 60 * 60);
+pub const MAX_STORE_BYTES: u64 = 50 * 1024 * 1024 * 1024;
+/// Records and catalog size a default store keeps; a larger storage limit raises both.
+pub const DEFAULT_RECORDS: usize = 10_000;
+pub const MAX_RECORDS_LIMIT: usize = 200_000;
+pub const DEFAULT_CATALOG_BYTES: u64 = 16 * 1024 * 1024;
+pub const MAX_CATALOG_BYTES_LIMIT: u64 = 512 * 1024 * 1024;
+/// WebP quality for screens kept past a day: text stays sharp at a third of the PNG size.
+const WEBP_QUALITY: f32 = 80.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -299,6 +311,49 @@ pub struct Frame {
     pub(crate) sha256: String,
 }
 
+fn sha256_hex(bytes: &[u8]) -> String {
+    digest::digest(&digest::SHA256, bytes)
+        .as_ref()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 16 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP"
+}
+
+/// 8-bit RGB or RGBA pixels of a PNG, and whether they carry alpha.
+fn decode_png_rgb(bytes: &[u8]) -> Result<(Zeroizing<Vec<u8>>, bool), Error> {
+    let mut decoder = png::Decoder::new(Cursor::new(bytes));
+    decoder.set_transformations(png::Transformations::normalize_to_color8());
+    decoder.set_limits(png::Limits {
+        bytes: 32 * 1024 * 1024,
+    });
+    let mut reader = decoder.read_info().map_err(|_| Error::Invalid("PNG"))?;
+    let size = reader
+        .output_buffer_size()
+        .ok_or(Error::Invalid("frame allocation"))?;
+    if size > 32 * 1024 * 1024 {
+        return Err(Error::Invalid("frame allocation"));
+    }
+    let mut buffer = Zeroizing::new(vec![0; size]);
+    let info = reader
+        .next_frame(&mut buffer)
+        .map_err(|_| Error::Invalid("PNG pixels"))?;
+    buffer.truncate(info.buffer_size());
+    match info.color_type {
+        png::ColorType::Rgb => Ok((buffer, false)),
+        png::ColorType::Rgba => Ok((buffer, true)),
+        png::ColorType::Grayscale => Ok((Zeroizing::new(buffer.iter().flat_map(|v| [*v, *v, *v]).collect()), false)),
+        png::ColorType::GrayscaleAlpha => Ok((
+            Zeroizing::new(buffer.chunks_exact(2).flat_map(|p| [p[0], p[0], p[0], p[1]]).collect()),
+            true,
+        )),
+        _ => Err(Error::Invalid("PNG color")),
+    }
+}
+
 impl std::fmt::Debug for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Frame([redacted])")
@@ -347,17 +402,88 @@ impl Frame {
             .next_frame(&mut decoded)
             .map_err(|_| Error::Invalid("PNG pixels"))?;
         reader.finish().map_err(|_| Error::Invalid("PNG end"))?;
-        let sha256 = digest::digest(&digest::SHA256, &bytes)
-            .as_ref()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect();
+        let sha256 = sha256_hex(&bytes);
         Ok(Self {
             bytes: Zeroizing::new(bytes),
             width,
             height,
             sha256,
         })
+    }
+
+    /// A frame read back from the store: the captured PNG, or the WebP it was saved
+    /// as when screens are kept past a day. The store has authenticated the bytes.
+    pub(crate) fn from_stored(bytes: Vec<u8>) -> Result<Self, Error> {
+        if !is_webp(&bytes) {
+            return Self::from_png(bytes);
+        }
+        if bytes.len() > MAX_FRAME_BYTES {
+            return Err(Error::Invalid("frame bytes"));
+        }
+        let features = webp::BitstreamFeatures::new(&bytes).ok_or(Error::Invalid("WebP"))?;
+        let (width, height) = (features.width(), features.height());
+        if width == 0 || height == 0 || width > MAX_FRAME_EDGE || height > MAX_FRAME_EDGE || features.has_animation() {
+            return Err(Error::Invalid("frame geometry"));
+        }
+        let sha256 = sha256_hex(&bytes);
+        Ok(Self { bytes: Zeroizing::new(bytes), width, height, sha256 })
+    }
+
+    /// The same screen as a lossy WebP, for screens kept past a day. A frame that
+    /// does not encode stays as it is.
+    pub(crate) fn compressed(&self) -> Result<Self, Error> {
+        if is_webp(&self.bytes) {
+            return Ok(self.copy_for_processing());
+        }
+        let (pixels, alpha) = decode_png_rgb(&self.bytes)?;
+        let encoder = if alpha {
+            webp::Encoder::from_rgba(&pixels, self.width, self.height)
+        } else {
+            webp::Encoder::from_rgb(&pixels, self.width, self.height)
+        };
+        let encoded = encoder
+            .encode_simple(false, WEBP_QUALITY)
+            .map_err(|_| Error::Invalid("WebP encoding"))?;
+        let bytes = encoded.to_vec();
+        if bytes.len() >= self.bytes.len() || bytes.len() > MAX_FRAME_BYTES {
+            return Ok(self.copy_for_processing());
+        }
+        let sha256 = sha256_hex(&bytes);
+        Ok(Self { bytes: Zeroizing::new(bytes), width: self.width, height: self.height, sha256 })
+    }
+
+    pub fn mime_type(&self) -> &'static str {
+        if is_webp(&self.bytes) {
+            "image/webp"
+        } else {
+            "image/png"
+        }
+    }
+
+    /// PNG bytes for AI inputs, which accept the captured format only. None when a
+    /// saved WebP decodes to more than a frame may hold.
+    pub fn png_bytes(&self) -> Option<Zeroizing<Vec<u8>>> {
+        if !is_webp(&self.bytes) {
+            return Some(self.bytes.clone());
+        }
+        let image = webp::Decoder::new(&self.bytes).decode()?;
+        let mut out = Zeroizing::new(Vec::new());
+        {
+            let mut encoder = png::Encoder::new(&mut *out, image.width(), image.height());
+            encoder.set_color(if image.is_alpha() { png::ColorType::Rgba } else { png::ColorType::Rgb });
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().ok()?;
+            writer.write_image_data(&image).ok()?;
+        }
+        (out.len() <= MAX_FRAME_BYTES).then_some(out)
+    }
+
+    /// The frame as a PNG for AI inputs; a saved WebP is decoded and encoded again.
+    pub fn into_png(self) -> Option<Self> {
+        if !is_webp(&self.bytes) {
+            return Some(self);
+        }
+        Self::from_png(self.png_bytes()?.to_vec()).ok()
     }
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
@@ -381,8 +507,8 @@ pub struct Retention {
 impl Default for Retention {
     fn default() -> Self {
         Self {
-            ttl: MAX_RETENTION,
-            max_bytes: MAX_STORE_BYTES,
+            ttl: DEFAULT_RETENTION,
+            max_bytes: DEFAULT_STORE_BYTES,
         }
     }
 }
@@ -396,5 +522,23 @@ impl Retention {
             return Err(Error::Invalid("retention policy"));
         }
         Ok(())
+    }
+    /// Screens kept past a day are saved as WebP; a day's screens stay as captured.
+    pub fn compresses(&self) -> bool {
+        self.ttl > DEFAULT_RETENTION
+    }
+    /// Records a store may hold: the default store's, or one per 100 KB of a larger limit.
+    pub(crate) fn record_cap(&self) -> usize {
+        if self.max_bytes <= DEFAULT_STORE_BYTES {
+            return DEFAULT_RECORDS;
+        }
+        (self.max_bytes / (100 * 1024)).clamp(DEFAULT_RECORDS as u64, MAX_RECORDS_LIMIT as u64) as usize
+    }
+    /// The catalog's share of a larger limit grows with its records.
+    pub(crate) fn catalog_cap(&self) -> u64 {
+        if self.max_bytes <= DEFAULT_STORE_BYTES {
+            return DEFAULT_CATALOG_BYTES;
+        }
+        (self.max_bytes / 32).clamp(DEFAULT_CATALOG_BYTES, MAX_CATALOG_BYTES_LIMIT)
     }
 }
