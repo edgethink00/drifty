@@ -1,6 +1,7 @@
 import { beginSupportOperation } from "../../lib/diagnostics/supportOperations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 
+import { ActionLabel } from "../../components/ActionLabel";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -683,7 +684,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [taskNow, setTaskNow] = useState(now);
-  const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>(null);
+  // Undefined means the first local summary is pending. Null allows the
+  // default recommendations when the summary is unavailable.
+  const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>();
   const [running, setRunning] = useState<RunningTurn | null>(null);
   const [taskIndex, setTaskIndex] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -770,6 +773,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     now: taskNow, availability: taskAvailability, memory: memoryTaskAvailable,
   }), [lang, projectKey, projectsKey, taskNow, taskAvailability, client.kind, memoryTaskAvailable]);
   const taskDay = localDay(taskNow);
+  const recommendationsReady = status !== null && (!status.toolsAvailable || taskAvailability !== undefined);
   const busy = Boolean(running);
 
   useEffect(() => {
@@ -787,8 +791,12 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     void client.runTool({ name: "summary", arguments: {
       from: offsetTimestamp(calendarDay(calendarWeek(at), -14)), to: offsetTimestamp(at),
     }, detail: "safe" }).then((result) => {
-      if (!cancelled && !result.isError) setTaskAvailability(parseTaskAvailability(result.text));
-    }, () => undefined);
+      if (cancelled) return;
+      const availability = result.isError ? null : parseTaskAvailability(result.text);
+      setTaskAvailability((previous) => availability ?? previous ?? null);
+    }, () => {
+      if (!cancelled) setTaskAvailability((previous) => previous ?? null);
+    });
     return () => { cancelled = true; };
     // Refresh on entry, calendar rollover and after a turn; a clock tick alone needs no database scan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -809,11 +817,18 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   // Read again when the person may have just signed in from Terminal.
   const [statusVersion, setStatusVersion] = useState(0);
+  const [statusChecking, setStatusChecking] = useState(false);
+  const recheckConnection = () => setStatusVersion((version) => version + 1);
   useEffect(() => {
     let cancelled = false;
+    setStatusChecking(true);
     client.getStatus()
       .then((next) => { if (!cancelled) setStatus(next); })
-      .catch(() => { if (!cancelled) setStatus({ providers: [], toolsAvailable: false, toolsMessage: null }); });
+      .catch(() => {
+        // A failed lookup does not undo a previous successful detection.
+        if (!cancelled) setStatus((previous) => previous ?? { providers: [], toolsAvailable: false, toolsMessage: null });
+      })
+      .finally(() => { if (!cancelled) setStatusChecking(false); });
     return () => { cancelled = true; };
   }, [client, statusVersion]);
 
@@ -823,11 +838,18 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   // Re-read Cloud status when someone signs in or out while Chat is open.
   const [cloudAccountVersion, setCloudAccountVersion] = useState(0);
+  const [cloudStatusChecking, setCloudStatusChecking] = useState(false);
+  const recheckCloud = () => setCloudAccountVersion((version) => version + 1);
   useEffect(() => watchCloudAccount(() => setCloudAccountVersion((version) => version + 1)), [watchCloudAccount]);
 
   useEffect(() => {
     let cancelled = false;
-    void readChatCloudStatus(cloudInvoke).then((next) => { if (!cancelled) setCloudStatus(next); });
+    setCloudStatusChecking(true);
+    void readChatCloudStatus(cloudInvoke).then((next) => {
+      if (cancelled) return;
+      setCloudStatus(next);
+      setCloudStatusChecking(false);
+    });
     return () => { cancelled = true; };
   }, [cloudInvoke, cloudAccountVersion]);
 
@@ -906,6 +928,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const availability = (provider: ChatProvider) => status?.providers.find((entry) => entry.provider === provider) ?? null;
   const selectedProvider: ChatProvider | null = connection === "cloud" ? null : connection;
   const providerReady = selectedProvider !== null && availability(selectedProvider)?.installed === true;
+  const missingConnection = selectedProvider !== null && status !== null && !providerReady;
+  const showConnectionRecovery = missingConnection && !running;
   const cloudModels = cloudStatus?.kind === "ready" ? cloudStatus.models : NO_CLOUD_MODELS;
   const cloudModel: ChatCloudModelKey = storedCloudModel && cloudModels.some((model) => model.key === storedCloudModel && model.allowed)
     ? storedCloudModel
@@ -1138,7 +1162,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const pageDrops = !client.watchFileDrops;
   const latestDrop = useRef<{ readonly add: (files: readonly ChatFileSource[]) => void; readonly busy: boolean }>({ add: () => undefined, busy: false });
   useLayoutEffect(() => {
-    latestDrop.current = { add: addFiles, busy: Boolean(running) };
+    latestDrop.current = { add: addFiles, busy: Boolean(running) || showConnectionRecovery };
   });
   useEffect(() => {
     if (!client.watchFileDrops) return undefined;
@@ -1247,35 +1271,42 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     }
   };
 
-  // The line under the composer speaks only when something needs the person: a missing
-  // CLI or record tools, a Drifty Cloud sign-in or plan, and Cloud's credits left. A
-  // ready Codex or Claude Code says nothing; the connection picker already names it.
+  // Below the composer, show Cloud credits or an issue with the active connection.
+  // A missing CLI has its own recovery state inside the composer.
+  const cloudNeedsSignIn = cloudStatus?.kind === "sign_in_required" || cloudStatus?.kind === "full_account_required";
   const statusLine = (() => {
     if (connection === "cloud") {
       if (!cloudStatus) return copy.cloudChecking;
-      if (cloudStatus.kind === "sign_in_required" || cloudStatus.kind === "full_account_required") return copy.cloudSignIn;
+      if (cloudNeedsSignIn) return copy.cloudSignIn;
       if (cloudStatus.kind !== "ready") return copy.cloudUnavailable;
       if (!cloudStatus.available) return copy.cloudPlanRequired;
       return copy.cloudCredits(cloudStatus.credits.remaining, cloudStatus.credits.renewsAt);
     }
     if (status && !status.toolsAvailable && status.providers.length > 0 && client.kind === "native") return copy.toolsMissing;
-    const ready = availability(connection);
-    if (status && !ready?.installed) return connection === "codex" ? copy.missingCodex : copy.missingClaude;
     if (signedOut(connection)) return connection === "codex" ? copy.codexSignedOut : copy.claudeSignedOut;
     return null;
   })();
 
   const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
     const missing = value !== "cloud" && status !== null && !availability(value)?.installed;
-    const needsSignIn = value !== "cloud" && signedOut(value);
+    const needsSignIn = value === "cloud" ? cloudNeedsSignIn : signedOut(value);
+    const checking = value === "cloud" ? cloudStatusChecking : statusChecking;
+    const label = value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud;
     return {
       value,
-      label: value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud,
-      description: copy.connectionDescription(value),
+      label,
+      description: missing || needsSignIn ? undefined : copy.connectionDescription(value),
       icon: <ConnectionIcon connection={value} />,
       statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
-      statusTone: missing || needsSignIn ? "warning" : undefined,
-      muted: missing,
+      disabled: missing,
+      actions: missing || needsSignIn ? [{
+        key: "recheck",
+        label: `${copy.checkAgain}: ${label}`,
+        text: copy.checkAgain,
+        busy: checking,
+        disabled: checking,
+        onAction: value === "cloud" ? recheckCloud : recheckConnection,
+      }] : undefined,
     };
   });
   const cliProvider: ChatProvider | null = connection === "cloud" ? null : connection;
@@ -1322,7 +1353,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (!input) return;
     input.style.height = "auto";
     if (input.scrollHeight > 0) input.style.height = input.scrollHeight + "px";
-  }, [draft]);
+  }, [draft, showConnectionRecovery]);
   // The first question moves the composer from the centre to the bottom, as in ChatGPT and Claude;
   // it slides there instead of jumping, unless the person prefers reduced motion.
   useLayoutEffect(() => {
@@ -1455,7 +1486,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
             </div>
           )}
           <form ref={composerRef} className="chat-composer" onSubmit={submit}>
-            {menuVisible ? (
+            {menuVisible && !showConnectionRecovery ? (
               <div className="chat-task-menu" role="listbox" id={menuId} aria-label={copy.tasks}>
                 {menuTasks.length === 0 ? <p className="chat-task-menu__empty">{copy.noTasks}</p> : menuTasks.map((task, index) => (
                   <button
@@ -1476,10 +1507,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               </div>
             ) : null}
             <div
-              className={"chat-composer__box" + (draggingFiles ? " is-dragging" : "")}
+              className={"chat-composer__box" + (draggingFiles && !showConnectionRecovery ? " is-dragging" : "")}
               data-drop-label={copy.attachDrop}
               onDragOver={(event) => {
-                if (!pageDrops || !hasFiles(event.dataTransfer) || running) return;
+                if (!pageDrops || !hasFiles(event.dataTransfer) || running || showConnectionRecovery) return;
                 event.preventDefault();
                 setDraggingFiles(true);
               }}
@@ -1491,10 +1522,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 if (!pageDrops || !hasFiles(event.dataTransfer)) return;
                 event.preventDefault();
                 setDraggingFiles(false);
-                if (!running) addFiles(Array.from(event.dataTransfer.files));
+                if (!running && !showConnectionRecovery) addFiles(Array.from(event.dataTransfer.files));
               }}
             >
-              {pendingAttachments.length > 0 ? (
+              {!showConnectionRecovery && pendingAttachments.length > 0 ? (
                 <ul className="chat-attachments" aria-label={copy.attachments}>
                   {pendingAttachments.map((item) => (
                     <li key={item.id} className={"chat-attachment" + (item.status === "error" ? " is-error" : "")}>
@@ -1516,52 +1547,64 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   ))}
                 </ul>
               ) : null}
-              <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
-              <textarea
-                id="chat-input"
-                ref={inputRef}
-                rows={1}
-                value={draft}
-                placeholder={copy.placeholderHint}
-                aria-controls={menuVisible ? menuId : undefined}
-                aria-expanded={menuVisible}
-                onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
-                onKeyDown={onKeyDown}
-                onPaste={(event) => {
-                  const files = Array.from(event.clipboardData.files);
-                  if (files.length === 0) return;
-                  event.preventDefault();
-                  addFiles(files);
-                }}
-              />
+              {showConnectionRecovery ? (
+                <p className="chat-composer__notice" role="status">
+                  {connection === "codex" ? copy.missingCodex : copy.missingClaude}
+                </p>
+              ) : (
+                <>
+                  <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
+                  <textarea
+                    id="chat-input"
+                    ref={inputRef}
+                    rows={1}
+                    value={draft}
+                    placeholder={copy.placeholderHint}
+                    aria-controls={menuVisible ? menuId : undefined}
+                    aria-expanded={menuVisible}
+                    onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
+                    onKeyDown={onKeyDown}
+                    onPaste={(event) => {
+                      const files = Array.from(event.clipboardData.files);
+                      if (files.length === 0) return;
+                      event.preventDefault();
+                      addFiles(files);
+                    }}
+                  />
+                </>
+              )}
               <div className="chat-composer__row">
-                <button
-                  type="button"
-                  className="chat-attach-button"
-                  aria-label={copy.attach}
-                  disabled={Boolean(running)}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <PaperclipIcon />
-                  <ChatTip side="top">{copy.attach}</ChatTip>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={CHAT_ATTACHMENT_ACCEPT}
-                  className="chat-sr-only"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  data-testid="chat-file-input"
-                  onChange={(event) => {
-                    addFiles(Array.from(event.target.files ?? []));
-                    event.target.value = "";
-                  }}
-                />
+                {!showConnectionRecovery ? (
+                  <>
+                    <button
+                      type="button"
+                      className="chat-attach-button"
+                      aria-label={copy.attach}
+                      disabled={Boolean(running)}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <PaperclipIcon />
+                      <ChatTip side="top">{copy.attach}</ChatTip>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={CHAT_ATTACHMENT_ACCEPT}
+                      className="chat-sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      data-testid="chat-file-input"
+                      onChange={(event) => {
+                        addFiles(Array.from(event.target.files ?? []));
+                        event.target.value = "";
+                      }}
+                    />
+                  </>
+                ) : null}
                 <SettingsSelect<ChatConnection>
                   ariaLabel={copy.connection}
-                  className="chat-picker"
+                  className="chat-picker chat-picker--connection"
                   placement="below"
                   value={connection}
                   options={connectionOptions}
@@ -1579,7 +1622,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                     onChange={setStoredCloudModel}
                   />
                 ) : null}
-                {cliProvider && cliChoice ? (
+                {cliProvider && cliChoice && !missingConnection ? (
                   <>
                     <SettingsSelect<string>
                       ariaLabel={copy.cliModel}
@@ -1606,6 +1649,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={stop}>
                     <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
                   </button>
+                ) : showConnectionRecovery ? (
+                  <button
+                    type="button"
+                    className="chat-recheck"
+                    aria-busy={statusChecking}
+                    disabled={statusChecking}
+                    onClick={recheckConnection}
+                  >
+                    <ActionLabel busy={statusChecking}>
+                      <span className="chat-recheck__label">
+                        <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M13.2 6A5.3 5.3 0 0 0 4 3.6L2.8 4.8M2.8 4.8V2.4M2.8 4.8h2.4M2.8 10A5.3 5.3 0 0 0 12 12.4l1.2-1.2m0 0v2.4m0-2.4h-2.4" />
+                        </svg>
+                        {copy.checkAgain}
+                      </span>
+                    </ActionLabel>
+                  </button>
                 ) : (
                   <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
                     <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" /></svg>
@@ -1613,9 +1673,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 )}
               </div>
             </div>
-            {statusLine ? <p className="chat-usage">{statusLine}</p> : null}
+            {statusLine && !showConnectionRecovery ? <p className="chat-usage">{statusLine}</p> : null}
           </form>
-          {isEmpty ? (
+          {isEmpty && recommendationsReady ? (
             <ul className="chat-tasks" aria-label={copy.tasks}>
               {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
                 <li key={task.id}>
