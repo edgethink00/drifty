@@ -1,7 +1,4 @@
 /* Reuse the Settings page, section, group and control styles. */
-.classification-rules-manager .classification-rule-list-head {
-  align-items: center;
-}
 .classification-rule-list-intro { display: grid; gap: var(--space-2); }
 /* Empty list: one short line on how to add, left-aligned like the rows it stands in for. */
 .classification-rule-empty { display: grid; gap: 0.2rem; padding: var(--space-3) var(--space-4); }
@@ -9,8 +6,7 @@
 .classification-rule-empty__text { margin: 0; color: var(--text-soft); font-family: var(--font-ui); font-size: var(--type-setting-desc-size); line-height: 1.5; word-break: keep-all; }
 /* With nothing saved, the empty line belongs to the rules card itself rather than a
    second card inside it, and the add action lines up with that text. */
-.classification-rules-manager .classification-rule-list-shell:has(> .classification-rule-empty) { border: 0; background: transparent; }
-.classification-rules-manager .classification-rule-list-shell > .classification-rule-empty { padding: var(--space-1) 0 0; }
+.classification-rules-manager .classification-rule-empty { padding: var(--space-1) 0 0; }
 .classification-rules-manager .classification-rule-list-section:has(.classification-rule-empty) .classification-rule-add__row { margin-left: calc(-1 * (var(--space-3) + 1px)); }
 .classification-rules-manager .classification-rule-list-section:has(.classification-rule-empty) .classification-rule-add__icon { justify-items: start; }
 .classification-rules-manager__intro,
@@ -36,10 +32,31 @@
 }
 .classification-rules-manager__help-toggle:hover { color: var(--text); }
 .classification-rule-list-count { color: var(--text-soft); font-size: var(--type-caption-size); white-space: nowrap; }
-.classification-rule-list-tools { display: flex; align-items: center; justify-content: end; gap: var(--space-2); min-width: 0; }
-.classification-rules-manager .classification-rule-list-tools .settings-input { width: min(17rem, 100%); min-width: 0; }
+.classification-rule-list-head {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+}
+
+.classification-rule-list-tools {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: end;
+  margin-inline-start: auto;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.classification-rules-manager .classification-rule-list-tools .settings-input {
+  width: var(--settings-search-width);
+  max-width: 100%;
+  min-width: 0;
+}
+
 .classification-rules-manager .classification-rule-list-tools .settings-btn { min-width: 5rem; }
-.classification-rules-manager .classification-rule-list-head { flex-direction: row; flex-wrap: wrap; }
 .classification-rules-manager .classification-rule-card__editor,
 .classification-rules-manager .classification-rule-card__confirmation {
   min-width: 0;
@@ -91,8 +108,6 @@
 .content--settings .classification-rule-list-section.settings-row {
   grid-template-columns: minmax(0, 1fr);
 }
-.classification-rules-manager .classification-rule-list-shell,
-.classification-rules-manager .classification-rule-list-head { width: 100%; min-width: 0; }
 
 .classification-rules-manager .classification-rule-card__form-actions {
   display: flex;
@@ -112,7 +127,11 @@
 }
 /* The card's intro line and the outcome of the last save, switch or delete
    share one grid cell (2026-10-22), so a result never pushes the rules down. */
-.classification-rule-list-intro__line { display: grid; }
+.classification-rule-list-intro__line {
+  display: grid;
+  flex: 1 1 18rem;
+  min-width: 0;
+}
 .classification-rule-list-intro__line > * { grid-area: 1 / 1; min-width: 0; }
 .classification-rule-list-intro__line > [data-hidden] { visibility: hidden; }
 .classification-rules-manager__notice {

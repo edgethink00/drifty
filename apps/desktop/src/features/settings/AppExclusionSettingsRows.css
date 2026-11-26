@@ -277,7 +277,7 @@
    open in a panel under it, over the list, and close when focus leaves. */
 .content--settings .settings-block:has(> h3) > .settings-row.excluded-apps-head > .ctrl.excluded-apps-search {
   position: relative;
-  width: clamp(11rem, 28vw, 15rem);
+  width: var(--settings-search-width);
 }
 
 .excluded-apps-search__icon {

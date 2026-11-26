@@ -75,6 +75,7 @@ export function ClassificationSavedRulesList({
   const [helpOpen, setHelpOpen] = useState(false);
   const helpId = useId();
   const query = search.trim().toLocaleLowerCase();
+  const showSearch = classificationRules.length > 8 || Boolean(search);
   const visibleRules = classificationRules.filter((rule) => !query || classificationRuleSearchText(rule, classificationRuleSegments, t).includes(query));
   const countLabel = !hasError && !classificationRulesLoading && (classificationRules.length > 0 || query)
     ? t(query ? "classification.rules.count" : "classification.rules.totalCount", { count: visibleRules.length, total: classificationRules.length })
@@ -89,27 +90,25 @@ export function ClassificationSavedRulesList({
       <section className="settings-row settings-row--group-start settings-row--group-end classification-rule-list-section" aria-labelledby={headingId ?? "classification-saved-rules-heading"}>
         {/* The one line on how these apply sits inside the card it describes. */}
         <div className="classification-rule-list-intro">
-          {/* The outcome of the last save, switch or delete takes that line's
-              place in the same grid cell, so the rules below never move. The
-              live region stays mounted, so each outcome is announced. */}
-          <div className="classification-rule-list-intro__line">
-            <p className="classification-rules-manager__intro" data-hidden={feedback ? "" : undefined} aria-hidden={feedback ? true : undefined}>
-              {t("classification.rules.description")}{" "}
-              <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} tabIndex={feedback ? -1 : undefined} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
-            </p>
-            <div className="classification-rule-list-intro__feedback" role="status">{feedback}</div>
+          <div className="classification-rule-list-head">
+            {/* Feedback takes the intro's place and stays in the same live region. */}
+            <div className="classification-rule-list-intro__line">
+              <p className="classification-rules-manager__intro" data-hidden={feedback ? "" : undefined} aria-hidden={feedback ? true : undefined}>
+                {t("classification.rules.description")}{" "}
+                <button type="button" className="classification-rules-manager__help-toggle" aria-expanded={helpOpen} aria-controls={helpId} tabIndex={feedback ? -1 : undefined} onClick={() => setHelpOpen((open) => !open)}>{t("classification.rules.help")}</button>
+              </p>
+              <div className="classification-rule-list-intro__feedback" role="status">{feedback}</div>
+            </div>
+            {showSearch || hasError ? (
+              <div className="classification-rule-list-tools">
+                {showSearch ? <input type="search" className="settings-input" aria-label={t("classification.rules.search")} placeholder={t("classification.rules.search")} value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
+                {hasError ? <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("common.retry")}</button> : null}
+              </div>
+            ) : null}
           </div>
           <p id={helpId} className="classification-rules-manager__help" hidden={!helpOpen}>{t("settings.classification.savedRulesDescription")}</p>
         </div>
-        {classificationRules.length > 8 || search || hasError ? (
-          <div className="classification-rule-list-head">
-            <div className="classification-rule-list-tools">
-              {classificationRules.length > 8 || search ? <input type="search" className="settings-input" aria-label={t("classification.rules.search")} placeholder={t("classification.rules.search")} value={search} onChange={(event) => setSearch(event.target.value)} /> : null}
-              {hasError ? <button type="button" className="settings-btn" onClick={onLoadClassificationRules} disabled={classificationRulesLoading}>{t("common.retry")}</button> : null}
-            </div>
-          </div>
-        ) : null}
-        {(!hasError || visibleRules.length > 0 || classificationRulesLoading) ? <div className="classification-rule-list-shell">
+        {(!hasError || visibleRules.length > 0 || classificationRulesLoading) ? <>
           {classificationRulesLoading ? <p className="classification-rule-hint">{t("settings.classification.loadingRules")}</p> : null}
           {!hasError && !classificationRulesLoading && classificationRules.length === 0 ? (
             <div className="classification-rule-empty">
@@ -139,7 +138,7 @@ export function ClassificationSavedRulesList({
               ))}
             </div>
           ) : null}
-        </div> : null}
+        </> : null}
         {addControl}
       </section>
     </div>
@@ -216,7 +215,7 @@ function ClassificationSavedRuleCard({
         </span>
         <div className="classification-rule-card__text">
           <p className="classification-rule-card__target" title={presentation.fullLabel}>
-            <strong>{presentation.name}</strong>
+            <strong className="lbl">{presentation.name}</strong>
             {presentation.detail ? <span className={`classification-rule-card__detail classification-rule-card__detail--${presentation.detailStyle}`}>{presentation.detail}</span> : null}
             {presentation.pageTitle ? <span className="classification-rule-card__page-title">{presentation.pageTitle}</span> : null}
           </p>
