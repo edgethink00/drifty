@@ -385,6 +385,7 @@
   --settings-segment-active-bg: color-mix(in srgb, var(--surface) 94%, var(--canvas));
   --settings-segment-active-border: color-mix(in srgb, var(--accent) 18%, var(--line-strong));
   --settings-swatch-size: 1.25rem;
+  --settings-search-width: clamp(11rem, 28vw, 15rem);
   /* Settings reads one step above the dense dashboard (2026-11-06): 14px labels
      over 12.5px descriptions, 13px values and controls. Pretendard's Latin is
      about 9% wider than SF at the same size, so the 15/13/14px first tried
@@ -2791,22 +2792,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   gap: var(--space-3);
 }
 
-.classification-rule-list-head {
-  align-items: center;
-  display: flex;
-  gap: var(--space-3);
-  justify-content: space-between;
-  margin: 0;
-}
-
-/* Visible overflow lets a row's options menu extend past the last row; the
-   first and last rows round their own hover fill instead. */
-.classification-rule-list-shell {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-}
-
 /* The list grows with the page; an inner scroll region hid saved choices
    behind a second scrollbar. */
 .classification-rule-list {
@@ -2816,7 +2801,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 
 .classification-rule-card {
   align-items: center;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--settings-row-divider);
   display: grid;
   gap: 0 var(--space-3);
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2825,13 +2810,6 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 
 .classification-rule-card:first-child {
   border-top: 0;
-  border-top-left-radius: var(--radius-md);
-  border-top-right-radius: var(--radius-md);
-}
-
-.classification-rule-card:last-child {
-  border-bottom-left-radius: var(--radius-md);
-  border-bottom-right-radius: var(--radius-md);
 }
 
 .classification-rule-card:hover {
@@ -2868,8 +2846,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   min-width: 0;
 }
 
-/* Line one names what the choice matches: the site or app, then the exact
-   page or title. Only URL paths use the mono face. */
+/* Line one names the site or app, followed by the exact page or title. */
 .classification-rule-card__target {
   align-items: baseline;
   display: flex;
@@ -2882,10 +2859,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 }
 
 .classification-rule-card__target strong {
-  color: var(--text);
   flex: 0 0 auto;
-  font-size: var(--type-setting-label-size);
-  font-weight: 650;
 }
 
 .classification-rule-card__detail,
@@ -2902,8 +2876,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
 }
 
 .classification-rule-card__detail--path {
-  font-family: var(--font-mono);
-  font-size: var(--type-caption-size);
+  font-family: var(--font-ui);
 }
 
 .classification-rule-card__detail--title::before {
@@ -3053,7 +3026,7 @@ button.individual-plan-card--featured:focus-visible .individual-plan-card__cta {
   margin: 0;
 }
 
-.classification-rule-list-shell .classification-rule-hint {
+.classification-rule-list-section > .classification-rule-hint {
   margin: 0;
   padding: var(--space-3);
 }
