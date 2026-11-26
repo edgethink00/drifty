@@ -824,7 +824,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     setStatusChecking(true);
     client.getStatus()
       .then((next) => { if (!cancelled) setStatus(next); })
-      .catch(() => { if (!cancelled) setStatus({ providers: [], toolsAvailable: false, toolsMessage: null }); })
+      .catch(() => {
+        // A failed lookup does not undo a previous successful detection.
+        if (!cancelled) setStatus((previous) => previous ?? { providers: [], toolsAvailable: false, toolsMessage: null });
+      })
       .finally(() => { if (!cancelled) setStatusChecking(false); });
     return () => { cancelled = true; };
   }, [client, statusVersion]);

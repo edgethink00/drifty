@@ -739,11 +739,11 @@ describe("Chat page", () => {
     expect(screen.getByRole("combobox", { name: "Connection" }).textContent).toBe("Codex");
   });
 
-  it("rechecks an uninstalled CLI from the open menu without changing the active connection", async () => {
+  it("rechecks an uninstalled CLI without losing the active connection if detection fails", async () => {
     const { client: baseClient } = fakeClient();
     const getStatus = vi.fn(async () => READY)
       .mockResolvedValueOnce(READY)
-      .mockResolvedValueOnce(READY)
+      .mockRejectedValueOnce(new Error("Status could not be checked"))
       .mockResolvedValueOnce(BOTH_INSTALLED);
     render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, getStatus }} /></LocalizationTestProvider>);
     await waitFor(() => expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(false));
@@ -756,7 +756,9 @@ describe("Chat page", () => {
     expect(claude().querySelector(".settings-select-control__option-status--warning")).toBeNull();
     await act(async () => { fireEvent.click(recheck()); });
     expect(claude().disabled).toBe(true);
+    expect(menu.getByRole<HTMLButtonElement>("option", { name: "Codex" }).disabled).toBe(false);
     expect(chooser.textContent).toBe("Codex");
+    expect(screen.getByRole("textbox", { name: CHAT_COPY.en.placeholder })).toBeTruthy();
 
     await act(async () => { fireEvent.click(recheck()); });
     expect(getStatus).toHaveBeenCalledTimes(3);
