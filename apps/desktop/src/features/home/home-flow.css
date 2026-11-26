@@ -170,7 +170,7 @@ button.wf-stats__part:hover { background: color-mix(in srgb, var(--text) 2.5%, t
 .wf--flow5 .wf-weekpart__days { margin-top: 6px; }
 .wf-ringpart__pct { gap: 2px; grid-auto-flow: row; justify-items: center; align-items: center; }
 .wf-ringpart__pct b { display: flex; align-items: baseline; font-weight: inherit; }
-.wf-ringpart__pct em { color: var(--text-soft); font-family: var(--font-sans); font-size: 0.625rem; font-style: normal; font-weight: 500; letter-spacing: 0; }
+.wf-ringpart__pct em { color: var(--text-soft); font-family: var(--font-sans); font-size: 0.6875rem; font-style: normal; font-weight: 500; letter-spacing: 0; }
 .wf--flow5 .wf-ringrow { padding: 0; }
 .wf--flow5 .wf-ringrow + .wf-ringrow, .wf--flow5 .wf-ringrow:first-child { box-shadow: none; }
 .wf--flow5 .wf-ringpart__rows { gap: var(--space-3); padding-top: var(--space-1); }
