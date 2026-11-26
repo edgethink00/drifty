@@ -1053,13 +1053,12 @@
   white-space: nowrap;
 }
 
-.chat-usage--recheck {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  overflow: visible;
-  white-space: normal;
+.chat-composer__notice {
+  margin: 0;
+  padding: var(--space-1) var(--space-2) var(--space-2) 0;
+  color: var(--text);
+  font-size: var(--chat-text-size);
+  line-height: 1.5;
 }
 
 .chat-recheck {
@@ -1067,20 +1066,21 @@
   flex: 0 0 auto;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.2rem 0.5rem;
+  min-height: 2rem;
+  padding: 0 var(--space-3);
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-pill);
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: var(--type-button-size);
   font-weight: 500;
   cursor: pointer;
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  transition: background var(--transition-fast);
 }
 
 .chat-recheck:hover:not(:disabled) {
   background: var(--surface-strong);
-  border-color: var(--line-strong);
 }
 
 .chat-recheck:focus-visible {

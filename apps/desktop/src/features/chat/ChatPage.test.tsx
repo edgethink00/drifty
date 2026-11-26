@@ -13,7 +13,7 @@ import {
 import { ChatAttachmentReadError } from "./chatAttachments";
 import type { ChatClient, ChatSendRequest } from "./chatClient";
 import { CHAT_COPY } from "./chatCopy";
-import { CHAT_CLI_CHOICE_STORAGE_KEY, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
+import { CHAT_CLI_CHOICE_STORAGE_KEY, CHAT_CONNECTION_STORAGE_KEY, ChatNavItem, ChatPage, groupChatConversations } from "./ChatPage";
 import { ChatAnswerText } from "./ChatAnswerText";
 import type { ChatConversation, ChatRunExit, ChatRuntimeStatus } from "./chatTypes";
 import { PRODUCT_ANALYTICS_PREFERENCE_STORAGE_KEY } from "../../lib/analytics/productAnalyticsPreference";
@@ -27,6 +27,11 @@ const READY: ChatRuntimeStatus = {
   ],
   toolsAvailable: true,
   toolsMessage: null,
+};
+
+const BOTH_INSTALLED: ChatRuntimeStatus = {
+  ...READY,
+  providers: [READY.providers[0], { provider: "claude", installed: true, version: "2.1.327" }],
 };
 
 const FENCE = "\u0060\u0060\u0060";
@@ -275,7 +280,7 @@ describe("Chat page", () => {
     const connections = openPicker("연결");
     await waitFor(() => expect(within(connections).getByText("설치 필요")).toBeTruthy());
     expect(within(connections).getByRole("option", { name: "Codex" }).getAttribute("aria-selected")).toBe("true");
-    expect(within(connections).getByRole("option", { name: "Claude Code" }).textContent).toContain("내 Claude 계정으로");
+    expect(within(connections).getByRole("option", { name: "Claude Code" }).getAttribute("aria-disabled")).toBe("true");
     fireEvent.click(screen.getByRole("combobox", { name: "연결" }));
     fireEvent.change(input, { target: { value: "어제 뭐 했어?" } });
     (input as HTMLTextAreaElement).focus();
@@ -462,7 +467,7 @@ describe("Chat page", () => {
   });
 
   it("starts Codex on Automatic and preserves an explicit model and effort", async () => {
-    const { client, pending } = fakeClient();
+    const { client, pending } = fakeClient(BOTH_INSTALLED);
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     const input = await screen.findByLabelText("Ask about your records…");
     await waitFor(() => expect((screen.getByRole("button", { name: "Today so far" }) as HTMLButtonElement).disabled).toBe(false));
@@ -707,42 +712,52 @@ describe("Chat page", () => {
     expect(pending[1].request.prompt).toContain("Summarize the recorded activity in time order");
   });
 
-  it("keeps sending off for a connection that is not installed or not ready", async () => {
-    const { client } = fakeClient({ ...READY, providers: [{ provider: "codex", installed: false, version: null }] });
+  it("offers another connection when the saved CLI is missing", async () => {
+    const { client, pending } = fakeClient({ ...READY, providers: [{ provider: "codex", installed: false, version: null }] });
     const signedOut = vi.fn(async () => ({ status: 401, data: { code: "sign_in_required" } }));
-    render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={signedOut} /></LocalizationTestProvider>);
-    await waitFor(() => expect(screen.getByText("Codex CLI isn't on this computer. Install it and sign in to use it.")).toBeTruthy());
-    const input = screen.getByLabelText("Ask about your records…");
-    fireEvent.change(input, { target: { value: "hello" } });
-    expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(true);
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} cloudInvoke={signedOut} initialDraft="A draft to keep" /></LocalizationTestProvider>);
+    await screen.findByText(CHAT_COPY.en.missingCodex);
+    expect(screen.queryByLabelText(CHAT_COPY.en.placeholder)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Attach files" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Yesterday’s work" })).toBeNull();
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Drifty Cloud" }));
-    await waitFor(() => expect(screen.getByText("Sign in to use Drifty Cloud.")).toBeTruthy());
-    expect((screen.getByLabelText("Send") as HTMLButtonElement).disabled).toBe(true);
+    await screen.findByText(CHAT_COPY.en.cloudSignIn);
+    expect((screen.getByLabelText(CHAT_COPY.en.placeholder) as HTMLTextAreaElement).value).toBe("A draft to keep");
+    expect((screen.getByRole("button", { name: "Send" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(pending).toHaveLength(0);
   });
 
-  it("leaves the line under the composer empty for a ready CLI and uses it when the connection needs the person", async () => {
-    const { client: baseClient } = fakeClient();
-    const getStatus = vi.fn(async () => READY);
-    const client = { ...baseClient, getStatus };
-    const { container } = render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+  it("keeps a CLI with no install from taking over the current connection", async () => {
+    const { client } = fakeClient();
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     await waitFor(() => expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(false));
-    expect(container.querySelector(".chat-usage")).toBeNull();
-    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: /Claude Code/ }));
-    expect(container.querySelector(".chat-usage")).toBeNull();
+    const claude = within(openPicker("Connection")).getByRole("option", { name: "Claude Code" });
+    expect((claude as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(claude);
+    expect(screen.getByRole("combobox", { name: "Connection" }).textContent).toBe("Codex");
+  });
 
-    window.localStorage.setItem("drifty.chat.connection", "claude");
-    cleanup();
-    const unavailable = render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
-    await waitFor(() => expect(unavailable.container.querySelector(".chat-usage")?.textContent).toContain("Claude Code isn't on this computer."));
+  it("restores the saved CLI's composer once a recheck detects the install", async () => {
+    window.localStorage.setItem(CHAT_CONNECTION_STORAGE_KEY, "claude");
+    const { client: baseClient } = fakeClient();
+    const getStatus = vi.fn(async () => READY)
+      .mockResolvedValueOnce(READY)
+      .mockResolvedValueOnce(READY)
+      .mockResolvedValueOnce(BOTH_INSTALLED);
+    const client = { ...baseClient, getStatus };
+    render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    await screen.findByText(CHAT_COPY.en.missingClaude);
     expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
     expect(screen.queryByRole("combobox", { name: "Effort" })).toBeNull();
-    const checkAgain = screen.getByRole("button", { name: "Check again" });
-    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: /Claude Code/ }));
-    expect((within(screen.getByRole("listbox", { name: "Connection" })).getByRole("option", { name: /Claude Code/ }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("combobox", { name: "Connection" }));
-    fireEvent.click(checkAgain);
-    await waitFor(() => expect(getStatus).toHaveBeenCalledTimes(3));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Check again" })); });
+    expect(getStatus).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(CHAT_COPY.en.missingClaude)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Check again" })); });
+    expect(getStatus).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText(CHAT_COPY.en.missingClaude)).toBeNull();
+    expect(screen.getByLabelText(CHAT_COPY.en.placeholder)).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe("Sonnet 5.5");
   });
 });
 

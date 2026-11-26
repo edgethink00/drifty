@@ -909,6 +909,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const availability = (provider: ChatProvider) => status?.providers.find((entry) => entry.provider === provider) ?? null;
   const selectedProvider: ChatProvider | null = connection === "cloud" ? null : connection;
   const providerReady = selectedProvider !== null && availability(selectedProvider)?.installed === true;
+  const missingConnection = selectedProvider !== null && status !== null && !providerReady;
+  const showConnectionRecovery = missingConnection && !running;
   const cloudModels = cloudStatus?.kind === "ready" ? cloudStatus.models : NO_CLOUD_MODELS;
   const cloudModel: ChatCloudModelKey = storedCloudModel && cloudModels.some((model) => model.key === storedCloudModel && model.allowed)
     ? storedCloudModel
@@ -1141,7 +1143,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const pageDrops = !client.watchFileDrops;
   const latestDrop = useRef<{ readonly add: (files: readonly ChatFileSource[]) => void; readonly busy: boolean }>({ add: () => undefined, busy: false });
   useLayoutEffect(() => {
-    latestDrop.current = { add: addFiles, busy: Boolean(running) };
+    latestDrop.current = { add: addFiles, busy: Boolean(running) || showConnectionRecovery };
   });
   useEffect(() => {
     if (!client.watchFileDrops) return undefined;
@@ -1250,10 +1252,8 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     }
   };
 
-  // The line under the composer speaks only when something needs the person: a missing
-  // CLI or record tools, a Drifty Cloud sign-in or plan, and Cloud's credits left. A
-  // ready Codex or Claude Code says nothing; the connection picker already names it.
-  const missingConnection = connection !== "cloud" && status !== null && !availability(connection)?.installed;
+  // Below the composer, show Cloud credits or an issue with the active connection.
+  // A missing CLI has its own recovery state inside the composer.
   const statusLine = (() => {
     if (connection === "cloud") {
       if (!cloudStatus) return copy.cloudChecking;
@@ -1263,8 +1263,6 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       return copy.cloudCredits(cloudStatus.credits.remaining, cloudStatus.credits.renewsAt);
     }
     if (status && !status.toolsAvailable && status.providers.length > 0 && client.kind === "native") return copy.toolsMissing;
-    const ready = availability(connection);
-    if (status && !ready?.installed) return connection === "codex" ? copy.missingCodex : copy.missingClaude;
     if (signedOut(connection)) return connection === "codex" ? copy.codexSignedOut : copy.claudeSignedOut;
     return null;
   })();
@@ -1275,7 +1273,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     return {
       value,
       label: value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud,
-      description: copy.connectionDescription(value),
+      description: missing ? undefined : copy.connectionDescription(value),
       icon: <ConnectionIcon connection={value} />,
       statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
       statusTone: missing || needsSignIn ? "warning" : undefined,
@@ -1327,7 +1325,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     if (!input) return;
     input.style.height = "auto";
     if (input.scrollHeight > 0) input.style.height = input.scrollHeight + "px";
-  }, [draft]);
+  }, [draft, showConnectionRecovery]);
   // The first question moves the composer from the centre to the bottom, as in ChatGPT and Claude;
   // it slides there instead of jumping, unless the person prefers reduced motion.
   useLayoutEffect(() => {
@@ -1460,7 +1458,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
             </div>
           )}
           <form ref={composerRef} className="chat-composer" onSubmit={submit}>
-            {menuVisible ? (
+            {menuVisible && !showConnectionRecovery ? (
               <div className="chat-task-menu" role="listbox" id={menuId} aria-label={copy.tasks}>
                 {menuTasks.length === 0 ? <p className="chat-task-menu__empty">{copy.noTasks}</p> : menuTasks.map((task, index) => (
                   <button
@@ -1481,10 +1479,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
               </div>
             ) : null}
             <div
-              className={"chat-composer__box" + (draggingFiles ? " is-dragging" : "")}
+              className={"chat-composer__box" + (draggingFiles && !showConnectionRecovery ? " is-dragging" : "")}
               data-drop-label={copy.attachDrop}
               onDragOver={(event) => {
-                if (!pageDrops || !hasFiles(event.dataTransfer) || running) return;
+                if (!pageDrops || !hasFiles(event.dataTransfer) || running || showConnectionRecovery) return;
                 event.preventDefault();
                 setDraggingFiles(true);
               }}
@@ -1496,10 +1494,10 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 if (!pageDrops || !hasFiles(event.dataTransfer)) return;
                 event.preventDefault();
                 setDraggingFiles(false);
-                if (!running) addFiles(Array.from(event.dataTransfer.files));
+                if (!running && !showConnectionRecovery) addFiles(Array.from(event.dataTransfer.files));
               }}
             >
-              {pendingAttachments.length > 0 ? (
+              {!showConnectionRecovery && pendingAttachments.length > 0 ? (
                 <ul className="chat-attachments" aria-label={copy.attachments}>
                   {pendingAttachments.map((item) => (
                     <li key={item.id} className={"chat-attachment" + (item.status === "error" ? " is-error" : "")}>
@@ -1521,49 +1519,61 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   ))}
                 </ul>
               ) : null}
-              <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
-              <textarea
-                id="chat-input"
-                ref={inputRef}
-                rows={1}
-                value={draft}
-                placeholder={copy.placeholderHint}
-                aria-controls={menuVisible ? menuId : undefined}
-                aria-expanded={menuVisible}
-                onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
-                onKeyDown={onKeyDown}
-                onPaste={(event) => {
-                  const files = Array.from(event.clipboardData.files);
-                  if (files.length === 0) return;
-                  event.preventDefault();
-                  addFiles(files);
-                }}
-              />
+              {showConnectionRecovery ? (
+                <p className="chat-composer__notice" role="status">
+                  {connection === "codex" ? copy.missingCodex : copy.missingClaude}
+                </p>
+              ) : (
+                <>
+                  <label className="chat-sr-only" htmlFor="chat-input">{copy.placeholder}</label>
+                  <textarea
+                    id="chat-input"
+                    ref={inputRef}
+                    rows={1}
+                    value={draft}
+                    placeholder={copy.placeholderHint}
+                    aria-controls={menuVisible ? menuId : undefined}
+                    aria-expanded={menuVisible}
+                    onChange={(event) => { setDraft(event.target.value); setTaskIndex(0); }}
+                    onKeyDown={onKeyDown}
+                    onPaste={(event) => {
+                      const files = Array.from(event.clipboardData.files);
+                      if (files.length === 0) return;
+                      event.preventDefault();
+                      addFiles(files);
+                    }}
+                  />
+                </>
+              )}
               <div className="chat-composer__row">
-                <button
-                  type="button"
-                  className="chat-attach-button"
-                  aria-label={copy.attach}
-                  disabled={Boolean(running)}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <PaperclipIcon />
-                  <ChatTip side="top">{copy.attach}</ChatTip>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={CHAT_ATTACHMENT_ACCEPT}
-                  className="chat-sr-only"
-                  tabIndex={-1}
-                  aria-hidden="true"
-                  data-testid="chat-file-input"
-                  onChange={(event) => {
-                    addFiles(Array.from(event.target.files ?? []));
-                    event.target.value = "";
-                  }}
-                />
+                {!showConnectionRecovery ? (
+                  <>
+                    <button
+                      type="button"
+                      className="chat-attach-button"
+                      aria-label={copy.attach}
+                      disabled={Boolean(running)}
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      <PaperclipIcon />
+                      <ChatTip side="top">{copy.attach}</ChatTip>
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={CHAT_ATTACHMENT_ACCEPT}
+                      className="chat-sr-only"
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      data-testid="chat-file-input"
+                      onChange={(event) => {
+                        addFiles(Array.from(event.target.files ?? []));
+                        event.target.value = "";
+                      }}
+                    />
+                  </>
+                ) : null}
                 <SettingsSelect<ChatConnection>
                   ariaLabel={copy.connection}
                   className="chat-picker"
@@ -1611,17 +1621,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   <button type="button" className="chat-send chat-send--stop" aria-label={copy.stop} onClick={stop}>
                     <svg viewBox="0 0 16 16" width={12} height={12} aria-hidden="true"><rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" /></svg>
                   </button>
-                ) : (
-                  <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
-                    <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" /></svg>
-                  </button>
-                )}
-              </div>
-            </div>
-            {statusLine ? (
-              <div className={`chat-usage${missingConnection ? " chat-usage--recheck" : ""}`}>
-                <span>{statusLine}</span>
-                {missingConnection ? (
+                ) : showConnectionRecovery ? (
                   <button
                     type="button"
                     className="chat-recheck"
@@ -1633,11 +1633,16 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                     </svg>
                     {statusChecking ? copy.checkingConnection : copy.checkAgain}
                   </button>
-                ) : null}
+                ) : (
+                  <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
+                    <svg viewBox="0 0 16 16" width={14} height={14} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 13V3M4 7l4-4 4 4" /></svg>
+                  </button>
+                )}
               </div>
-            ) : null}
+            </div>
+            {statusLine && !showConnectionRecovery ? <p className="chat-usage">{statusLine}</p> : null}
           </form>
-          {isEmpty ? (
+          {isEmpty && !showConnectionRecovery ? (
             <ul className="chat-tasks" aria-label={copy.tasks}>
               {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
                 <li key={task.id}>
