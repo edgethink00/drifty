@@ -2,10 +2,10 @@ import type { ActivityCategory } from "@drifty/domain";
 import { storyCategoryName, storyKindsList } from "./storyCategories";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { TranslationKey } from "../localization/translations";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel, formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { FirstDayRecap } from "./firstDayStory";
 import type { FirstDaySource } from "./firstDayPreparationStory";
-import type { IntroLayout } from "./postOnboardingSidebarGuide";
+import { layoutOpensByKind, type IntroLayout } from "./postOnboardingSidebarGuide";
 
 /**
  * Review prototype: other ways to open the first story card on a day with almost no focus, so the
@@ -197,13 +197,60 @@ export function hasReadingCard(recap: FirstDayRecap): boolean {
  * Review prototype: what the six-card story's middle card shows in a layout, or null when the day has
  * nothing for it and the story goes on with five cards. A story that opened on focus ("rebalanced")
  * follows with the day by kind; one that opened by kind follows with its focus when it had some
- * ("overview"), else with how Drifty read its pages.
+ * ("overview", "five", "rhythm"); without focus, "reading" and "overview" follow with how Drifty read its
+ * pages, "rhythm" with the hours the day leaned on, and "five" with nothing.
  */
-export function breakdownContent(recap: FirstDayRecap, layout: IntroLayout): "focus" | "kinds" | "reading" | null {
+export function breakdownContent(recap: FirstDayRecap, layout: IntroLayout): "focus" | "kinds" | "reading" | "rhythm" | null {
   const reading = hasReadingCard(recap) ? "reading" as const : null;
   if (layout === "rebalanced") return recap.lead === "kinds" ? reading : "kinds";
-  if (layout === "overview" && recap.lead !== "kinds" && recap.longestFocus) return "focus";
+  if (layoutOpensByKind(layout) && layout !== "reading" && recap.lead !== "kinds" && recap.longestFocus) return "focus";
+  if (layout === "five") return null;
+  if (layout === "rhythm") return recap.busiestHours && recap.span ? "rhythm" : null;
   return reading;
+}
+
+const RHYTHM_COPY = {
+  ko: {
+    title: "가장 몰린 때는 {from}~{to}였어요",
+    body: "{start}부터 {end}까지 기록이 있었고, 그중 이 두 시간에 {duration}이 몰렸어요.",
+    nextDay: "다음 날 {time}",
+  },
+  en: {
+    title: "It leaned on {from}–{to}",
+    body: "Your records ran from {start} to {end}, and {duration} of it fell in those two hours.",
+    nextDay: "{time} the next day",
+  },
+} as const;
+
+/** A clock hour as Koreans say it, with the part of the day: 새벽 2시, 오전 10시, 오후 3시, 저녁 8시, 밤 11시. */
+function koreanHour(hour: number, withPeriod: boolean): string {
+  const h = ((hour % 24) + 24) % 24;
+  const period = h < 6 ? "새벽" : h < 12 ? "오전" : h < 18 ? "오후" : h < 21 ? "저녁" : "밤";
+  const twelve = h % 12 === 0 ? 12 : h % 12;
+  return (withPeriod ? period + " " : "") + twelve + "시";
+}
+
+/** Review prototype, the "rhythm" layout's middle card on a day without focus: the two hours the day leaned on. */
+export function rhythmCardText(recap: FirstDayRecap, language: DisplayLanguage): { readonly title: string; readonly body: string } | null {
+  const busiest = recap.busiestHours;
+  if (!busiest || !recap.span) return null;
+  const copy = language === "ko" ? RHYTHM_COPY.ko : RHYTHM_COPY.en;
+  const fromHour = recap.firstHour + busiest.fromHour, toHour = recap.firstHour + busiest.toHour;
+  // The end hour names its own part of the day only past midnight (밤 11시~새벽 1시; 저녁 8시~10시, 밤 10시~12시).
+  const crossesPeriod = koreanHour(fromHour, true).split(" ")[0] !== koreanHour(toHour, true).split(" ")[0] && Math.floor(fromHour / 24) !== Math.floor((toHour - 1) / 24);
+  const from = language === "ko" ? koreanHour(fromHour, true) : formatLocalizedCompactHourLabel(fromHour % 24, language);
+  const to = language === "ko" ? koreanHour(toHour, crossesPeriod) : formatLocalizedCompactHourLabel(toHour % 24, language);
+  const startDate = new Date(recap.span.startedAt), endDate = new Date(recap.span.endedAt);
+  const nextDay = endDate.toDateString() !== startDate.toDateString();
+  const end = formatLocalizedTimeLabel(recap.span.endedAt, language);
+  return {
+    title: fill(copy.title, { from, to }),
+    body: fill(copy.body, {
+      start: formatLocalizedTimeLabel(recap.span.startedAt, language),
+      end: nextDay ? fill(copy.nextDay, { time: end }) : end,
+      duration: formatLocalizedCompactDurationFromSeconds(busiest.seconds, language),
+    }),
+  };
 }
 
 /**

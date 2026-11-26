@@ -12,7 +12,7 @@ import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLa
 import { CATEGORY_COLORS } from "../../../../lib/activityLabels";
 import { useLocalization } from "../../../localization/LocalizationContext";
 import { breakdownContent, hasReadingCard, noFocusCardVariant, readingView } from "../../noFocusCardVariants";
-import { introLayout } from "../../postOnboardingSidebarGuide";
+import { introLayout, layoutOpensByKind } from "../../postOnboardingSidebarGuide";
 import { storyCategoryName } from "../../storyCategories";
 
 /*
@@ -242,18 +242,20 @@ function FactMark({ source, duration, color, span, chart, name: nameOverride }: 
  * productivity. "focus" lights the longest focus stretch, "drift" lights the drift, and "day" lights every
  * classified block for a day with almost no focus, whose card names where the time went; the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en", factTitle }: {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en", factTitle, rhythm = false }: {
   recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage;
   /** Review prototype: names the focus stretch by the page title Drifty read instead of its site. */
   factTitle?: string;
+  /** Review prototype ("rhythm" layout): the day by kind again, with the two hours it leaned on lit. */
+  rhythm?: boolean;
 }) {
   const { t } = useLocalization();
   // A day with almost no focus opens on its time by kind; the dev server can compare other cards
   // (rhythm, stays, places; see noFocusCardVariants).
   const variant = lit === "day" ? noFocusCardVariant() : null;
-  const byCategory = variant === "kinds";
-  const busiest = variant === "rhythm" ? recap.busiestHours : null;
-  const stay = variant === "stays" ? recap.stays.longest : null;
+  const byCategory = rhythm || variant === "kinds";
+  const busiest = rhythm || variant === "rhythm" ? recap.busiestHours : null;
+  const stay = !rhythm && variant === "stays" ? recap.stays.longest : null;
   const panel = { x: 14, y: 34, w: 372, h: 282 };
   const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
   const cw = chart.w / recap.hourCount;
@@ -451,9 +453,10 @@ export function StoryScene({ step, theme, ko, platform, labels, language, driftC
     const middle = breakdownContent(recap, layout);
     if (middle === "focus") return <RecapDayScene recap={recap} lit="focus" ko={ko} labels={labels} language={language} factTitle={recap.longestFocus?.title} />;
     if (middle === "reading") return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
+    if (middle === "rhythm") return <RecapDayScene recap={recap} lit="day" rhythm ko={ko} labels={labels} language={language} />;
     return <RecapDayScene recap={recap} lit="day" ko={ko} labels={labels} language={language} />;
   }
-  const opensByKind = recap?.lead === "kinds" || layout === "overview" || layout === "reading";
+  const opensByKind = recap?.lead === "kinds" || layoutOpensByKind(layout);
   if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap}
     lit={step === "drift" ? "drift" : opensByKind ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}

@@ -20,8 +20,8 @@ import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
 import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
-import { breakdownCardText, breakdownContent, noFocusCardText, noFocusCardVariant, rebalancedFixHint } from "./noFocusCardVariants";
-import { introLayout, isRebalancedIntroLayout } from "./postOnboardingSidebarGuide";
+import { breakdownCardText, breakdownContent, noFocusCardText, noFocusCardVariant, rebalancedFixHint, rhythmCardText } from "./noFocusCardVariants";
+import { introLayout, isRebalancedIntroLayout, layoutOpensByKind } from "./postOnboardingSidebarGuide";
 import { storyKindsList } from "./storyCategories";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
@@ -187,6 +187,10 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       }),
     };
   }
+  if (middle === "rhythm") {
+    const rhythm = rhythmCardText(recap, language);
+    if (rhythm) return rhythm;
+  }
   if (step === "breakdown") return breakdownCardText(recap, language, t, middle === "kinds" ? "kinds" : "reading");
   const fixHint = isRebalancedIntroLayout() ? rebalancedFixHint(language) : null;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
@@ -198,7 +202,7 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       duration: duration(recap.longestFocus.seconds),
       source: recap.longestFocus.source.label,
     } : null;
-    if (recap.lead === "kinds" || layout === "overview" || layout === "reading") {
+    if (recap.lead === "kinds" || layoutOpensByKind(layout)) {
       // Review prototype: the dev server can open this card on other facts (see noFocusCardVariants).
       const variant = recap.lead === "kinds" ? noFocusCardVariant() : "kinds";
       const variantText = noFocusCardText(variant, recap, language, t);

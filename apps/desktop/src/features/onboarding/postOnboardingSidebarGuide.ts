@@ -46,15 +46,23 @@ export function isRebalancedIntroLayout(
  * middle one): "rebalanced" opens on the usual first card, then the day by kind, then the drift;
  * "overview" always opens on the day by kind, then its focus (how Drifty read the pages on a day without
  * focus), then the drift; "reading" always opens by kind, then how Drifty read the pages, then the drift.
+ * "five" and "rhythm" follow "overview" on a day with focus; on a day without it, "five" goes straight
+ * from the day by kind to the drift, and "rhythm" puts the hours the day leaned on between them.
  */
-export type IntroLayout = "current" | "rebalanced" | "overview" | "reading";
+export type IntroLayout = "current" | "rebalanced" | "overview" | "reading" | "five" | "rhythm";
+const INTRO_LAYOUTS: readonly IntroLayout[] = ["rebalanced", "overview", "reading", "five", "rhythm"];
 export function introLayout(
   search: string = typeof window === "undefined" ? "" : window.location.search,
   isDevelopment: boolean = import.meta.env.DEV,
 ): IntroLayout {
   if (!isDevelopment) return "current";
   const raw = new URLSearchParams(search).get(INTRO_LAYOUT_QUERY_PARAM);
-  return raw === "rebalanced" || raw === "overview" || raw === "reading" ? raw : "current";
+  return INTRO_LAYOUTS.find((layout) => layout === raw) ?? "current";
+}
+
+/** Whether a review layout opens every story on the day by kind, whatever its focus. */
+export function layoutOpensByKind(layout: IntroLayout): boolean {
+  return layout === "overview" || layout === "reading" || layout === "five" || layout === "rhythm";
 }
 
 /**

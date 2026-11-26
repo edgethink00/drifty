@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildFirstDayRecap } from "./firstDayStory";
 import { buildIntroReviewCase } from "./introStoryReview";
-import { breakdownCardText, breakdownContent, readingView, rebalancedFixHint } from "./noFocusCardVariants";
+import { breakdownCardText, breakdownContent, readingView, rebalancedFixHint, rhythmCardText } from "./noFocusCardVariants";
 import { isRebalancedIntroLayout, postOnboardingGuideStepInSequence, POST_ONBOARDING_STORY_REBALANCED_STEPS } from "./postOnboardingSidebarGuide";
 
 const DAY = "2026-09-30", TODAY = "2026-10-01";
@@ -39,6 +39,20 @@ describe("rebalanced story review prototype", () => {
     });
     expect(breakdownCardText(dayOff!, "ko", tKo, "reading").body).toBe("같은 youtube.com도 페이지 3개를 하나씩 보고 엔터테인먼트와 음악으로 나눴어요.");
     expect(rebalancedFixHint("ko").drift).toContain("‘분류’에서 바로잡을 수 있어요");
+  });
+
+  it("goes on with five cards or puts the busiest hours in the middle of a day without focus", () => {
+    const focusDay = buildFirstDayRecap({ ...buildIntroReviewCase("story", () => DAY), today: TODAY })!;
+    const dayOff = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => DAY), today: TODAY })!;
+    // With focus, both follow the day by kind with its focus.
+    expect(breakdownContent(focusDay, "five")).toBe("focus");
+    expect(breakdownContent(focusDay, "rhythm")).toBe("focus");
+    expect(breakdownContent(dayOff, "five")).toBeNull();
+    expect(breakdownContent(dayOff, "rhythm")).toBe("rhythm");
+    // 10:00-12:00 held mail, Hacker News, the jazz playlist, shopping and the trip plan: 72 minutes.
+    expect(rhythmCardText(dayOff, "ko")?.title).toBe("가장 몰린 때는 오전 10시~12시였어요");
+    expect(rhythmCardText(dayOff, "ko")?.body).toContain("그중 이 두 시간에 1시간 12분이 몰렸어요.");
+    expect(rhythmCardText(dayOff, "en")?.title).toBe("It leaned on 10am–12pm");
   });
 
   it("names the main kind by a page only when that page stands for a tenth of its time", () => {
