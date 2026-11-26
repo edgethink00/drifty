@@ -97,8 +97,14 @@ documented here yet.
 
 ## Roadmap
 
-- [x] Automatic time tracking on Mac and Windows
-- [ ] Document Windows source builds
+- [x] AI time tracking for Mac (Apple Silicon)
+- [x] For Windows
+- [x] For iPhone — [App Store](https://apps.apple.com/app/id6824176729)
+- [x] For AI agents — [Drifty skill](integrations/skills/drifty/SKILL.md)
+- [ ] For Intel Mac — [Waitlist](https://drifty.so/intel-mac/)
+- [ ] For Linux — [Waitlist](https://drifty.so/linux/)
+- [ ] For Android — [Waitlist](https://drifty.so/android/)
+- [ ] For Teams — [Limited beta](https://drifty.so/teams/)
 
 ## Community
 
