@@ -3,9 +3,7 @@
    and accepts a typed address, then asks for the category and focus. */
 .classification-rule-add { min-width: 0; }
 
-/* No rule above it: the list box already ends there. The row lines its "+" and
-   label up with the rows' icon and name columns, and fills on hover so it reads
-   as a button on the card's gray surface. */
+/* The "+" and label align with the rules' icon and name columns. */
 .classification-rule-add__row {
   display: grid;
   grid-template-columns: 1.5rem minmax(0, 1fr);
