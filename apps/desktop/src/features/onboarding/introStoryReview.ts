@@ -72,11 +72,11 @@ export const FIRST_DAY_REVIEW_ENTRY_COUNT = ENTRIES.length;
  * Review cases for the story cards (?driftyIntroData=): story (yesterday, rebuilt from browser history),
  * today (the prepared day is today: the story says so far today), earlier (the day before yesterday, whole in the 72-hour import), watched (recorded by the tracker, so no rebuilt
  * note), mixed (part watched, part rebuilt: no note), appDrift (the top drift is an app), lowDrift (2 min
- * of drift), noDrift, lowFocus (22 min of focus: the story opens on the time it read), short (too little
- * to tell: the sample cards), empty.
+ * of drift), noDrift, lowFocus (22 min of focus: the story opens on the time it read), noFocus (no focus:
+ * the story names where the time went), short (too little to tell: the sample cards), empty.
  */
-export type IntroReviewDataMode = "story" | "today" | "earlier" | "watched" | "mixed" | "appDrift" | "lowDrift" | "noDrift" | "lowFocus" | "short" | "empty";
-const REVIEW_MODES: readonly IntroReviewDataMode[] = ["story", "today", "earlier", "watched", "mixed", "appDrift", "lowDrift", "noDrift", "lowFocus", "short", "empty"];
+export type IntroReviewDataMode = "story" | "today" | "earlier" | "watched" | "mixed" | "appDrift" | "lowDrift" | "noDrift" | "lowFocus" | "noFocus" | "short" | "empty";
+const REVIEW_MODES: readonly IntroReviewDataMode[] = ["story", "today", "earlier", "watched", "mixed", "appDrift", "lowDrift", "noDrift", "lowFocus", "noFocus", "short", "empty"];
 export function introReviewDataMode(search: string): IntroReviewDataMode {
   const mode = new URLSearchParams(search).get(INTRO_REVIEW_DATA_QUERY_PARAM);
   return REVIEW_MODES.find((candidate) => candidate === mode) ?? "story";
@@ -98,6 +98,9 @@ export function buildIntroReviewCase(mode: IntroReviewDataMode, dayFor: (offset:
   if (mode === "short") segments = segments.filter((_, index) => index === 0 || index === 2);
   // Only the morning's Q4 planning doc stays focus: 22 minutes, the rest of the work reads as neutral.
   if (mode === "lowFocus") segments = segments.map((segment) => segment.classification?.productivity === "focus" && segment.siteTitle !== "Q4 planning"
+    ? { ...segment, classification: { ...segment.classification, productivity: "neutral" } } satisfies ActivitySegment : segment);
+  // Every work entry reads as neutral: a day of browsing with no focus at all.
+  if (mode === "noFocus") segments = segments.map((segment) => segment.classification?.productivity === "focus"
     ? { ...segment, classification: { ...segment.classification, productivity: "neutral" } } satisfies ActivitySegment : segment);
   if (mode === "mixed") segments = segments.map((segment, index) => index % 2 === 0 ? { ...segment, source: "nsworkspace", siteSource: "applescript" } satisfies ActivitySegment : segment);
   if (mode === "appDrift") segments = segments.map((segment) => segment.siteDomain === "youtube.com"

@@ -68,10 +68,11 @@ export type FirstDayRecapMoment = { readonly hourIndex: number; readonly minute:
 export type FirstDayStoryDay = "yesterday" | "today" | "dayBefore";
 
 /**
- * How the first story card opens: on focus, or, when focus fell short of the focus lead's minimum, on
- * the classified time it read, with the focus it found in the body.
+ * How the first story card opens: on focus; or, when focus fell short of the focus lead's minimum, on
+ * the classified time it read, with the focus it found in the body ("overview"); or, with almost no
+ * focus, on the classified time it read and where that time went ("sources").
  */
-export type FirstDayStoryLead = "focus" | "overview";
+export type FirstDayStoryLead = "focus" | "overview" | "sources";
 
 export type FirstDayRecap = {
   readonly day: string;
@@ -91,6 +92,8 @@ export type FirstDayRecap = {
     readonly to: FirstDayRecapMoment;
   } | null;
   readonly topDrift: { readonly seconds: number; readonly source: FirstDaySource } | null;
+  /** Up to three sources with the most classified time, whatever their verdict: where a day with almost no focus went. */
+  readonly topSources: readonly { readonly seconds: number; readonly source: FirstDaySource }[];
   /** The site with the most drift (any amount), so the Automatic close preview can close a real tab even when the top drift was an app. */
   readonly topDriftSite: FirstDaySource | null;
   /** Clock hour (0-23) of the chart's first column. */
@@ -108,11 +111,14 @@ export const FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS = 30 * 60;
 export const FIRST_DAY_RECAP_MIN_FOCUS_SECONDS = 30 * 60;
 /**
  * Below the focus lead's minimum the story opens on the classified time instead and names the longest
- * focus stretch in the body; under this much focus there is no stretch worth pointing at.
+ * focus stretch in the body; under this much focus there is no stretch worth pointing at, so the story
+ * names where the time went instead.
  */
 export const FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS = 5 * 60;
 /** Drift shorter than this is reported as "almost none" instead of naming a source. */
 export const FIRST_DAY_RECAP_MIN_DRIFT_SECONDS = 3 * 60;
+/** How many places a story with almost no focus names. */
+const FIRST_DAY_RECAP_TOP_SOURCE_COUNT = 3;
 const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 const MIN_CHART_HOURS = 8;
 const HOUR_MS = 60 * 60 * 1000;
@@ -269,15 +275,20 @@ export function resolveFirstDayRecap({
   for (const entry of timed) totals[entry.verdict] += entry.segment.durationSeconds;
   const classifiedSeconds = totals.focus + totals.neutral + totals.drift;
   if (classifiedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS) return { recap: null, decisionReason: "below_classified_minimum" };
-  if (totals.focus < FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS) return { recap: null, decisionReason: "below_focus_minimum" };
-  const lead: FirstDayStoryLead = totals.focus >= FIRST_DAY_RECAP_MIN_FOCUS_SECONDS ? "focus" : "overview";
+  const lead: FirstDayStoryLead = totals.focus >= FIRST_DAY_RECAP_MIN_FOCUS_SECONDS ? "focus"
+    : totals.focus >= FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS ? "overview" : "sources";
   const chart = chartOf(timed);
   if (!chart) return { recap: null, decisionReason: "no_chart" };
 
   const driftBySource = new Map<string, { source: FirstDaySource; seconds: number }>();
+  const classifiedBySource = new Map<string, { source: FirstDaySource; seconds: number }>();
   for (const entry of timed) {
-    if (entry.verdict !== "drift") continue;
+    if (entry.verdict === "pending") continue;
     const source = firstDaySourceOf(entry.segment);
+    const classified = classifiedBySource.get(source.key) ?? { source, seconds: 0 };
+    classified.seconds += entry.segment.durationSeconds;
+    classifiedBySource.set(source.key, classified);
+    if (entry.verdict !== "drift") continue;
     const tally = driftBySource.get(source.key) ?? { source, seconds: 0 };
     tally.seconds += entry.segment.durationSeconds;
     driftBySource.set(source.key, tally);
@@ -285,8 +296,9 @@ export function resolveFirstDayRecap({
   const driftRanked = Array.from(driftBySource.values()).sort((left, right) => right.seconds - left.seconds);
   const topDrift = driftRanked[0] ?? null;
   const topDriftSite = driftRanked.find((entry) => entry.source.kind === "site")?.source ?? null;
+  const topSources = Array.from(classifiedBySource.values()).sort((left, right) => right.seconds - left.seconds).slice(0, FIRST_DAY_RECAP_TOP_SOURCE_COUNT);
 
-  return { decisionReason: lead === "focus" ? "story_ready" : "story_low_focus", recap: {
+  return { decisionReason: lead === "focus" ? "story_ready" : lead === "overview" ? "story_low_focus" : "story_no_focus", recap: {
     day,
     dayRelation,
     lead,
@@ -297,6 +309,7 @@ export function resolveFirstDayRecap({
     classifiedSeconds,
     longestFocus: chart.longestFocus,
     topDrift: topDrift && totals.drift >= FIRST_DAY_RECAP_MIN_DRIFT_SECONDS ? topDrift : null,
+    topSources,
     topDriftSite,
     firstHour: chart.firstHour,
     hourCount: chart.hourCount,
@@ -307,4 +320,38 @@ export function resolveFirstDayRecap({
 /** Existing callers only need the local recap, never the observation reason. */
 export function buildFirstDayRecap(input: Parameters<typeof resolveFirstDayRecap>[0]): FirstDayRecap | null {
   return resolveFirstDayRecap(input).recap;
+}
+
+/**
+ * What first-run preparation learned about the history it could read, so a sample intro can say why
+ * (as a fixed label, never the facts themselves): whether the browser-history import was chosen,
+ * whether Safari is the default browser while its history is unreadable, and the recorded time of the
+ * three days the import covers taken together. Null facts leave the reason as it was.
+ */
+export type FirstDayPreparedFacts = {
+  readonly importEnabled: boolean;
+  readonly safariLocked: boolean | null;
+  readonly windowRecordedSeconds: number | null;
+};
+
+/**
+ * Splits the two broad sample-card reasons by what preparation saw: an empty day because the import was
+ * off or Safari could not be read, and a short day whose three imported days together would have held
+ * enough time. Every other reason, and either reason without facts, is unchanged.
+ */
+export function refineIntroDecisionReason(
+  reason: OnboardingIntroDecisionReason,
+  facts: FirstDayPreparedFacts | null,
+): OnboardingIntroDecisionReason {
+  if (!facts) return reason;
+  if (reason === "no_usable_history") {
+    if (!facts.importEnabled) return "no_history_import_off";
+    if (facts.safariLocked) return "no_history_safari_locked";
+    return reason;
+  }
+  if (reason === "below_classified_minimum" && facts.windowRecordedSeconds !== null
+    && facts.windowRecordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS) {
+    return "below_classified_window_enough";
+  }
+  return reason;
 }

@@ -232,9 +232,10 @@ function FactMark({ source, duration, color, span, chart }: {
 
 /**
  * The first day as the Today canvas draws it: one column per hour, blocks by minute, coloured by
- * productivity. "focus" lights the longest focus stretch, "drift" lights the drift; the rest steps back.
+ * productivity. "focus" lights the longest focus stretch, "drift" lights the drift, and "day" lights every
+ * classified block for a day with almost no focus, whose card names where the time went; the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
   const panel = { x: 14, y: 34, w: 372, h: 282 };
   const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
   const cw = chart.w / recap.hourCount;
@@ -242,7 +243,9 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
   // With almost no drift there is no source to point at: the drift card lights the day's focus and
   // neutral time instead, a day that stayed mostly on track, and shows no label.
   const clean = lit === "drift" && !recap.topDrift;
-  const isLit = (block: FirstDayRecapBlock) => lit === "focus" ? inLongestRun(block, recap)
+  const wholeDay = lit === "day";
+  const isLit = (block: FirstDayRecapBlock) => wholeDay ? block[3] !== "pending"
+    : lit === "focus" ? inLongestRun(block, recap)
     : clean ? block[3] === "focus" || block[3] === "neutral" : block[3] === "drift";
   const litColumns = recap.blocks.filter(isLit).map((block) => block[0]);
   // Drift: point at the hour holding the most drift; focus: at the stretch's first hour.
@@ -264,7 +267,7 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
     <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
     {legend.map(([fill, text], i) => {
       const x = panel.x + 16 + i * (ko ? 52 : 64);
-      const on = clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2);
+      const on = wholeDay || (clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2));
       return <g key={text} opacity={on ? 1 : 0.55}><circle cx={x + 4} cy={panel.y + 22} r={4} fill={fill} /><text x={x + 12} y={panel.y + 25.5} fontSize="10" fontWeight={on ? 700 : 500} fill="var(--text)">{text}</text></g>;
     })}
     <g transform={"translate(" + chart.x + " " + chart.y + ")"}>
@@ -275,7 +278,7 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
       {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
         <text key={i} x={i * cw + cw / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{formatLocalizedCompactHourLabel((recap.firstHour + i) % 24, language)}</text>)}
     </g>
-    {clean ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+    {clean || wholeDay ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
       span={{ x0: chart.x + Math.floor(spanFrom) * cw, x1: chart.x + (Math.floor(spanTo) + 1) * cw }} />}
   </g>;
 }
@@ -283,7 +286,8 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
 export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} language={language} />;
+  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap}
+    lit={step === "drift" ? "drift" : recap.lead === "sources" ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

@@ -42,6 +42,25 @@ describe("centered app introduction", () => {
     expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your day so far" })).toBeTruthy();
   });
 
+  it("opens a day with no focus on the time it read and where it went, lighting the whole day", () => {
+    const props = callbacks();
+    const day = "2026-09-30", today = "2026-10-01";
+    const noFocus = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => day), today });
+    const { unmount } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} />);
+    expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your browsing yesterday" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Most of it went to github.com, youtube.com, and figma.com.");
+    // No stretch to point at: every classified block is lit and no tooltip names a single source.
+    expect(document.querySelector(".story-day__fact")).toBeNull();
+    const blocks = Array.from(document.querySelectorAll(".story-day__block"));
+    expect(blocks.length).toBeGreaterThan(0);
+    expect(blocks.every((block) => block.hasAttribute("data-lit"))).toBe(true);
+    unmount();
+    render(<LocalizationTestProvider language="ko"><PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} /></LocalizationTestProvider>);
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("주로 github.com, youtube.com, figma.com에서 시간을 보냈어요.");
+  });
+
   it("names today or the day before when preparation took one of them", () => {
     const props = callbacks();
     const today = "2026-10-01";

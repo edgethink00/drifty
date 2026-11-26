@@ -82,6 +82,7 @@ export const JAPANESE_PART_2 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "一昨日の記録{{total}}を振り返りました",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "一昨日ブラウザで過ごした{{total}}を振り返りました",
   "postOnboarding.story.recapOverviewBody": "そのうち集中は{{focus}}でした。最も長く集中したのは{{source}}で、{{time}}から{{duration}}でした。",
+  "postOnboarding.story.recapSourcesBody": "主に{{sources}}で過ごしました。",
   "postOnboarding.story.driftTitle": "気晴らしの時間は{{duration}}でした",
   "postOnboarding.story.driftTitleBrowser": "ブラウザでの気晴らしは{{duration}}でした",
   "postOnboarding.story.driftNoneTitleBrowser": "ブラウザでの気晴らしはほとんどありませんでした",

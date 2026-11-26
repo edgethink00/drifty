@@ -82,6 +82,7 @@ export const SIMPLIFIED_CHINESE_PART_2 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "我们查看了你前天记录的 {{total}}",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "我们查看了你前天在浏览器中的 {{total}}",
   "postOnboarding.story.recapOverviewBody": "其中专注 {{focus}}，最长一次是在 {{source}} 上持续 {{duration}}，从 {{time}} 开始。",
+  "postOnboarding.story.recapSourcesBody": "大部分时间花在 {{sources}} 上。",
   "postOnboarding.story.driftTitle": "分心用了 {{duration}}",
   "postOnboarding.story.driftTitleBrowser": "浏览器中的分心用了 {{duration}}",
   "postOnboarding.story.driftNoneTitleBrowser": "浏览器中几乎没有分心",

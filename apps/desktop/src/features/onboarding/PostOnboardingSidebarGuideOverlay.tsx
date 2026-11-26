@@ -119,6 +119,24 @@ function usePageTransition(step: PostOnboardingSidebarGuideStep, stepOrder: read
 type GuideText = { readonly title: string; readonly body: string };
 type Translate = ReturnType<typeof useLocalization>["t"];
 
+/**
+ * The places a story with almost no focus names, as one list in the display language. Korean reads more
+ * naturally as a plain comma list than with Intl's formal 및.
+ */
+function sourceList(labels: readonly string[], language: DisplayLanguage): string {
+  if (language === "ko") return labels.join(", ");
+  // Intl.ListFormat is ES2021; the TypeScript lib here predates it, so reach it through a narrow type.
+  const ListFormat = (Intl as unknown as {
+    readonly ListFormat?: new (locale: string, options: { readonly type: "conjunction" }) => { format(items: readonly string[]): string };
+  }).ListFormat;
+  if (!ListFormat) return labels.join(", ");
+  try {
+    return new ListFormat(language, { type: "conjunction" }).format(labels);
+  } catch {
+    return labels.join(", ");
+  }
+}
+
 /** The focus title for the day the story tells: [watched or mixed, rebuilt from browser history]. */
 const RECAP_TITLE_KEYS = {
   yesterday: ["postOnboarding.story.recapTitleYesterday", "postOnboarding.story.recapTitleYesterdayBrowser"],
@@ -138,7 +156,8 @@ const RECAP_OVERVIEW_TITLE_KEYS = {
  * of app time, so the totals are the browser's, not the whole day's. The first title names the day the
  * story tells (yesterday, so far today, or the day before yesterday; see resolveFirstDayRecap). With
  * under 30 minutes of focus the first card opens on the classified time it read and names the focus in
- * its body. With almost no drift the second card says so plainly instead of naming a source.
+ * its body; with almost no focus it names where that time went instead. With almost no drift the second
+ * card says so plainly instead of naming a source.
  */
 function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: DisplayLanguage): GuideText | null {
   if (!recap || (step !== "recap" && step !== "drift")) return null;
@@ -151,10 +170,13 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       duration: duration(recap.longestFocus.seconds),
       source: recap.longestFocus.source.label,
     } : null;
-    if (recap.lead === "overview") {
+    if (recap.lead === "overview" || recap.lead === "sources") {
+      const places = recap.topSources.map((entry) => entry.source.label);
       return {
         title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
-        body: stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
+        body: recap.lead === "sources"
+          ? places.length > 0 ? t("postOnboarding.story.recapSourcesBody", { sources: sourceList(places, language) }) : ""
+          : stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
       };
     }
     const title = t(RECAP_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { focus });

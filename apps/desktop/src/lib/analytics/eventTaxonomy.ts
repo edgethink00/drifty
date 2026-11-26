@@ -77,9 +77,17 @@ export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 /** The day a story intro tells, relative to the install day. */
 export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed", "skipped"] as const;
-/** First matching decision, in the same order as the local introduction rules. */
+/**
+ * First matching decision, in the same order as the local introduction rules. story_no_focus is a story
+ * that opens on where the time went because it held almost no focus (below_focus_minimum is its earlier
+ * sample-card label). Three labels split a sample intro by what first-run preparation saw:
+ * no_history_import_off and no_history_safari_locked narrow no_usable_history, and
+ * below_classified_window_enough narrows below_classified_minimum to a short day whose three imported
+ * days together held enough time.
+ */
 export const ONBOARDING_INTRO_DECISION_REASONS = [
-  "story_ready", "story_low_focus", "prepared_today", "prepared_other_day", "no_usable_history",
+  "story_ready", "story_low_focus", "story_no_focus", "prepared_today", "prepared_other_day", "no_usable_history",
+  "no_history_import_off", "no_history_safari_locked", "below_classified_window_enough",
   "below_classified_minimum", "below_focus_minimum", "no_chart",
   "history_read_failed", "history_wait_timed_out",
 ] as const;

@@ -245,7 +245,7 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { resolveFirstDayRecap, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
+import { refineIntroDecisionReason, resolveFirstDayRecap, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
@@ -2012,6 +2012,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   /* The intro opens on the user's own first day when the preparation left enough classified time.
      The recap is read once, when the intro is first shown, so its facts do not shift while it is open. */
   const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null; readonly decisionReason?: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }>({ resolved: false, recap: null });
+  // What first-run preparation saw of the readable history; it only narrows a sample intro's label.
+  const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
   const introSequence = introStory.recap ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
@@ -2404,9 +2406,11 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (error) setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" });
       return;
     }
+    const decision = resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes });
     setIntroStory({
       resolved: true,
-      ...resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes }),
+      recap: decision.recap,
+      decisionReason: refineIntroDecisionReason(decision.decisionReason, firstDayPreparedFactsRef.current),
     });
   }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
   // A day that is still loading after a few seconds does not hold the intro back either.
@@ -5170,6 +5174,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setProgress: setFirstDayPreparationProgress,
     setReadingSegmentIds: setFirstDayReadingSegmentIds,
     setPreparedDay: setFirstDayPreparedDay,
+    onPreparedFacts: (facts) => { firstDayPreparedFactsRef.current = facts; },
     shouldBlockLocalTrackerAccess,
     startOfDayMinutes,
   });

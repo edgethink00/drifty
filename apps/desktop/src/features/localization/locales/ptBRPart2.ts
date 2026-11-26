@@ -82,6 +82,7 @@ export const BRAZILIAN_PORTUGUESE_PART_2 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "O Drifty analisou {{total}} do seu dia de anteontem",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "O Drifty analisou {{total}} de navegação de anteontem",
   "postOnboarding.story.recapOverviewBody": "Desse tempo, {{focus}} foi de foco. Sua maior sequência foi de {{duration}} em {{source}}, a partir de {{time}}.",
+  "postOnboarding.story.recapSourcesBody": "A maior parte foi em {{sources}}.",
   "postOnboarding.story.driftTitle": "Distrações ocuparam {{duration}}",
   "postOnboarding.story.driftTitleBrowser": "Distrações no navegador ocuparam {{duration}}",
   "postOnboarding.story.driftNoneTitleBrowser": "Quase nenhuma distração no navegador",

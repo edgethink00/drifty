@@ -82,6 +82,7 @@ export const FRENCH_PART_2 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "Drifty a examiné {{total}} de votre journée d’avant-hier",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "Drifty a examiné {{total}} de navigation d’avant-hier",
   "postOnboarding.story.recapOverviewBody": "Dont {{focus}} de concentration. Votre plus longue séquence a duré {{duration}} sur {{source}}, depuis {{time}}.",
+  "postOnboarding.story.recapSourcesBody": "Vous l’avez surtout passé sur {{sources}}.",
   "postOnboarding.story.driftTitle": "Les distractions ont pris {{duration}}",
   "postOnboarding.story.driftTitleBrowser": "Les distractions dans votre navigateur ont pris {{duration}}",
   "postOnboarding.story.driftNoneTitleBrowser": "Presque aucune distraction dans votre navigateur",

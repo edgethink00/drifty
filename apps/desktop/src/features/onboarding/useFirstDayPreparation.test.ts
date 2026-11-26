@@ -15,6 +15,7 @@ import {
   FIRST_DAY_PREPARATION_RETRY_BASE_MS,
   FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT,
   resolveFirstDayTargetDay,
+  resolveFirstDayTarget,
   useFirstDayPreparation,
   type UseFirstDayPreparationOptions,
 } from "./useFirstDayPreparation";
@@ -25,6 +26,7 @@ const trackerMocks = vi.hoisted(() => ({
   previewBrowserHistoryImport: vi.fn(),
   getTimeline: vi.fn(),
   getUnclassifiedSegments: vi.fn(),
+  getBrowserHistoryEnvironment: vi.fn(),
 }));
 
 const analyticsMocks = vi.hoisted(() => ({
@@ -381,6 +383,29 @@ describe("useFirstDayPreparation", () => {
     const preparedOrder = setPreparedDay.mock.invocationCallOrder;
     expect(preparedOrder[preparedOrder.length - 1]).toBeLessThan(vi.mocked(options.selectDay).mock.invocationCallOrder[0]);
     expect(options.selectDay).toHaveBeenCalledWith("2026-07-03", { userSelected: false });
+  });
+
+  it("reports what it could read: the import choice, an unreadable default Safari and the window's time", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(4, 0));
+    trackerMocks.getBrowserHistoryEnvironment.mockResolvedValue({ defaultBrowserIsSafari: true, safariHistoryReadable: false });
+    // Twelve minutes a day: no single day reaches a story, the three together do.
+    trackerMocks.getTimeline.mockImplementation(async (query: { day?: string }) => [{
+      id: "visit-" + query.day, startedAt: query.day + "T09:00:00", endedAt: query.day + "T09:12:00", durationSeconds: 12 * 60,
+      appName: "Google Chrome", bundleId: "com.google.Chrome", source: "browser-history-import",
+    }]);
+    const onPreparedFacts = vi.fn();
+    renderHook(() => useFirstDayPreparation(makeOptions({ onPreparedFacts })));
+    await flushAsync(30);
+    expect(onPreparedFacts.mock.calls[0]).toEqual([null]);
+    expect(onPreparedFacts).toHaveBeenLastCalledWith({ importEnabled: true, safariLocked: true, windowRecordedSeconds: 36 * 60 });
+
+    // Without the import there is nothing to read the environment for.
+    trackerMocks.getBrowserHistoryEnvironment.mockClear();
+    const withoutImport = vi.fn();
+    renderHook(() => useFirstDayPreparation(makeOptions({ browserHistoryImportEnabled: false, onPreparedFacts: withoutImport })));
+    await flushAsync(30);
+    expect(trackerMocks.getBrowserHistoryEnvironment).not.toHaveBeenCalled();
+    expect(withoutImport).toHaveBeenLastCalledWith({ importEnabled: false, safariLocked: null, windowRecordedSeconds: 36 * 60 });
   });
 
   it("spaces background reloads at least a second apart when batches finish faster than that", async () => {
@@ -1250,6 +1275,7 @@ describe("resolveFirstDayTargetDay", () => {
     mockMetricsByDay({ "2026-07-04": 40, "2026-07-03": 15 });
     trackerMocks.getTimeline.mockRejectedValue(new Error("timeline unavailable"));
     await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
+    await expect(resolveFirstDayTarget("2026-07-04")).resolves.toEqual({ day: "2026-07-03", windowRecordedSeconds: null });
   });
 
   it("prefers yesterday, a whole day, even when today already has enough segments", async () => {

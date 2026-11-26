@@ -329,6 +329,7 @@ export const SPANISH_PART_1 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "Drifty revisó {{total}} de tu día de anteayer",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "Drifty revisó {{total}} de tu navegación de anteayer",
   "postOnboarding.story.recapOverviewBody": "De ese tiempo, {{focus}} fue concentración. Tu racha más larga fue de {{duration}} en {{source}}, desde {{time}}.",
+  "postOnboarding.story.recapSourcesBody": "Pasaste la mayor parte en {{sources}}.",
   "postOnboarding.story.driftTitle": "Las distracciones ocuparon {{duration}}",
   "postOnboarding.story.driftTitleBrowser": "Las distracciones en tu navegador ocuparon {{duration}}",
   "postOnboarding.story.driftNoneTitleBrowser": "Casi no hubo distracciones en tu navegador",

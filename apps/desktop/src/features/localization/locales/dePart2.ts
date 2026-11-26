@@ -82,6 +82,7 @@ export const GERMAN_PART_2 = {
   "postOnboarding.story.recapOverviewTitleDayBefore": "Erfasste Zeit vorgestern: {{total}}",
   "postOnboarding.story.recapOverviewTitleDayBeforeBrowser": "Erfasste Zeit im Browser vorgestern: {{total}}",
   "postOnboarding.story.recapOverviewBody": "Davon {{focus}} Fokus. Deine längste Phase dauerte {{duration}} bei {{source}}, ab {{time}}.",
+  "postOnboarding.story.recapSourcesBody": "Die meiste Zeit warst du auf {{sources}}.",
   "postOnboarding.story.driftTitle": "Ablenkung dauerte {{duration}}",
   "postOnboarding.story.driftTitleBrowser": "Ablenkung im Browser dauerte {{duration}}",
   "postOnboarding.story.driftNoneTitleBrowser": "Fast keine Ablenkung im Browser",
