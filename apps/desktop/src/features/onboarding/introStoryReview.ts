@@ -34,14 +34,36 @@ const ENTRIES: readonly Entry[] = [
   [21, 31, 14, "netflix.com", "Netflix", "entertainment", "drift"],
 ];
 
+// A day off as Chrome history: mail and messages, a trip being planned, some shopping, and videos and
+// Netflix in the evening. Nothing in it is focus; it is what a first day with no focus looks like.
+const NO_FOCUS_ENTRIES: readonly Entry[] = [
+  [9, 40, 18, "mail.google.com", "Inbox", "communication", "neutral"],
+  [10, 5, 12, "news.ycombinator.com", "Hacker News", "social_media", "drift"],
+  [10, 20, 24, "youtube.com", "Morning jazz playlist", "music", "neutral"],
+  [11, 0, 16, "coupang.com", "Running shoes", "shopping", "drift"],
+  [11, 20, 20, "notion.so", "Jeju trip plan", "utility", "neutral"],
+  [13, 10, 35, "youtube.com", "Street food tour", "entertainment", "drift"],
+  [14, 0, 22, "slack.com", "Slack", "communication", "neutral"],
+  [14, 30, 15, "x.com", "Home / X", "social_media", "drift"],
+  [15, 0, 28, "notion.so", "Jeju trip plan", "utility", "neutral"],
+  [16, 10, 14, "coupang.com", "Cart", "shopping", "drift"],
+  [20, 30, 40, "netflix.com", "Netflix", "entertainment", "drift"],
+  [21, 15, 26, "youtube.com", "Movie review", "entertainment", "drift"],
+  [22, 0, 10, "instagram.com", "Instagram", "social_media", "drift"],
+];
+
 /**
  * classifiedCount: how many entries (in a fixed scattered order) already carry a classification, so
  * the review can play classification arriving. The rest are stored as unknown, which reads as pending.
  */
 export function buildFirstDayReviewSegments(day: string, classifiedCount = ENTRIES.length): ActivitySegment[] {
-  const order = ENTRIES.map((_, index) => index).sort((left, right) => ((left * 7) % ENTRIES.length) - ((right * 7) % ENTRIES.length));
+  return reviewSegmentsFrom(ENTRIES, day, classifiedCount);
+}
+
+function reviewSegmentsFrom(entries: readonly Entry[], day: string, classifiedCount = entries.length): ActivitySegment[] {
+  const order = entries.map((_, index) => index).sort((left, right) => ((left * 7) % entries.length) - ((right * 7) % entries.length));
   const classified = new Set(order.slice(0, Math.max(0, classifiedCount)));
-  return ENTRIES.map(([hour, minute, minutes, domain, title, category, productivity], index) => {
+  return entries.map(([hour, minute, minutes, domain, title, category, productivity], index) => {
     const startedAt = new Date(day + "T" + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0") + ":00");
     const endedAt = new Date(startedAt.getTime() + minutes * 60_000);
     return {
@@ -99,9 +121,7 @@ export function buildIntroReviewCase(mode: IntroReviewDataMode, dayFor: (offset:
   // Only the morning's Q4 planning doc stays focus: 22 minutes, the rest of the work reads as neutral.
   if (mode === "lowFocus") segments = segments.map((segment) => segment.classification?.productivity === "focus" && segment.siteTitle !== "Q4 planning"
     ? { ...segment, classification: { ...segment.classification, productivity: "neutral" } } satisfies ActivitySegment : segment);
-  // Every work entry reads as neutral: a day of browsing with no focus at all.
-  if (mode === "noFocus") segments = segments.map((segment) => segment.classification?.productivity === "focus"
-    ? { ...segment, classification: { ...segment.classification, productivity: "neutral" } } satisfies ActivitySegment : segment);
+  if (mode === "noFocus") segments = reviewSegmentsFrom(NO_FOCUS_ENTRIES, day);
   if (mode === "mixed") segments = segments.map((segment, index) => index % 2 === 0 ? { ...segment, source: "nsworkspace", siteSource: "applescript" } satisfies ActivitySegment : segment);
   if (mode === "appDrift") segments = segments.map((segment) => segment.siteDomain === "youtube.com"
     ? { ...segment, appName: "Steam", bundleId: "com.valvesoftware.steam", browserName: null, siteDomain: null, siteTitle: null, siteUrl: null, windowTitle: "Steam", source: "nsworkspace", siteSource: null } satisfies ActivitySegment
@@ -113,7 +133,7 @@ export function buildIntroReviewCase(mode: IntroReviewDataMode, dayFor: (offset:
 
 const REVIEW_SITES = [
   "github.com", "youtube.com", "figma.com", "docs.google.com", "mail.google.com", "notion.so", "linear.app",
-  "slack.com", "x.com", "news.ycombinator.com", "stackoverflow.com", "coupang.com", "netflix.com",
+  "slack.com", "x.com", "news.ycombinator.com", "stackoverflow.com", "coupang.com", "netflix.com", "instagram.com",
 ] as const;
 
 /**

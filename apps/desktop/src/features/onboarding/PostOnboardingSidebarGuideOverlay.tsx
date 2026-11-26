@@ -20,6 +20,7 @@ import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
 import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
+import { noFocusCardText, noFocusCardVariant } from "./noFocusCardVariants";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
 import type { AutoCloseMode } from "../focus-session/focusSession";
@@ -171,6 +172,8 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       source: recap.longestFocus.source.label,
     } : null;
     if (recap.lead === "overview" || recap.lead === "sources") {
+      const variantText = recap.lead === "sources" ? noFocusCardText(noFocusCardVariant(), recap, language, t) : null;
+      if (variantText) return variantText;
       const places = recap.topSources.map((entry) => entry.source.label);
       return {
         title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),

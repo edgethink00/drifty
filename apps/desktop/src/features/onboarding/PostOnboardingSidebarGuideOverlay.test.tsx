@@ -47,9 +47,9 @@ describe("centered app introduction", () => {
     const day = "2026-09-30", today = "2026-10-01";
     const noFocus = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => day), today });
     const { unmount } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} />);
-    expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your browsing yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty looked at 4h 40m of your browsing yesterday" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("Most of it went to github.com, youtube.com, and figma.com.");
+      .toBe("Most of it went to youtube.com, notion.so, and netflix.com.");
     // No stretch to point at: every classified block is lit and no tooltip names a single source.
     expect(document.querySelector(".story-day__fact")).toBeNull();
     const blocks = Array.from(document.querySelectorAll(".story-day__block"));
@@ -58,7 +58,7 @@ describe("centered app introduction", () => {
     unmount();
     render(<LocalizationTestProvider language="ko"><PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} /></LocalizationTestProvider>);
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("주로 github.com, youtube.com, figma.com에서 시간을 보냈어요.");
+      .toBe("주로 youtube.com, notion.so, netflix.com에서 시간을 보냈어요.");
   });
 
   it("names today or the day before when preparation took one of them", () => {

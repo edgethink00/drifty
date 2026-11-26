@@ -7,6 +7,7 @@ import {
   logicalDayStartMs,
   shiftIsoDate,
   type ActivitySegment,
+  type ActivityCategory,
   type ClassificationOptions,
   type ProductivityLabel,
 } from "@drifty/domain";
@@ -47,17 +48,36 @@ export function firstDaySourceOf(segment: ActivitySegment): FirstDaySource {
   return { key: "app:" + (segment.bundleId ?? name), label: name, kind: "app", bundleId: segment.bundleId ?? null, siteDomain: null };
 }
 
-function verdictOf(segment: ActivitySegment, options?: ClassificationOptions): FirstDayVerdict {
+/** Whether a page or window title says more than its site's or app's own name ("Jeju trip plan" on notion.so, not "Netflix" on netflix.com). */
+function titleTellsMore(title: string, source: FirstDaySource): boolean {
+  const brand = (source.kind === "site" ? source.label.split(".")[0] : source.label).toLowerCase();
+  const normalized = title.trim().toLowerCase();
+  return normalized.length > 0 && normalized !== source.label.toLowerCase() && !normalized.includes(brand);
+}
+
+function verdictOf(segment: ActivitySegment, options?: ClassificationOptions): { readonly verdict: FirstDayVerdict; readonly category: ActivityCategory } {
   const classification = classifyActivityDetailed(segment, options);
-  return classification.category === "unknown" ? "pending" : classification.productivity;
+  return {
+    verdict: classification.category === "unknown" ? "pending" : classification.productivity,
+    category: classification.category,
+  };
 }
 
 type VerdictSeconds = Record<FirstDayVerdict, number>;
 const emptyVerdictSeconds = (): VerdictSeconds => ({ focus: 0, neutral: 0, drift: 0, pending: 0 });
 
-/** One drawn block: hour column (0 = the chart's first hour), minute range inside it, and its verdict. */
-export type FirstDayRecapBlock = readonly [hourIndex: number, fromMinute: number, toMinute: number, verdict: FirstDayVerdict, sourceKey?: string];
+/** One drawn block: hour column (0 = the chart's first hour), minute range inside it, its verdict, source and category. */
+export type FirstDayRecapBlock = readonly [hourIndex: number, fromMinute: number, toMinute: number, verdict: FirstDayVerdict, sourceKey?: string, category?: ActivityCategory];
 export type FirstDayRecapMoment = { readonly hourIndex: number; readonly minute: number };
+
+/** One stay on a place: consecutive visits to the same source joined across gaps of up to five minutes. */
+export type FirstDayStay = {
+  readonly seconds: number;
+  readonly startedAt: string;
+  readonly source: FirstDaySource;
+  readonly from: FirstDayRecapMoment;
+  readonly to: FirstDayRecapMoment;
+};
 
 /**
  * The day the story tells, relative to today. First-run preparation picks yesterday, then today, then
@@ -94,6 +114,18 @@ export type FirstDayRecap = {
   readonly topDrift: { readonly seconds: number; readonly source: FirstDaySource } | null;
   /** Up to three sources with the most classified time, whatever their verdict: where a day with almost no focus went. */
   readonly topSources: readonly { readonly seconds: number; readonly source: FirstDaySource }[];
+  /** Classified time by category, longest first. */
+  readonly categories: readonly { readonly category: ActivityCategory; readonly seconds: number }[];
+  /** The first and last classified moment of the day. */
+  readonly span: { readonly startedAt: string; readonly endedAt: string } | null;
+  /** The two neighbouring chart hours that held the most classified time (hour indexes, end exclusive). */
+  readonly busiestHours: { readonly fromHour: number; readonly toHour: number; readonly seconds: number } | null;
+  /** How the day moved between places: separate stays, their average length and the longest one. */
+  readonly stays: { readonly count: number; readonly averageSeconds: number; readonly longest: FirstDayStay | null };
+  /** Up to three long classified visits in different categories with the page title Drifty read: how it sorted the day. */
+  readonly examples: readonly { readonly title: string; readonly source: FirstDaySource; readonly category: ActivityCategory; readonly seconds: number }[];
+  /** How many classified records the day held. */
+  readonly visitCount: number;
   /** The site with the most drift (any amount), so the Automatic close preview can close a real tab even when the top drift was an app. */
   readonly topDriftSite: FirstDaySource | null;
   /** Clock hour (0-23) of the chart's first column. */
@@ -123,7 +155,7 @@ const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 const MIN_CHART_HOURS = 8;
 const HOUR_MS = 60 * 60 * 1000;
 
-type TimedSegment = { readonly segment: ActivitySegment; readonly startMs: number; readonly endMs: number; readonly verdict: FirstDayVerdict };
+type TimedSegment = { readonly segment: ActivitySegment; readonly startMs: number; readonly endMs: number; readonly verdict: FirstDayVerdict; readonly category: ActivityCategory };
 
 /** The day as the Today canvas draws it: one column per local clock hour, blocks by minute. */
 export type FirstDayChart = {
@@ -139,6 +171,10 @@ export type FirstDayChart = {
     readonly from: FirstDayRecapMoment;
     readonly to: FirstDayRecapMoment;
   } | null;
+  /** Every stay on one place, in time order (classified time only). */
+  readonly stays: readonly FirstDayStay[];
+  /** The two neighbouring hour columns with the most classified time. */
+  readonly busiestHours: { readonly fromHour: number; readonly toHour: number; readonly seconds: number } | null;
 };
 
 function toTimed(segments: readonly ActivitySegment[], options: ClassificationOptions | undefined, bounds?: { readonly startMs: number; readonly endMs: number }): TimedSegment[] {
@@ -151,7 +187,7 @@ function toTimed(segments: readonly ActivitySegment[], options: ClassificationOp
     const startMs = bounds ? Math.max(rawStart, bounds.startMs) : rawStart;
     const endMs = bounds ? Math.min(Math.max(rawEnd, rawStart), bounds.endMs) : Math.max(rawEnd, rawStart);
     if (endMs <= startMs) continue;
-    timed.push({ segment, startMs, endMs, verdict: verdictOf(segment, options) });
+    timed.push({ segment, startMs, endMs, ...verdictOf(segment, options) });
   }
   return timed.sort((left, right) => left.startMs - right.startMs);
 }
@@ -179,8 +215,41 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
       const until = Math.min(entry.endMs, hourEnd);
       const fromMinute = (cursor - baseMs - hourIndex * HOUR_MS) / 60_000;
       const toMinute = (until - baseMs - hourIndex * HOUR_MS) / 60_000;
-      if (toMinute - fromMinute >= 0.5) blocks.push([hourIndex, fromMinute, toMinute, entry.verdict, firstDaySourceOf(entry.segment).key]);
+      if (toMinute - fromMinute >= 0.5) blocks.push([hourIndex, fromMinute, toMinute, entry.verdict, firstDaySourceOf(entry.segment).key, entry.category]);
       cursor = until;
+    }
+  }
+
+  // Stays: classified visits to one place, joined while the next visit to it follows within five minutes.
+  type Stay = { seconds: number; startMs: number; endMs: number; source: FirstDaySource };
+  const stayRuns: Stay[] = [];
+  for (const entry of timed) {
+    if (entry.verdict === "pending") continue;
+    const source = firstDaySourceOf(entry.segment);
+    const last = stayRuns[stayRuns.length - 1];
+    const seconds = (entry.endMs - entry.startMs) / 1000;
+    if (last && last.source.key === source.key && entry.startMs <= last.endMs + FOCUS_RUN_MAX_GAP_MS) {
+      last.seconds += seconds;
+      last.endMs = Math.max(last.endMs, entry.endMs);
+    } else {
+      stayRuns.push({ seconds, startMs: entry.startMs, endMs: entry.endMs, source });
+    }
+  }
+  const stays: FirstDayStay[] = stayRuns.map((stay) => ({
+    seconds: Math.round(stay.seconds),
+    startedAt: new Date(stay.startMs).toISOString(),
+    source: stay.source,
+    from: momentAt(stay.startMs),
+    to: momentAt(stay.endMs),
+  }));
+
+  const classifiedMinutesByHour = Array.from({ length: hourCount }, () => 0);
+  for (const block of blocks) if (block[3] !== "pending") classifiedMinutesByHour[block[0]] += block[2] - block[1];
+  let busiestHours: FirstDayChart["busiestHours"] = null;
+  for (let hour = 0; hour + 1 < hourCount; hour += 1) {
+    const minutes = classifiedMinutesByHour[hour] + classifiedMinutesByHour[hour + 1];
+    if (minutes > 0 && (!busiestHours || minutes * 60 > busiestHours.seconds)) {
+      busiestHours = { fromHour: hour, toHour: hour + 2, seconds: Math.round(minutes * 60) };
     }
   }
 
@@ -216,6 +285,8 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
       from: momentAt(longest.startMs),
       to: momentAt(longest.endMs),
     } : null,
+    stays,
+    busiestHours,
   };
 }
 
@@ -298,6 +369,34 @@ export function resolveFirstDayRecap({
   const topDriftSite = driftRanked.find((entry) => entry.source.kind === "site")?.source ?? null;
   const topSources = Array.from(classifiedBySource.values()).sort((left, right) => right.seconds - left.seconds).slice(0, FIRST_DAY_RECAP_TOP_SOURCE_COUNT);
 
+  const classifiedEntries = timed.filter((entry) => entry.verdict !== "pending");
+  const byCategory = new Map<ActivityCategory, number>();
+  for (const entry of classifiedEntries) byCategory.set(entry.category, (byCategory.get(entry.category) ?? 0) + entry.segment.durationSeconds);
+  const categories = Array.from(byCategory, ([category, seconds]) => ({ category, seconds })).sort((left, right) => right.seconds - left.seconds);
+  const span = classifiedEntries.length > 0 ? {
+    startedAt: new Date(classifiedEntries[0].startMs).toISOString(),
+    endedAt: new Date(Math.max(...classifiedEntries.map((entry) => entry.endMs))).toISOString(),
+  } : null;
+  const longestStay = chart.stays.reduce<FirstDayStay | null>((best, stay) => (best === null || stay.seconds > best.seconds ? stay : best), null);
+  // One visit per category, preferring a title that says more than the site's own name ("Jeju trip plan"
+  // over "Netflix"), then the longest: real titles Drifty read and how it sorted them.
+  const exampleOf = (entry: TimedSegment) => {
+    const source = firstDaySourceOf(entry.segment);
+    const title = (entry.segment.siteTitle ?? entry.segment.windowTitle ?? "").trim() || source.label;
+    return { title, source, category: entry.category, seconds: entry.segment.durationSeconds, telling: titleTellsMore(title, source) };
+  };
+  const exampleByCategory = new Map<ActivityCategory, ReturnType<typeof exampleOf>>();
+  for (const entry of classifiedEntries) {
+    const candidate = exampleOf(entry);
+    const current = exampleByCategory.get(entry.category);
+    if (!current || Number(candidate.telling) - Number(current.telling) > 0
+      || (candidate.telling === current.telling && candidate.seconds > current.seconds)) exampleByCategory.set(entry.category, candidate);
+  }
+  const examples = Array.from(exampleByCategory.values())
+    .sort((left, right) => Number(right.telling) - Number(left.telling) || right.seconds - left.seconds)
+    .slice(0, FIRST_DAY_RECAP_TOP_SOURCE_COUNT)
+    .map(({ title, source, category, seconds }) => ({ title, source, category, seconds }));
+
   return { decisionReason: lead === "focus" ? "story_ready" : lead === "overview" ? "story_low_focus" : "story_no_focus", recap: {
     day,
     dayRelation,
@@ -310,6 +409,16 @@ export function resolveFirstDayRecap({
     longestFocus: chart.longestFocus,
     topDrift: topDrift && totals.drift >= FIRST_DAY_RECAP_MIN_DRIFT_SECONDS ? topDrift : null,
     topSources,
+    categories,
+    span,
+    busiestHours: chart.busiestHours,
+    stays: {
+      count: chart.stays.length,
+      averageSeconds: chart.stays.length > 0 ? Math.round(chart.stays.reduce((total, stay) => total + stay.seconds, 0) / chart.stays.length) : 0,
+      longest: longestStay,
+    },
+    examples,
+    visitCount: classifiedEntries.length,
     topDriftSite,
     firstHour: chart.firstHour,
     hourCount: chart.hourCount,
