@@ -1020,6 +1020,11 @@
   opacity: 1;
 }
 
+.chat-picker .settings-select-control__option.is-disabled:has(.settings-select-control__option-status--warning) {
+  cursor: not-allowed;
+  opacity: 0.54;
+}
+
 .chat-send {
   display: grid;
   flex: 0 0 auto;
