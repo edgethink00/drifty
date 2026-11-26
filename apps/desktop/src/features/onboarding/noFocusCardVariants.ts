@@ -66,13 +66,16 @@ function withWa(word: string): string {
   return word + (finalConsonant(word) > 0 ? "과" : "와");
 }
 
-/** Kind names as one phrase: "작업과 학습으로", "entertainment, music and work". */
-function kindsPhrase(names: readonly string[], language: DisplayLanguage): string {
+/** Up to three kind names as one phrase, "and more" past three: "작업과 학습으로", "entertainment, music and work". */
+function kindsPhrase(all: readonly string[], language: DisplayLanguage): string {
+  const names = all.slice(0, 3), more = all.length > 3;
   if (language === "ko") {
+    if (more) return names.join(", ") + " 등으로";
     if (names.length === 2) return withWa(names[0]) + " " + withRo(names[1]);
     return names.slice(0, -1).join(", ") + (names.length > 1 ? ", " : "") + withRo(names[names.length - 1] ?? "");
   }
   const lower = names.map((name) => name.toLowerCase());
+  if (more) return lower.join(", ") + " and more";
   return lower.length > 1 ? lower.slice(0, -1).join(", ") + " and " + lower[lower.length - 1] : lower[0] ?? "";
 }
 
@@ -125,7 +128,7 @@ export function noFocusCardText(
         body: view.site ? fill(copy.readingSiteBody, {
           source: view.site.source.label,
           count: view.site.pageCount,
-          kinds: kindsPhrase(view.rows.map((row) => storyCategoryName(row.category, t)), language),
+          kinds: kindsPhrase(view.site.kinds.map((kind) => storyCategoryName(kind.category, t)), language),
         }) : copy.readingBody,
       };
     }

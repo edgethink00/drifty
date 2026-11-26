@@ -286,7 +286,8 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en", fa
   const spanTo = lit === "focus" && recap.longestFocus ? recap.longestFocus.to.hourIndex : pillColumn;
   const color = lit === "focus" ? VERDICT_FILL.focus : VERDICT_FILL.drift;
   const step = recap.hourCount > 12 ? 3 : 2;
-  // By kind, the three largest categories keep their colours and the rest share one quiet "Other".
+  // By kind, the three largest categories keep their colours and the rest share one quiet "Other". Time
+  // Drifty could not sort (a browser with no page) is no kind at all, so it is left out of this chart.
   const namedCategories = new Set(recap.categories.slice(0, 3).map((entry) => entry.category));
   const otherFill = "var(--line-strong)";
   const legend: readonly (readonly [string, string])[] = byCategory
@@ -314,7 +315,7 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en", fa
     })}
     <g transform={"translate(" + chart.x + " " + chart.y + ")"}>
       {Array.from({ length: recap.hourCount }, (_, i) => <rect key={i} x={i * cw} width={cw} height={chart.h} fill="var(--line)" opacity={i % 2 ? 0.16 : 0.34} />)}
-      {recap.blocks.map((block, i) => <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
+      {recap.blocks.map((block, i) => byCategory && block[3] === "pending" ? null : <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
         x={block[0] * cw} y={(block[1] / 60) * chart.h} width={cw + 0.4} height={Math.max(1, ((block[2] - block[1]) / 60) * chart.h)}
         fill={blockFill(block)} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
       {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
@@ -337,6 +338,11 @@ function clipText(text: string, size: number, max: number, weight = 650): string
   let cut = text;
   while (cut.length > 1 && textWidth(cut + "…", size, weight) > max) cut = cut.slice(0, -1);
   return cut + "…";
+}
+
+/** A page title in quotes, unless it already opens with one (“1등이면 겸손해야지”에 긁힌 사람들). */
+function quoted(title: string): string {
+  return /^[‘’“”"'「『]/u.test(title) ? title : "‘" + title + "’";
 }
 
 const READING_COPY = {
@@ -413,7 +419,7 @@ function ReadingScene({ recap, language }: { recap: FirstDayRecap; language: Dis
     const textX = left + (site ? 13 : 37);
     const suffix = row.title && row.pages > 0 ? count(copy.more, row.pages) : "";
     const suffixW = suffix ? textWidth(suffix, 10.5, 500) + 6 : 0;
-    const label = row.title ? clipText("‘" + row.title + "’", 12.5, pillX - 12 - textX - suffixW) : count(copy.pages, row.pages);
+    const label = row.title ? clipText(quoted(row.title), 12.5, pillX - 12 - textX - suffixW) : count(copy.pages, row.pages);
     const labelW = textWidth(label, 12.5, row.title ? 650 : 600);
     parts.push(<g key={"r" + i}>
       <rect x={left} y={top} width={width} height={rowH} rx={10} fill="var(--line)" opacity=".34" />
