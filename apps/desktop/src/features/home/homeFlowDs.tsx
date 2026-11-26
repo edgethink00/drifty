@@ -1,7 +1,5 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import type { AppIconMap, ProductivityDuration } from "@drifty/domain";
-import { AppGlyph } from "../../components/AppGlyph";
-import { SiteFavicon } from "../../components/SiteFavicon";
 import { buildDonutArcSegments } from "../../lib/donutArcPath";
 import { DONUT_CIRCUMFERENCE } from "../insights/insightData";
 import { CompactRingChart } from "../dashboard/CompactRingChart";
@@ -14,8 +12,9 @@ import { isAchievementDesignReview, useAchievementReviewState } from "../achieve
 import { itemsForReviewHolding } from "../achievements/useAchievementsTab";
 import type { AchievementItem } from "../achievements/useAchievements";
 import { C15Medal } from "../achievements/layouts/c15/C15Medal";
-import { DEEP_FOCUS_MIN_SECONDS, type HomeModel, type HomeSession, type HomeWorkItem } from "./homeModel";
+import { DEEP_FOCUS_MIN_SECONDS, type HomeModel, type HomeSession } from "./homeModel";
 import { formatClock, formatDuration, formatShortDuration, topCard, type HomeLang } from "./homeCards";
+import { DriftyVoice, ItemIcon, type VoiceVariant } from "./homeVoice";
 import "./home-ds.css";
 
 /*
@@ -63,11 +62,6 @@ function dayLabel(day: string, lang: HomeLang, c: Copy): string {
     : date.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
-function ItemIcon({ item, appIcons }: { readonly item: HomeWorkItem; readonly appIcons: AppIconMap }) {
-  const icon = appIcons[item.bundleId ?? item.appName] ?? appIcons[item.appName] ?? null;
-  return item.siteDomain ? <SiteFavicon domain={item.siteDomain} size={20} fallbackIconSrc={icon} /> : <AppGlyph appName={item.appName} iconSrc={icon} size="sm" />;
-}
-
 /** A small donut drawn with Your Day's donut track and arc, for one share. */
 function SmallDonut({ ratio }: { readonly ratio: number }) {
   const entries = ratio > 0.004 ? [{ key: "focus", ratio: Math.min(1, ratio) }] : [];
@@ -89,20 +83,8 @@ function Title({ text, meta }: { readonly text: string; readonly meta?: string }
   );
 }
 
-function AskBox({ c, phase, onAsk }: { readonly c: Copy; readonly phase: HomeModel["phase"]; readonly onAsk: (q: string) => void }) {
-  const [text, setText] = useState("");
-  const example = c.examples[phase];
-  const submit = (event: FormEvent) => { event.preventDefault(); onAsk(text.trim() || example); setText(""); };
-  return (
-    <form className="hf-ask" onSubmit={submit}>
-      <input type="text" value={text} onChange={(event) => setText(event.target.value)} placeholder={c.example(example)} aria-label={c.ask} />
-      <button type="submit" className="app-btn app-btn--primary app-btn--compact" aria-label={c.send}>{c.send}</button>
-    </form>
-  );
-}
-
-export function FlowDsHome({ model, lang, appIcons, achievements, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
-  readonly model: HomeModel; readonly lang: HomeLang; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
+export function FlowDsHome({ voice = "d0", model, lang, appIcons, achievements, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
+  readonly voice?: VoiceVariant; readonly model: HomeModel; readonly lang: HomeLang; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
   readonly onOpenDay: () => void; readonly onOpenWeek: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
 }) {
   const c = COPY[lang];
@@ -138,22 +120,13 @@ export function FlowDsHome({ model, lang, appIcons, achievements, onOpenDay, onO
   const last = model.week.length - 1;
   const pastDays = model.week.slice(0, -1).filter((entry) => entry.focus > 0);
   const weekAverage = pastDays.length > 0 ? pastDays.reduce((sum, entry) => sum + entry.focus, 0) / pastDays.length : 0;
-  const primary = card.actions.find((action) => action.kind === "ask");
 
   return (
     <div className="page hf">
       <div className="pg-head"><h1>{c.welcome}</h1></div>
       <div className="hf-grid">
         <div className="hf-main">
-          <section className="hf-block hf-voice" aria-label={card.kicker}>
-            <Title text={"Drifty · " + formatClock(card.atMs)} />
-            <p className="hf-voice__title">{card.title}</p>
-            {card.body ? <p className="hf-voice__body">{card.body}</p> : null}
-            <div className="hf-voice__actions">
-              {primary && primary.kind === "ask" ? <button type="button" className="app-btn app-btn--primary app-btn--compact" onClick={() => onAsk(primary.question)}>{primary.label}</button> : null}
-              <AskBox c={c} phase={model.phase} onAsk={onAsk} />
-            </div>
-          </section>
+          <DriftyVoice variant={voice} card={card} model={model} lang={lang} appIcons={appIcons} onAsk={onAsk} onOpenDay={onOpenDay} />
 
           <section className="hf-block hf-day" aria-label={c.dayTitle(dayLabel(listDay, lang, c))}>
             <div className="hf-day__top">

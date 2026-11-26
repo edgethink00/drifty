@@ -8,6 +8,7 @@ import type { AchievementItem } from "../achievements/useAchievements";
 import { BASELINE_WEEKS, buildHomeModel } from "./homeModel";
 import type { HomeLang } from "./homeCards";
 import { FlowDsHome } from "./homeFlowDs";
+import { VOICE_VARIANTS, type VoiceVariant } from "./homeVoice";
 
 /*
  * Home preview (owner review 2026-11-27): loads the records and draws the
@@ -25,6 +26,12 @@ function previewClock(): string | null {
   if (typeof window === "undefined") return null;
   const clock = new URLSearchParams(window.location.search).get("homeAt");
   return clock && /^\d{1,2}:\d{2}$/.test(clock) ? clock : null;
+}
+
+function previewVoice(): VoiceVariant {
+  if (typeof window === "undefined") return "d0";
+  const voice = new URLSearchParams(window.location.search).get("homeVoice") as VoiceVariant | null;
+  return voice && VOICE_VARIANTS.includes(voice) ? voice : "d0";
 }
 
 function asOfFor(clock: string | null, today: string, startOfDayMinutes: number, nowMs: number): number {
@@ -54,6 +61,7 @@ export function HomeV2Page({ loadHistory, recentSegments, classificationOptions,
   const { effectiveLanguage } = useLocalization();
   const lang: HomeLang = effectiveLanguage === "ko" ? "ko" : "en";
   const clock = useMemo(previewClock, []);
+  const voice = useMemo(previewVoice, []);
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNowMs(Date.now()), 60_000);
@@ -81,7 +89,7 @@ export function HomeV2Page({ loadHistory, recentSegments, classificationOptions,
   if (!model) {
     return <div className="page hf"><p className="hf-sub">{failed === key ? COPY[lang].failed : COPY[lang].loading}</p></div>;
   }
-  return <FlowDsHome model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;
+  return <FlowDsHome voice={voice} model={model} lang={lang} appIcons={appIcons} achievements={achievements} onOpenDay={onOpenDay} onOpenWeek={onOpenWeek} onOpenAchievements={onOpenAchievements} onAsk={onAsk} />;
 }
 
 /** The sidebar item for the preview, at the top of the list like the old Home. */
