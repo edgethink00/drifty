@@ -4,6 +4,8 @@ import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { TranslationKey } from "../localization/translations";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import type { FirstDayRecap } from "./firstDayStory";
+import type { FirstDaySource } from "./firstDayPreparationStory";
+import type { IntroLayout } from "./postOnboardingSidebarGuide";
 
 /**
  * Review prototype: other ways to open the first story card on a day with almost no focus, so the
@@ -34,7 +36,7 @@ const COPY = {
     staysBody: "가장 오래 머문 곳은 {source}, {time}부터 {duration}이에요.",
     readingTitle: "Drifty가 어제 브라우저에서 보낸 {total}을 제목까지 읽고 나눴어요",
     readingBody: "사이트 이름만이 아니라 페이지 제목을 보고 무엇을 하던 중인지 가려요.",
-    readingPairBody: "같은 {source}에서도 ‘{first}’는 {firstKind}, ‘{second}’는 {secondKind} 봤어요.",
+    readingSiteBody: "같은 {source}도 페이지 {count}개를 하나씩 보고 {kinds} 나눴어요.",
   },
   en: {
     rhythmTitle: "Yesterday your browsing ran from {start} to {end}",
@@ -43,16 +45,35 @@ const COPY = {
     staysBody: "The longest was {source}: {duration} from {time}.",
     readingTitle: "Drifty read {total} of your browsing yesterday, page titles and all",
     readingBody: "It looks at page titles, not only sites, to tell what you were doing.",
-    readingPairBody: "Even on {source}, it read “{first}” as {firstKind} and “{second}” as {secondKind}.",
+    readingSiteBody: "Even on {source}, it read {count} pages one by one and sorted them into {kinds}.",
   },
 } as const;
 
-/** A Korean word with 로 or 으로, by its last syllable (ㄹ and open syllables take 로). */
-function withRo(word: string): string {
+/** The final consonant of a Korean word's last syllable (0 when open), or -1 when it does not end in Hangul. */
+function finalConsonant(word: string): number {
   const code = word.charCodeAt(word.length - 1) - 0xac00;
-  if (code < 0 || code > 11171) return word + "로";
-  const coda = code % 28;
-  return word + (coda === 0 || coda === 8 ? "로" : "으로");
+  return code < 0 || code > 11171 ? -1 : code % 28;
+}
+
+/** A Korean word with 로 or 으로 (ㄹ and open syllables take 로). */
+function withRo(word: string): string {
+  const coda = finalConsonant(word);
+  return word + (coda <= 0 || coda === 8 ? "로" : "으로");
+}
+
+/** A Korean word with 와 or 과. */
+function withWa(word: string): string {
+  return word + (finalConsonant(word) > 0 ? "과" : "와");
+}
+
+/** Kind names as one phrase: "작업과 학습으로", "entertainment, music and work". */
+function kindsPhrase(names: readonly string[], language: DisplayLanguage): string {
+  if (language === "ko") {
+    if (names.length === 2) return withWa(names[0]) + " " + withRo(names[1]);
+    return names.slice(0, -1).join(", ") + (names.length > 1 ? ", " : "") + withRo(names[names.length - 1] ?? "");
+  }
+  const lower = names.map((name) => name.toLowerCase());
+  return lower.length > 1 ? lower.slice(0, -1).join(", ") + " and " + lower[lower.length - 1] : lower[0] ?? "";
 }
 
 function fill(template: string, values: Record<string, string | number>): string {
@@ -98,40 +119,47 @@ export function noFocusCardText(
       };
     }
     case "reading": {
-      const { pair } = readingRows(recap);
-      const [first, second] = pair ?? [];
-      const kind = (category: ActivityCategory) => language === "ko" ? storyCategoryName(category, t) : storyCategoryName(category, t).toLowerCase();
+      const view = readingView(recap);
       return {
         title: fill(copy.readingTitle, { total: duration(recap.classifiedSeconds) }),
-        body: first && second ? fill(copy.readingPairBody, {
-          source: first.source.label,
-          first: first.title,
-          firstKind: kind(first.category),
-          second: second.title,
-          secondKind: language === "ko" ? withRo(kind(second.category)) : kind(second.category),
+        body: view.site ? fill(copy.readingSiteBody, {
+          source: view.site.source.label,
+          count: view.site.pageCount,
+          kinds: kindsPhrase(view.rows.map((row) => storyCategoryName(row.category, t)), language),
         }) : copy.readingBody,
       };
     }
   }
 }
 
+/** One line of the reading card: a page title and how Drifty read it, or how many pages of one kind there were. */
+export type ReadingRow = {
+  readonly category: ActivityCategory;
+  readonly source: FirstDaySource;
+  /** The page's title; absent when no one page stands for the kind (a day of short videos). */
+  readonly title?: string;
+  /** Other pages in the same kind on the site, or every page of the kind when there is no title. */
+  readonly pages: number;
+};
 
 /**
- * The titles the reading card shows. Two titles from one site that Drifty sorted differently are the
- * clearest sign it reads the page and not only the site, so such a pair comes first.
+ * What the reading card shows. A site whose pages Drifty sorted into several kinds comes first: one row
+ * per kind in the order of its time, each with its longest page. The site's main kind names that page
+ * only when it holds at least a tenth of the kind's time, so a page does not stand for sixty short videos
+ * it happened to outlast; otherwise the row counts the kind's pages. Without such a site, the rows are
+ * the day's longest page in each of up to three kinds.
  */
-export function readingRows(recap: FirstDayRecap): {
-  readonly rows: FirstDayRecap["examples"];
-  readonly pair: readonly [FirstDayRecap["examples"][number], FirstDayRecap["examples"][number]] | null;
-} {
-  const examples = recap.examples;
-  for (let index = 0; index < examples.length; index += 1) {
-    const partner = examples.slice(index + 1).find((other) => other.source.key === examples[index].source.key && other.category !== examples[index].category);
-    if (partner) {
-      return { rows: [examples[index], partner, ...examples.filter((example) => example !== examples[index] && example !== partner)], pair: [examples[index], partner] };
-    }
-  }
-  return { rows: examples, pair: null };
+export function readingView(recap: FirstDayRecap): { readonly site: FirstDayRecap["readingSite"]; readonly rows: readonly ReadingRow[] } {
+  const site = recap.readingSite;
+  if (!site) return { site: null, rows: recap.examples.map((page) => ({ category: page.category, source: page.source, title: page.title, pages: 0 })) };
+  const rows: ReadingRow[] = [];
+  site.kinds.forEach((kind, index) => {
+    if (rows.length >= 3) return;
+    const page = kind.page;
+    if (index === 0 && (!page || page.seconds * 10 < kind.seconds)) rows.push({ category: kind.category, source: site.source, pages: kind.pageCount });
+    else if (page) rows.push({ category: kind.category, source: site.source, title: page.title, pages: kind.pageCount - 1 });
+  });
+  return { site, rows };
 }
 
 
@@ -155,22 +183,43 @@ const BREAKDOWN_COPY = {
 } as const;
 
 /**
- * Review prototype, the rebalanced story's middle card: the day by kind after a focus or overview
- * opening, or, when the day already opened by kind, the titles Drifty read and how it sorted them.
+ * Whether the day has enough to show how Drifty read pages: a site it sorted several ways, or pages in
+ * at least two kinds. One page alone says little, so such a day has no reading card.
+ */
+export function hasReadingCard(recap: FirstDayRecap): boolean {
+  return recap.readingSite !== null || recap.examples.length >= 2;
+}
+
+/**
+ * Review prototype: what the six-card story's middle card shows in a layout, or null when the day has
+ * nothing for it and the story goes on with five cards. A story that opened on focus ("rebalanced")
+ * follows with the day by kind; one that opened by kind follows with its focus when it had some
+ * ("overview"), else with how Drifty read its pages.
+ */
+export function breakdownContent(recap: FirstDayRecap, layout: IntroLayout): "focus" | "kinds" | "reading" | null {
+  const reading = hasReadingCard(recap) ? "reading" as const : null;
+  if (layout === "rebalanced") return recap.lead === "kinds" ? reading : "kinds";
+  if (layout === "overview" && recap.lead !== "kinds" && recap.longestFocus) return "focus";
+  return reading;
+}
+
+/**
+ * Review prototype, the six-card story's middle card when it is not the focus card: the day by kind, or
+ * the titles Drifty read and how it sorted them.
  */
 export function breakdownCardText(
   recap: FirstDayRecap,
   language: DisplayLanguage,
   t: Translate,
+  content: "kinds" | "reading",
 ): { readonly title: string; readonly body: string } {
   const copy = language === "ko" ? BREAKDOWN_COPY.ko : BREAKDOWN_COPY.en;
-  if (recap.lead !== "kinds") {
+  if (content === "kinds") {
     const kinds = recap.categories.slice(0, 3);
     return { title: copy.kindsTitle, body: kinds.length > 0 ? fill(copy.kindsBody, { list: storyKindsList(kinds, language, t) }) : "" };
   }
   const reading = noFocusCardText("reading", recap, language, t);
-  const { pair } = readingRows(recap);
-  return { title: copy.readingTitle, body: pair && reading ? reading.body : copy.readingBody };
+  return { title: copy.readingTitle, body: recap.readingSite && reading ? reading.body : copy.readingBody };
 }
 
 /** Review prototype: the drift card's correction line once the separate correcting card is gone. */

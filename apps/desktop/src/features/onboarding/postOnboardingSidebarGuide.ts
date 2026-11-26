@@ -38,7 +38,23 @@ export function isRebalancedIntroLayout(
   search: string = typeof window === "undefined" ? "" : window.location.search,
   isDevelopment: boolean = import.meta.env.DEV,
 ): boolean {
-  return isDevelopment && new URLSearchParams(search).get(INTRO_LAYOUT_QUERY_PARAM) === "rebalanced";
+  return introLayout(search, isDevelopment) !== "current";
+}
+
+/**
+ * Review prototype story orders on the dev server, six cards each (five when the day has nothing for the
+ * middle one): "rebalanced" opens on the usual first card, then the day by kind, then the drift;
+ * "overview" always opens on the day by kind, then its focus (how Drifty read the pages on a day without
+ * focus), then the drift; "reading" always opens by kind, then how Drifty read the pages, then the drift.
+ */
+export type IntroLayout = "current" | "rebalanced" | "overview" | "reading";
+export function introLayout(
+  search: string = typeof window === "undefined" ? "" : window.location.search,
+  isDevelopment: boolean = import.meta.env.DEV,
+): IntroLayout {
+  if (!isDevelopment) return "current";
+  const raw = new URLSearchParams(search).get(INTRO_LAYOUT_QUERY_PARAM);
+  return raw === "rebalanced" || raw === "overview" || raw === "reading" ? raw : "current";
 }
 
 /**

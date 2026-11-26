@@ -143,3 +143,17 @@ const REVIEW_SITES = [
 export function buildFirstDayReviewSiteIcons(): Record<string, string> {
   return Object.fromEntries(REVIEW_SITES.map((domain) => [domain, "https://www.google.com/s2/favicons?sz=64&domain=" + domain]));
 }
+
+/**
+ * Dev server only: ?driftyIntroData=file&driftyIntroFile=<absolute path> reads one day of real records
+ * from a local JSON file ({ day, segments }) through Vite's /@fs route, so a reviewer can see the story on
+ * their own data. The file never leaves the reviewer's machines; nothing is committed or uploaded.
+ */
+export const INTRO_REVIEW_FILE_QUERY_PARAM = "driftyIntroFile";
+export function introReviewDataFile(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const path = params.get(INTRO_REVIEW_FILE_QUERY_PARAM);
+  if (params.get(INTRO_REVIEW_DATA_QUERY_PARAM) !== "file" || !path || !path.startsWith("/") || !path.endsWith(".json")) return null;
+  return "/@fs" + path;
+}
+

@@ -246,7 +246,8 @@ import {
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
 import { refineIntroDecisionReason, resolveFirstDayRecap, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
-import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
+import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataFile, introReviewDataMode } from "./features/onboarding/introStoryReview";
+import { breakdownContent } from "./features/onboarding/noFocusCardVariants";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
@@ -256,7 +257,7 @@ import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImp
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, isRebalancedIntroLayout, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS, POST_ONBOARDING_STORY_REBALANCED_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
+import { introLayout, isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, isRebalancedIntroLayout, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS, POST_ONBOARDING_STORY_REBALANCED_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -2014,9 +2015,15 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null; readonly decisionReason?: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }>({ resolved: false, recap: null });
   // What first-run preparation saw of the readable history; it only narrows a sample intro's label.
   const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
-  const introSequence = introStory.recap
-    ? (isRebalancedIntroLayout() ? POST_ONBOARDING_STORY_REBALANCED_STEPS : POST_ONBOARDING_STORY_GUIDE_STEPS)
-    : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
+  // Dev review only: one request for a local file of real records (see introReviewDataFile).
+  const introReviewFileRequestedRef = useRef(false);
+  // Review prototype: a six-card story drops its middle card when the day has nothing for it.
+  const introSequence = useMemo(() => {
+    if (!introStory.recap) return POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
+    if (!isRebalancedIntroLayout()) return POST_ONBOARDING_STORY_GUIDE_STEPS;
+    const recap = introStory.recap;
+    return breakdownContent(recap, introLayout()) ? POST_ONBOARDING_STORY_REBALANCED_STEPS : POST_ONBOARDING_STORY_REBALANCED_STEPS.filter((step) => step !== "breakdown");
+  }, [introStory.recap]);
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {
@@ -2399,6 +2406,19 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (introStory.resolved || preparingFirstDay) return;
     const today = logicalTodayIsoDate(startOfDayMinutes);
     if (postOnboardingSidebarGuideReviewEnabled) {
+      const reviewFile = introReviewDataFile(window.location.search);
+      if (reviewFile) {
+        if (introReviewFileRequestedRef.current) return;
+        introReviewFileRequestedRef.current = true;
+        void fetch(reviewFile)
+          .then((response) => response.json() as Promise<{ readonly day: string; readonly segments: ActivitySegment[] }>)
+          .then((file) => setIntroStory({
+            resolved: true,
+            ...resolveFirstDayRecap({ segments: file.segments, day: file.day, today: shiftIsoDate(file.day, 1), startOfDayMinutes }),
+          }))
+          .catch(() => setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" }));
+        return;
+      }
       const review = buildIntroReviewCase(introReviewDataMode(window.location.search), (offset) => shiftIsoDate(today, offset));
       setIntroStory({ resolved: true, ...resolveFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
       return;

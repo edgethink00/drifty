@@ -48,11 +48,55 @@ export function firstDaySourceOf(segment: ActivitySegment): FirstDaySource {
   return { key: "app:" + (segment.bundleId ?? name), label: name, kind: "app", bundleId: segment.bundleId ?? null, siteDomain: null };
 }
 
-/** Whether a page or window title says more than its site's or app's own name ("Jeju trip plan" on notion.so, not "Netflix" on netflix.com). */
+const BRAND_SKIP = new Set(["www", "m", "co", "com", "net", "org", "ac", "or", "go", "ne"]);
+
+/** The names a source goes by in its titles: "youtube" for youtube.com, "x" for x.com, an app's own name. */
+function brandsOf(source: FirstDaySource): readonly string[] {
+  if (source.kind !== "site") return [source.label.trim().toLowerCase()];
+  const labels = source.label.toLowerCase().split(".");
+  return Array.from(new Set([labels[0], labels[labels.length - 2]].filter((label): label is string => Boolean(label) && !BRAND_SKIP.has(label))));
+}
+
+/** Whether a lowercased title names the brand; a short one ("x") only as a whole word. */
+function mentionsBrand(text: string, brand: string): boolean {
+  if (brand.length >= 4) return text.includes(brand);
+  const escaped = brand.replace(/[.*+?^$\{\}()|[\]\\]/gu, "\\$&");
+  return new RegExp("(^|[^\\p{L}\\p{N}])" + escaped + "($|[^\\p{L}\\p{N}])", "u").test(text);
+}
+
+const TITLE_TAIL = /^(.*\S)\s+[-–—|•·⋅/]\s+([^-–—|•·⋅/]+)$/u;
+
+/** A page title the way a person would say it, without an unread count or the site's own name: "(3) Street food tour - YouTube" is "Street food tour". */
+export function storyTitle(title: string, source: FirstDaySource): string {
+  let text = title.trim().replace(/^\(\d+\+?\)\s*/u, "");
+  const brands = brandsOf(source).map((brand) => brand.replace(/\s+/gu, ""));
+  for (let pass = 0; pass < 2; pass += 1) {
+    const match = TITLE_TAIL.exec(text);
+    const tail = match?.[2].trim().toLowerCase().replace(/\s+/gu, "") ?? "";
+    if (!match || !brands.some((brand) => tail === brand || (brand.length >= 2 && tail.includes(brand)) || (tail.length >= 3 && brand.includes(tail)))) break;
+    text = match[1];
+  }
+  return text;
+}
+
+/**
+ * Whether a title (through storyTitle) says what the page was about: more than its site's or app's own
+ * name ("Jeju trip plan" on notion.so, not "Netflix" on netflix.com) and more than a bare "Home" or "검색".
+ */
 function titleTellsMore(title: string, source: FirstDaySource): boolean {
-  const brand = (source.kind === "site" ? source.label.split(".")[0] : source.label).toLowerCase();
   const normalized = title.trim().toLowerCase();
-  return normalized.length > 0 && normalized !== source.label.toLowerCase() && !normalized.includes(brand);
+  if (!normalized || normalized === source.label.toLowerCase() || brandsOf(source).some((brand) => mentionsBrand(normalized, brand))) return false;
+  const letters = normalized.replace(/[^\p{L}\p{N}]/gu, "");
+  if (/[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(normalized)) return letters.length >= 4;
+  return normalized.split(/\s+/u).length >= 2 && letters.length >= 8;
+}
+
+/**
+ * Whether a visit may be shown by its title as an example of how Drifty read the day. Mail and chat titles
+ * name people and messages, and a browser extension's page has an ID instead of a site name, so neither is.
+ */
+function showableSource(source: FirstDaySource): boolean {
+  return source.kind !== "site" || (source.label.includes(".") && !/^[a-p]{32}$/u.test(source.label));
 }
 
 function verdictOf(segment: ActivitySegment, options?: ClassificationOptions): { readonly verdict: FirstDayVerdict; readonly category: ActivityCategory } {
@@ -94,6 +138,34 @@ export type FirstDayStoryDay = "yesterday" | "today" | "dayBefore";
  */
 export type FirstDayStoryLead = "focus" | "overview" | "kinds";
 
+/** One page title of the day, as Drifty read it. */
+export type FirstDayReadPage = {
+  readonly title: string;
+  readonly source: FirstDaySource;
+  readonly category: ActivityCategory;
+  readonly verdict: ProductivityLabel;
+  readonly seconds: number;
+};
+
+/**
+ * One site whose pages Drifty sorted into more than one kind (YouTube as entertainment, music and work):
+ * the plainest sign it reads each page and not only the site's name.
+ */
+export type FirstDayReadSite = {
+  readonly source: FirstDaySource;
+  readonly seconds: number;
+  /** Different page titles Drifty read on the site. */
+  readonly pageCount: number;
+  /** The site's time by kind, longest first, each with its page count and its longest page that can be shown by title. */
+  readonly kinds: readonly {
+    readonly category: ActivityCategory;
+    readonly verdict: ProductivityLabel;
+    readonly seconds: number;
+    readonly pageCount: number;
+    readonly page: FirstDayReadPage | null;
+  }[];
+};
+
 export type FirstDayRecap = {
   readonly day: string;
   readonly dayRelation: FirstDayStoryDay;
@@ -110,6 +182,8 @@ export type FirstDayRecap = {
     readonly source: FirstDaySource;
     readonly from: FirstDayRecapMoment;
     readonly to: FirstDayRecapMoment;
+    /** The page or window title that held most of the stretch on its source, when it says more than the source's name. */
+    readonly title?: string;
   } | null;
   readonly topDrift: { readonly seconds: number; readonly source: FirstDaySource } | null;
   /** Up to three sources with the most classified time, whatever their verdict: where a day with almost no focus went. */
@@ -122,8 +196,10 @@ export type FirstDayRecap = {
   readonly busiestHours: { readonly fromHour: number; readonly toHour: number; readonly seconds: number } | null;
   /** How the day moved between places: separate stays, their average length and the longest one. */
   readonly stays: { readonly count: number; readonly averageSeconds: number; readonly longest: FirstDayStay | null };
-  /** Up to three long classified visits in different categories with the page title Drifty read: how it sorted the day. */
-  readonly examples: readonly { readonly title: string; readonly source: FirstDaySource; readonly category: ActivityCategory; readonly seconds: number }[];
+  /** Up to three pages in different kinds, longest first, each shown by a title that says what it was: how Drifty sorted the day. */
+  readonly examples: readonly FirstDayReadPage[];
+  /** The site whose pages Drifty sorted most visibly into different kinds, or null when no site was read more than one way. */
+  readonly readingSite: FirstDayReadSite | null;
   /** How many classified records the day held. */
   readonly visitCount: number;
   /** The site with the most drift (any amount), so the Automatic close preview can close a real tab even when the top drift was an app. */
@@ -151,6 +227,8 @@ export const FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS = 5 * 60;
 export const FIRST_DAY_RECAP_MIN_DRIFT_SECONDS = 3 * 60;
 /** How many places a story with almost no focus names. */
 const FIRST_DAY_RECAP_TOP_SOURCE_COUNT = 3;
+/** A page held for less than this was a passing tab; it is not shown by its title. */
+const FIRST_DAY_READ_PAGE_MIN_SECONDS = 20;
 const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 const MIN_CHART_HOURS = 8;
 const HOUR_MS = 60 * 60 * 1000;
@@ -170,6 +248,7 @@ export type FirstDayChart = {
     readonly source: FirstDaySource;
     readonly from: FirstDayRecapMoment;
     readonly to: FirstDayRecapMoment;
+    readonly title?: string;
   } | null;
   /** Every stay on one place, in time order (classified time only). */
   readonly stays: readonly FirstDayStay[];
@@ -253,7 +332,10 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
     }
   }
 
-  type Run = { seconds: number; startMs: number; endMs: number; sources: Map<string, { source: FirstDaySource; seconds: number }> };
+  type Run = {
+    seconds: number; startMs: number; endMs: number;
+    sources: Map<string, { source: FirstDaySource; seconds: number; titles: Map<string, number> }>;
+  };
   const runs: Run[] = [];
   let run: Run | null = null;
   for (const entry of timed) {
@@ -266,14 +348,20 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
     run.seconds += seconds;
     run.endMs = Math.max(run.endMs, entry.endMs);
     const source = firstDaySourceOf(entry.segment);
-    const tally = run.sources.get(source.key) ?? { source, seconds: 0 };
+    const tally = run.sources.get(source.key) ?? { source, seconds: 0, titles: new Map<string, number>() };
     tally.seconds += seconds;
+    const title = storyTitle(entry.segment.siteTitle ?? entry.segment.windowTitle ?? "", source);
+    if (title && titleTellsMore(title, source)) tally.titles.set(title, (tally.titles.get(title) ?? 0) + seconds);
     run.sources.set(source.key, tally);
   }
   const longest = runs.reduce<Run | null>((best, candidate) => (best === null || candidate.seconds > best.seconds ? candidate : best), null);
-  const longestSource = longest
-    ? Array.from(longest.sources.values()).sort((left, right) => right.seconds - left.seconds)[0]?.source ?? null
+  const longestTally = longest
+    ? Array.from(longest.sources.values()).sort((left, right) => right.seconds - left.seconds)[0] ?? null
     : null;
+  const longestSource = longestTally?.source ?? null;
+  const longestTitle = longestTally
+    ? Array.from(longestTally.titles.entries()).sort((left, right) => right[1] - left[1])[0]?.[0]
+    : undefined;
   return {
     firstHour: firstStart.getHours(),
     hourCount,
@@ -284,10 +372,97 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
       source: longestSource,
       from: momentAt(longest.startMs),
       to: momentAt(longest.endMs),
+      ...(longestTitle ? { title: longestTitle } : {}),
     } : null,
     stays,
     busiestHours,
   };
+}
+
+/**
+ * The day's pages as Drifty read them, joined by title (through storyTitle) on each source. A page is
+ * shown by its title only when Drifty gave it one kind all day (a title read two ways is an unsteady
+ * label, not a reading), the title says what it was, it held more than a passing glance, and it is
+ * neither mail or chat (their titles name people) nor a browser extension's page.
+ */
+function readPagesOf(entries: readonly TimedSegment[]): { readonly examples: readonly FirstDayReadPage[]; readonly readingSite: FirstDayReadSite | null } {
+  type Tally = { seconds: number; readonly verdictSeconds: Map<ProductivityLabel, number> };
+  type Page = { readonly title: string; readonly source: FirstDaySource; readonly byCategory: Map<ActivityCategory, Tally> };
+  const addTo = (tally: Tally, verdict: ProductivityLabel, seconds: number) => {
+    tally.seconds += seconds;
+    tally.verdictSeconds.set(verdict, (tally.verdictSeconds.get(verdict) ?? 0) + seconds);
+  };
+  const mainVerdict = (tally: Tally): ProductivityLabel => Array.from(tally.verdictSeconds).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "neutral";
+  const pages = new Map<string, Page>();
+  for (const entry of entries) {
+    if (entry.verdict === "pending") continue;
+    const source = firstDaySourceOf(entry.segment);
+    const title = storyTitle(entry.segment.siteTitle ?? entry.segment.windowTitle ?? "", source) || source.label;
+    const key = source.key + "\u0000" + title.toLowerCase();
+    const page = pages.get(key) ?? { title, source, byCategory: new Map<ActivityCategory, Tally>() };
+    const tally = page.byCategory.get(entry.category) ?? { seconds: 0, verdictSeconds: new Map<ProductivityLabel, number>() };
+    addTo(tally, entry.verdict, entry.segment.durationSeconds);
+    page.byCategory.set(entry.category, tally);
+    pages.set(key, page);
+  }
+
+  const shown: FirstDayReadPage[] = [];
+  for (const page of pages.values()) {
+    const [only, ...rest] = Array.from(page.byCategory);
+    if (!only || rest.length > 0) continue;
+    const [category, tally] = only;
+    if (category === "communication" || tally.seconds < FIRST_DAY_READ_PAGE_MIN_SECONDS) continue;
+    if (!showableSource(page.source) || !titleTellsMore(page.title, page.source)) continue;
+    shown.push({ title: page.title, source: page.source, category, verdict: mainVerdict(tally), seconds: tally.seconds });
+  }
+  shown.sort((left, right) => right.seconds - left.seconds);
+
+  const examples: FirstDayReadPage[] = [];
+  for (const page of shown) {
+    if (examples.length >= FIRST_DAY_RECAP_TOP_SOURCE_COUNT) break;
+    if (!examples.some((example) => example.category === page.category)) examples.push(page);
+  }
+
+  // The site read most plainly in more than one way: two or more of its kinds have a page to show. A site
+  // where those kinds also differ in verdict (a work video among entertainment) comes first, then the
+  // site with more time.
+  const sites = new Map<string, Page[]>();
+  for (const page of pages.values()) {
+    if (page.source.kind === "site" && showableSource(page.source)) sites.set(page.source.key, [...(sites.get(page.source.key) ?? []), page]);
+  }
+  let readingSite: FirstDayReadSite | null = null;
+  let best = { crosses: false, seconds: 0 };
+  for (const sitePages of sites.values()) {
+    const kinds = new Map<ActivityCategory, Tally & { pageCount: number; page: FirstDayReadPage | null }>();
+    for (const page of sitePages) {
+      for (const [category, tally] of page.byCategory) {
+        const kind = kinds.get(category) ?? { seconds: 0, verdictSeconds: new Map<ProductivityLabel, number>(), pageCount: 0, page: null };
+        for (const [verdict, seconds] of tally.verdictSeconds) addTo(kind, verdict, seconds);
+        kind.pageCount += 1;
+        kinds.set(category, kind);
+      }
+    }
+    const source = sitePages[0].source;
+    for (const page of shown) {
+      const kind = page.source.key === source.key ? kinds.get(page.category) : undefined;
+      if (kind && !kind.page) kind.page = page;
+    }
+    const shownVerdicts = new Set(Array.from(kinds.values()).flatMap((kind) => (kind.page ? [kind.page.verdict] : [])));
+    const titledKinds = Array.from(kinds.values()).filter((kind) => kind.page).length;
+    if (titledKinds < 2) continue;
+    const crosses = shownVerdicts.size > 1;
+    const seconds = Array.from(kinds.values()).reduce((total, kind) => total + kind.seconds, 0);
+    if (readingSite && (Number(crosses) - Number(best.crosses) || seconds - best.seconds) <= 0) continue;
+    best = { crosses, seconds };
+    readingSite = {
+      source,
+      seconds,
+      pageCount: sitePages.length,
+      kinds: Array.from(kinds, ([category, kind]) => ({ category, verdict: mainVerdict(kind), seconds: kind.seconds, pageCount: kind.pageCount, page: kind.page }))
+        .sort((left, right) => right.seconds - left.seconds),
+    };
+  }
+  return { examples, readingSite };
 }
 
 /**
@@ -378,24 +553,7 @@ export function resolveFirstDayRecap({
     endedAt: new Date(Math.max(...classifiedEntries.map((entry) => entry.endMs))).toISOString(),
   } : null;
   const longestStay = chart.stays.reduce<FirstDayStay | null>((best, stay) => (best === null || stay.seconds > best.seconds ? stay : best), null);
-  // One visit per category, preferring a title that says more than the site's own name ("Jeju trip plan"
-  // over "Netflix"), then the longest: real titles Drifty read and how it sorted them.
-  const exampleOf = (entry: TimedSegment) => {
-    const source = firstDaySourceOf(entry.segment);
-    const title = (entry.segment.siteTitle ?? entry.segment.windowTitle ?? "").trim() || source.label;
-    return { title, source, category: entry.category, seconds: entry.segment.durationSeconds, telling: titleTellsMore(title, source) };
-  };
-  const exampleByCategory = new Map<ActivityCategory, ReturnType<typeof exampleOf>>();
-  for (const entry of classifiedEntries) {
-    const candidate = exampleOf(entry);
-    const current = exampleByCategory.get(entry.category);
-    if (!current || Number(candidate.telling) - Number(current.telling) > 0
-      || (candidate.telling === current.telling && candidate.seconds > current.seconds)) exampleByCategory.set(entry.category, candidate);
-  }
-  const examples = Array.from(exampleByCategory.values())
-    .sort((left, right) => Number(right.telling) - Number(left.telling) || right.seconds - left.seconds)
-    .slice(0, FIRST_DAY_RECAP_TOP_SOURCE_COUNT)
-    .map(({ title, source, category, seconds }) => ({ title, source, category, seconds }));
+  const { examples, readingSite } = readPagesOf(classifiedEntries);
 
   return { decisionReason: lead === "focus" ? "story_ready" : lead === "overview" ? "story_low_focus" : "story_no_focus", recap: {
     day,
@@ -418,6 +576,7 @@ export function resolveFirstDayRecap({
       longest: longestStay,
     },
     examples,
+    readingSite,
     visitCount: classifiedEntries.length,
     topDriftSite,
     firstHour: chart.firstHour,

@@ -11,7 +11,8 @@ import { useSiteIcon } from "../../../../components/SiteIconContext";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
 import { CATEGORY_COLORS } from "../../../../lib/activityLabels";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { noFocusCardVariant, readingRows } from "../../noFocusCardVariants";
+import { breakdownContent, hasReadingCard, noFocusCardVariant, readingView } from "../../noFocusCardVariants";
+import { introLayout } from "../../postOnboardingSidebarGuide";
 import { storyCategoryName } from "../../storyCategories";
 
 /*
@@ -241,7 +242,11 @@ function FactMark({ source, duration, color, span, chart, name: nameOverride }: 
  * productivity. "focus" lights the longest focus stretch, "drift" lights the drift, and "day" lights every
  * classified block for a day with almost no focus, whose card names where the time went; the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en", factTitle }: {
+  recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage;
+  /** Review prototype: names the focus stretch by the page title Drifty read instead of its site. */
+  factTitle?: string;
+}) {
   const { t } = useLocalization();
   // A day with almost no focus opens on its time by kind; the dev server can compare other cards
   // (rhythm, stays, places; see noFocusCardVariants).
@@ -321,59 +326,130 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
     {stay ? <FactMark source={stay.source} duration={duration(stay.seconds)} color={neutralMark} chart={chart}
       span={{ x0: chart.x + stay.from.hourIndex * cw, x1: chart.x + (stay.to.minute === 0 && stay.to.hourIndex > stay.from.hourIndex ? stay.to.hourIndex : stay.to.hourIndex + 1) * cw }} /> : null}
     {clean || wholeDay ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+      name={lit === "focus" && factTitle ? clipText(factTitle, 10, chart.w - 110, 600) : undefined}
       span={{ x0: chart.x + Math.floor(spanFrom) * cw, x1: chart.x + (Math.floor(spanTo) + 1) * cw }} />}
   </g>;
 }
 
+/** A label cut to fit max units at the given size, with an ellipsis when it was cut. */
+function clipText(text: string, size: number, max: number, weight = 650): string {
+  if (textWidth(text, size, weight) <= max) return text;
+  let cut = text;
+  while (cut.length > 1 && textWidth(cut + "…", size, weight) > max) cut = cut.slice(0, -1);
+  return cut + "…";
+}
+
+const READING_COPY = {
+  ko: { caption: "Drifty가 읽은 페이지", siteCaption: "제목을 보고 가른 페이지", more: "외 {n}개", pages: "페이지 {n}개" },
+  en: { caption: "Pages Drifty read", siteCaption: "Told apart by title", more: "+{n} more", pages: "{n} pages" },
+} as const;
+
 /**
- * Review prototype for a day with almost no focus: three real titles from the day and how Drifty sorted
- * them, the way the Classification page lists a record and its category.
+ * Review prototype: how Drifty read pages by their titles. With a site it sorted several ways (YouTube
+ * as entertainment, music and work), the site's time as one bar split by kind, then a row per kind in
+ * the bar's order: its page title, or a page count when no one page stands for the kind. Without such a
+ * site, the day's longest page in each of up to three kinds. Each row ends in the kind, coloured like the
+ * Classification page.
  */
 function ReadingScene({ recap, language }: { recap: FirstDayRecap; language: DisplayLanguage }) {
   const { t } = useLocalization();
+  const clip = useId();
+  const copy = READING_COPY[language === "ko" ? "ko" : "en"];
+  const count = (template: string, n: number) => template.replace("{n}", String(n));
+  const { site, rows } = readingView(recap);
   const panel = { x: 14, y: 34, w: 372, h: 282 };
-  const { rows } = readingRows(recap);
-  const rowH = 74, top = panel.y + (panel.h - rows.length * rowH) / 2;
-  const clip = (text: string, size: number, max: number, weight = 650) => {
-    if (textWidth(text, size, weight) <= max) return text;
-    let cut = text;
-    while (cut.length > 1 && textWidth(cut + "…", size, weight) > max) cut = cut.slice(0, -1);
-    return cut + "…";
-  };
+  const left = panel.x + 22, right = panel.x + panel.w - 22, width = right - left;
+  const rowH = 42, rowGap = 8, headH = site ? 24 + 14 + 12 + 30 + 28 : 26;
+  let y = panel.y + (panel.h - (headH + rows.length * rowH + Math.max(0, rows.length - 1) * rowGap)) / 2;
+  const parts: ReactNode[] = [];
+  if (site) {
+    // At most four kinds on the bar; the rest join as one grey part. Every part stays visible (6 units).
+    const shown = site.kinds.slice(0, 4).map((kind) => ({ key: kind.category, fill: CATEGORY_COLORS[kind.category], seconds: kind.seconds }));
+    const restSeconds = site.kinds.slice(4).reduce((total, kind) => total + kind.seconds, 0);
+    const barParts = restSeconds > 0 ? [...shown, { key: "rest", fill: "var(--line-strong)", seconds: restSeconds }] : shown;
+    const gap = 2, minW = 6, room = width - gap * (barParts.length - 1);
+    const natural = barParts.map((part) => (part.seconds / site.seconds) * room);
+    const fixed = natural.filter((w) => w < minW).length * minW;
+    const scalable = natural.filter((w) => w >= minW).reduce((total, w) => total + w, 0);
+    const widths = natural.map((w) => (w < minW ? minW : (w * (room - fixed)) / scalable));
+    // The legend under the bar: each kind's name and time, left to right; a kind that no longer fits is left to its colour.
+    const legend: { key: string; x: number; fill: string; name: string; time: string }[] = [];
+    let cursor = left;
+    for (const kind of site.kinds.slice(0, 4)) {
+      const name = storyCategoryName(kind.category, t), time = formatLocalizedCompactDurationFromSeconds(kind.seconds, language);
+      const w = 11 + textWidth(name, 10.5, 650) + textWidth(" " + time, 10.5, 500);
+      if (cursor + w > right) break;
+      legend.push({ key: kind.category, x: cursor, fill: CATEGORY_COLORS[kind.category], name, time });
+      cursor += w + 14;
+    }
+    let x = left;
+    parts.push(<g key="site">
+      <SourceGlyph x={left} y={y} size={24} source={site.source} />
+      <text x={left + 33} y={y + 17} fontSize="14.5" fontWeight="700" fill="var(--text)">{site.source.label}</text>
+      <text x={right} y={y + 17} fontSize="12" fontWeight="600" fill="var(--text-soft)" textAnchor="end">{formatLocalizedCompactDurationFromSeconds(site.seconds, language)}</text>
+      <clipPath id={clip}><rect x={left} y={y + 38} width={width} height={12} rx={6} /></clipPath>
+      <g clipPath={"url(#" + clip + ")"}>
+        {barParts.map((part, i) => {
+          const rect = <rect key={part.key} x={x} y={y + 38} width={widths[i]} height={12} fill={part.fill} />;
+          x += widths[i] + gap;
+          return rect;
+        })}
+      </g>
+      {legend.map((entry) => <g key={"l" + entry.key}>
+        <circle cx={entry.x + 3.5} cy={y + 68} r={3.5} fill={entry.fill} />
+        <text x={entry.x + 11} y={y + 71.5} fontSize="10.5" fontWeight="650" fill="var(--text)">{entry.name}
+          <tspan fontWeight="500" fill="var(--text-soft)">{" " + entry.time}</tspan></text>
+      </g>)}
+      <text x={left} y={y + 104} fontSize="10" fontWeight="600" fill="var(--text-soft)" letterSpacing=".3">{copy.siteCaption}</text>
+    </g>);
+  } else {
+    parts.push(<text key="caption" x={left} y={y + 11} fontSize="10" fontWeight="600" fill="var(--text-soft)" letterSpacing=".3">{copy.caption}</text>);
+  }
+  y += headH;
+  rows.forEach((row, i) => {
+    const top = y + i * (rowH + rowGap), mid = top + rowH / 2;
+    const name = storyCategoryName(row.category, t);
+    const pillW = textWidth(name, 10.5, 650) + 27, pillX = right - 9 - pillW;
+    const textX = left + (site ? 13 : 37);
+    const suffix = row.title && row.pages > 0 ? count(copy.more, row.pages) : "";
+    const suffixW = suffix ? textWidth(suffix, 10.5, 500) + 6 : 0;
+    const label = row.title ? clipText("‘" + row.title + "’", 12.5, pillX - 12 - textX - suffixW) : count(copy.pages, row.pages);
+    const labelW = textWidth(label, 12.5, row.title ? 650 : 600);
+    parts.push(<g key={"r" + i}>
+      <rect x={left} y={top} width={width} height={rowH} rx={10} fill="var(--line)" opacity=".34" />
+      {site ? null : <SourceGlyph x={left + 12} y={mid - 8} size={16} source={row.source} />}
+      <text x={textX} y={mid + 4.4} fontSize="12.5" fontWeight={row.title ? 650 : 600} fill={row.title ? "var(--text)" : "var(--text-soft)"}>{label}</text>
+      {suffix ? <text x={textX + labelW + 6} y={mid + 4} fontSize="10.5" fontWeight="500" fill="var(--text-soft)">{suffix}</text> : null}
+      <rect x={pillX} y={mid - 11} width={pillW} height={22} rx={11} fill={CATEGORY_COLORS[row.category]} opacity=".17" />
+      <circle cx={pillX + 11.5} cy={mid} r={3.6} fill={CATEGORY_COLORS[row.category]} />
+      <text x={pillX + 20} y={mid + 3.7} fontSize="10.5" fontWeight="650" fill="var(--text)">{name}</text>
+    </g>);
+  });
   return <g>
     <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
-    {rows.map((row, i) => {
-      const y = top + i * rowH;
-      const name = storyCategoryName(row.category, t);
-      const chipW = textWidth(name, 10, 600) + 26;
-      const chipX = panel.x + panel.w - 18 - chipW;
-      return <g key={row.source.key + i}>
-        {i > 0 ? <rect x={panel.x + 18} y={y} width={panel.w - 36} height={1} fill="var(--line)" /> : null}
-        <SourceGlyph x={panel.x + 18} y={y + 22} size={26} source={row.source} />
-        <text x={panel.x + 56} y={y + 32} fontSize="12" fontWeight="650" fill="var(--text)">{clip(row.title, 12, chipX - panel.x - 70)}</text>
-        <text x={panel.x + 56} y={y + 49} fontSize="10" fill="var(--text-soft)">{row.source.label + " · " + formatLocalizedCompactDurationFromSeconds(row.seconds, language)}</text>
-        <rect x={chipX} y={y + 25} width={chipW} height={22} rx={11} fill="var(--surface-strong)" stroke="var(--line)" />
-        <circle cx={chipX + 11} cy={y + 36} r={4} fill={CATEGORY_COLORS[row.category]} />
-        <text x={chipX + 19} y={y + 39.5} fontSize="10" fontWeight="600" fill="var(--text)">{name}</text>
-      </g>;
-    })}
+    {parts}
   </g>;
 }
+
 
 export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if (step === "recap" && recap?.lead === "kinds" && noFocusCardVariant() === "reading" && recap.examples.length > 0) {
+  if (step === "recap" && recap?.lead === "kinds" && noFocusCardVariant() === "reading" && hasReadingCard(recap)) {
     return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
   }
-  // Review prototype, the rebalanced story's middle card: titles Drifty read after a day opened by kind,
-  // otherwise the day by kind.
+  // Review prototypes of the six-card orders (see introLayout): the middle card is the focus stretch named
+  // by its page title, the titles Drifty read, or the day by kind.
+  const layout = introLayout();
   if (step === "breakdown" && recap) {
-    if (recap.lead === "kinds" && recap.examples.length > 0) return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
+    const middle = breakdownContent(recap, layout);
+    if (middle === "focus") return <RecapDayScene recap={recap} lit="focus" ko={ko} labels={labels} language={language} factTitle={recap.longestFocus?.title} />;
+    if (middle === "reading") return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
     return <RecapDayScene recap={recap} lit="day" ko={ko} labels={labels} language={language} />;
   }
+  const opensByKind = recap?.lead === "kinds" || layout === "overview" || layout === "reading";
   if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap}
-    lit={step === "drift" ? "drift" : recap.lead === "kinds" ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
+    lit={step === "drift" ? "drift" : opensByKind ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

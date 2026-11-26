@@ -1,10 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { buildFirstDayRecap, refineIntroDecisionReason, resolveFirstDayRecap } from "./firstDayStory";
+import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
+import { buildFirstDayRecap, refineIntroDecisionReason, resolveFirstDayRecap, storyTitle } from "./firstDayStory";
+import { firstDaySourceOf } from "./firstDayPreparationStory";
 import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
 import { sanitizePostHogEventProperties } from "../../lib/analytics/events";
 
 const DAY = "2026-09-30";
 const TODAY = "2026-10-01";
+
+type Visit = readonly [hour: number, minute: number, seconds: number, domain: string, title: string, category: ActivityCategory, productivity: ProductivityLabel];
+
+/** Imported browser visits on DAY, each already classified. */
+function visits(entries: readonly Visit[]): ActivitySegment[] {
+  return entries.map(([hour, minute, seconds, domain, title, category, productivity], index) => {
+    const startedAt = new Date(DAY + "T" + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0") + ":00");
+    return {
+      id: "visit-" + index,
+      startedAt: startedAt.toISOString(),
+      endedAt: new Date(startedAt.getTime() + seconds * 1000).toISOString(),
+      durationSeconds: seconds,
+      appName: "Google Chrome",
+      bundleId: "com.google.Chrome",
+      browserName: "Google Chrome",
+      siteDomain: domain,
+      siteTitle: title,
+      siteUrl: "https://" + domain + "/",
+      windowTitle: title,
+      platform: "macos",
+      source: "browser-history-import",
+      siteSource: "browser-history-import",
+      classification: { category, productivity, source: "llm", confidence: 0.9, aiResult: true, reason: "" },
+    } as ActivitySegment;
+  });
+}
 
 describe("tutorial story", () => {
   it("reports the actual first matching intro decision without changing recap eligibility", () => {
@@ -87,14 +115,51 @@ describe("tutorial story", () => {
     ]);
   });
 
-  it("sorts a day off by kind and picks titles that say more than the site's own name", () => {
+  it("sorts a day off by kind, and reads one site two ways by its page titles", () => {
     const recap = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => DAY), today: TODAY });
     expect(recap?.categories.slice(0, 3).map((entry) => [entry.category, entry.seconds / 60])).toEqual([
       ["entertainment", 101], ["utility", 48], ["communication", 40],
     ]);
-    // Netflix (40 min) is longer than Street food tour (35 min) but its title is only the site's name.
+    // Netflix (40 min) is longer than Street food tour (35 min) but its title is only the site's name, and
+    // the mail inbox is never shown by its title.
     expect(recap?.examples.map((example) => [example.title, example.category])).toEqual([
-      ["Street food tour", "entertainment"], ["Jeju trip plan", "utility"], ["Morning jazz playlist", "music"],
+      ["Jeju trip plan", "utility"], ["Street food tour", "entertainment"], ["Morning jazz playlist", "music"],
+    ]);
+    expect(recap?.readingSite?.source.label).toBe("youtube.com");
+    expect(recap?.readingSite?.kinds.map((kind) => [kind.category, kind.seconds / 60, kind.pageCount, kind.page?.title])).toEqual([
+      ["entertainment", 61, 2, "Street food tour"], ["music", 24, 1, "Morning jazz playlist"],
+    ]);
+  });
+
+  it("says a page title the way a person would, without its unread count or the site's name", () => {
+    const site = (domain: string) => firstDaySourceOf({ appName: "Google Chrome", bundleId: null, siteDomain: domain });
+    expect(storyTitle("(3) Street food tour - YouTube", site("youtube.com"))).toBe("Street food tour");
+    expect(storyTitle("Lo-fi mix | dingo - YouTube", site("youtube.com"))).toBe("Lo-fi mix | dingo");
+    expect(storyTitle("Home / X", site("x.com"))).toBe("Home");
+    expect(storyTitle("Pull requests · edgethink00/drifty", site("github.com"))).toBe("Pull requests · edgethink00/drifty");
+  });
+
+  it("reads a site by its pages only when each kind has a steady page held longer than a glance", () => {
+    const recap = buildFirstDayRecap({
+      segments: visits([
+        // Two focus kinds on one site: read two ways, but the verdict never changes.
+        [9, 0, 60 * 60, "docs.google.com", "Budget sheet", "workspace", "focus"],
+        [10, 0, 50 * 60, "docs.google.com", "Course notes", "learning", "focus"],
+        [11, 0, 30 * 60, "youtube.com", "Funny cats compilation - YouTube", "entertainment", "drift"],
+        [11, 30, 25 * 60, "youtube.com", "(2) Lo-fi beats to study - YouTube", "music", "neutral"],
+        // A title Drifty sorted two ways is an unsteady label, and ten seconds is a passing tab.
+        [12, 0, 10 * 60, "youtube.com", "Mixed video - YouTube", "entertainment", "drift"],
+        [12, 10, 10 * 60, "youtube.com", "Mixed video - YouTube", "music", "neutral"],
+        [12, 20, 10, "youtube.com", "Rust ownership explained - YouTube", "workspace", "focus"],
+      ]),
+      day: DAY,
+      today: TODAY,
+    });
+    // YouTube's pages differ in verdict (drift and neutral), so it is told before the larger Google Docs.
+    expect(recap?.readingSite?.source.label).toBe("youtube.com");
+    expect(recap?.readingSite?.pageCount).toBe(4);
+    expect(recap?.readingSite?.kinds.map((kind) => [kind.category, kind.pageCount, kind.page?.title ?? null])).toEqual([
+      ["entertainment", 2, "Funny cats compilation"], ["music", 2, "Lo-fi beats to study"], ["workspace", 1, null],
     ]);
   });
 

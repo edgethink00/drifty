@@ -20,8 +20,8 @@ import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
 import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
-import { breakdownCardText, noFocusCardText, noFocusCardVariant, rebalancedFixHint } from "./noFocusCardVariants";
-import { isRebalancedIntroLayout } from "./postOnboardingSidebarGuide";
+import { breakdownCardText, breakdownContent, noFocusCardText, noFocusCardVariant, rebalancedFixHint } from "./noFocusCardVariants";
+import { introLayout, isRebalancedIntroLayout } from "./postOnboardingSidebarGuide";
 import { storyKindsList } from "./storyCategories";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
@@ -173,8 +173,21 @@ const RECAP_KINDS_NAMED = 3;
  */
 function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: DisplayLanguage): GuideText | null {
   if (!recap || (step !== "recap" && step !== "breakdown" && step !== "drift")) return null;
-  // Review prototype of the rebalanced story: a middle card on the day, and the drift card says where to correct.
-  if (step === "breakdown") return breakdownCardText(recap, language, t);
+  // Review prototypes of the six-card story orders: a middle card on the day, and the drift card says where to correct.
+  const layout = introLayout();
+  const middle = step === "breakdown" ? breakdownContent(recap, layout) : null;
+  if (middle === "focus" && recap.longestFocus) {
+    const focusDuration = formatLocalizedCompactDurationFromSeconds(recap.focusSeconds, language);
+    return {
+      title: language === "ko" ? "그중 집중은 " + focusDuration + "이었어요" : focusDuration + " of it was focus",
+      body: t("postOnboarding.story.recapBody", {
+        time: formatLocalizedTimeLabel(recap.longestFocus.startedAt, language),
+        duration: formatLocalizedCompactDurationFromSeconds(recap.longestFocus.seconds, language),
+        source: recap.longestFocus.source.label,
+      }),
+    };
+  }
+  if (step === "breakdown") return breakdownCardText(recap, language, t, middle === "kinds" ? "kinds" : "reading");
   const fixHint = isRebalancedIntroLayout() ? rebalancedFixHint(language) : null;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   const browser = recap.importedOnly;
@@ -185,9 +198,9 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       duration: duration(recap.longestFocus.seconds),
       source: recap.longestFocus.source.label,
     } : null;
-    if (recap.lead === "kinds") {
+    if (recap.lead === "kinds" || layout === "overview" || layout === "reading") {
       // Review prototype: the dev server can open this card on other facts (see noFocusCardVariants).
-      const variant = noFocusCardVariant();
+      const variant = recap.lead === "kinds" ? noFocusCardVariant() : "kinds";
       const variantText = noFocusCardText(variant, recap, language, t);
       if (variantText) return variantText;
       if (variant === "places") {
