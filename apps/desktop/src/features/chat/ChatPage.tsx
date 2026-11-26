@@ -683,7 +683,9 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   const [status, setStatus] = useState<ChatRuntimeStatus | null>(null);
   const [draft, setDraft] = useState(initialDraft ?? "");
   const [taskNow, setTaskNow] = useState(now);
-  const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>(null);
+  // Undefined means the first local summary is pending. Null allows the
+  // default recommendations when the summary is unavailable.
+  const [taskAvailability, setTaskAvailability] = useState<ChatTaskAvailability | null>();
   const [running, setRunning] = useState<RunningTurn | null>(null);
   const [taskIndex, setTaskIndex] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -770,6 +772,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     now: taskNow, availability: taskAvailability, memory: memoryTaskAvailable,
   }), [lang, projectKey, projectsKey, taskNow, taskAvailability, client.kind, memoryTaskAvailable]);
   const taskDay = localDay(taskNow);
+  const recommendationsReady = status !== null && (!status.toolsAvailable || taskAvailability !== undefined);
   const busy = Boolean(running);
 
   useEffect(() => {
@@ -787,8 +790,12 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
     void client.runTool({ name: "summary", arguments: {
       from: offsetTimestamp(calendarDay(calendarWeek(at), -14)), to: offsetTimestamp(at),
     }, detail: "safe" }).then((result) => {
-      if (!cancelled && !result.isError) setTaskAvailability(parseTaskAvailability(result.text));
-    }, () => undefined);
+      if (cancelled) return;
+      const availability = result.isError ? null : parseTaskAvailability(result.text);
+      setTaskAvailability((previous) => availability ?? previous ?? null);
+    }, () => {
+      if (!cancelled) setTaskAvailability((previous) => previous ?? null);
+    });
     return () => { cancelled = true; };
     // Refresh on entry, calendar rollover and after a turn; a clock tick alone needs no database scan.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1642,7 +1649,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
             </div>
             {statusLine && !showConnectionRecovery ? <p className="chat-usage">{statusLine}</p> : null}
           </form>
-          {isEmpty && !showConnectionRecovery ? (
+          {isEmpty && recommendationsReady ? (
             <ul className="chat-tasks" aria-label={copy.tasks}>
               {tasks.slice(0, EMPTY_STATE_TASKS).map((task) => (
                 <li key={task.id}>

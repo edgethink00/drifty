@@ -434,7 +434,7 @@ describe("Chat page", () => {
   it("starts from a suggested task card, showing its title and sending its fuller request", async () => {
     const { client, pending, cancel } = fakeClient();
     render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
-    expect(screen.getByRole("list", { name: "Suggested tasks" })).toBeTruthy();
+    expect(await screen.findByRole("list", { name: "Suggested tasks" })).toBeTruthy();
     const card = await screen.findByRole("button", { name: "Yesterday’s work" });
     await waitFor(() => expect((card as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(card);
@@ -720,7 +720,8 @@ describe("Chat page", () => {
     expect(screen.queryByLabelText(CHAT_COPY.en.placeholder)).toBeNull();
     expect(screen.queryByRole("button", { name: "Attach files" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Send" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Yesterday’s work" })).toBeNull();
+    const suggestion = await screen.findByRole("button", { name: "Yesterday’s work" });
+    expect((suggestion as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: "Drifty Cloud" }));
     await screen.findByText(CHAT_COPY.en.cloudSignIn);
     expect((screen.getByLabelText(CHAT_COPY.en.placeholder) as HTMLTextAreaElement).value).toBe("A draft to keep");
@@ -784,6 +785,34 @@ describe("grounded task delivery", () => {
     await waitFor(() => expect(pending).toHaveLength(1));
     expect(pending[0].request.prompt).toBe("이번 주 기록을 요약해줘");
     expect(pending[0].request.instructions).toContain("never change a typed 'this week' to last week");
+  });
+
+  it("shows grounded recommendations once and keeps them when switching from a missing CLI", async () => {
+    window.localStorage.setItem(CHAT_CONNECTION_STORAGE_KEY, "claude");
+    const { client, pending } = fakeClient();
+    let resolveSummary!: (result: Awaited<ReturnType<ChatClient["runTool"]>>) => void;
+    const summary = new Promise<Awaited<ReturnType<ChatClient["runTool"]>>>((resolve) => { resolveSummary = resolve; });
+    const runTool = vi.fn(() => summary);
+    const now = () => new Date(2026, 10, 26, 16);
+    render(<LocalizationTestProvider language="ko"><ChatPage client={{ ...client, runTool }} now={now} /></LocalizationTestProvider>);
+
+    await screen.findByText(CHAT_COPY.ko.missingClaude);
+    expect(screen.queryByRole("list", { name: CHAT_COPY.ko.tasks })).toBeNull();
+    await act(async () => {
+      resolveSummary({ isError: false, text: JSON.stringify({ ok: true, data: {
+        days: [{ day: "2026-11-26", recordedSeconds: 900, focusSeconds: 0, driftSeconds: 0 }], projects: [],
+      } }) });
+    });
+
+    const list = screen.getByRole("list", { name: CHAT_COPY.ko.tasks });
+    const chips = within(list).getAllByRole<HTMLButtonElement>("button");
+    expect(chips.map((chip) => chip.getAttribute("aria-label"))).toEqual(["최근 작업 정리", "오늘 지금까지", "이번 주 지금까지"]);
+    expect(chips.every((chip) => chip.disabled)).toBe(true);
+    fireEvent.click(within(openPicker("연결")).getByRole("option", { name: "Codex" }));
+    expect(within(list).getAllByRole("button")).toEqual(chips);
+    expect(chips.every((chip) => !chip.disabled)).toBe(true);
+    expect(runTool).toHaveBeenCalledTimes(1);
+    expect(pending).toHaveLength(0);
   });
 
   it("keeps a useful recorded-day recommendation when previous weeks are empty, without a model call", async () => {
