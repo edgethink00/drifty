@@ -42,23 +42,27 @@ describe("centered app introduction", () => {
     expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your day so far" })).toBeTruthy();
   });
 
-  it("opens a day with no focus on the time it read and where it went, lighting the whole day", () => {
+  it("opens a day with no focus on its time by kind, colouring the chart by the three largest kinds", () => {
     const props = callbacks();
     const day = "2026-09-30", today = "2026-10-01";
     const noFocus = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => day), today });
     const { unmount } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} />);
-    expect(screen.getByRole("dialog", { name: "Drifty looked at 4h 40m of your browsing yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 4h 40m of your browsing yesterday by kind" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("Most of it went to youtube.com, notion.so, and netflix.com.");
+      .toBe("From the most: entertainment 1h 41m, utility 48m, and communication 40m.");
     // No stretch to point at: every classified block is lit and no tooltip names a single source.
     expect(document.querySelector(".story-day__fact")).toBeNull();
     const blocks = Array.from(document.querySelectorAll(".story-day__block"));
     expect(blocks.length).toBeGreaterThan(0);
     expect(blocks.every((block) => block.hasAttribute("data-lit"))).toBe(true);
+    // The three largest kinds keep their colours; shopping, social media and music share Other's.
+    const fills = new Set(blocks.map((block) => block.getAttribute("fill")));
+    expect(fills).toEqual(new Set(["var(--category-entertainment)", "var(--category-utility)", "var(--category-communication)", "var(--line-strong)"]));
     unmount();
     render(<LocalizationTestProvider language="ko"><PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={noFocus} {...props} /></LocalizationTestProvider>);
+    expect(screen.getByRole("dialog", { name: "어제 브라우저에서 보낸 4시간 40분을 종류별로 나눠 봤어요" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("주로 youtube.com, notion.so, netflix.com에서 시간을 보냈어요.");
+      .toBe("많은 순서대로 엔터테인먼트 1시간 41분, 유틸리티 48분, 커뮤니케이션 40분이었어요.");
   });
 
   it("names today or the day before when preparation took one of them", () => {

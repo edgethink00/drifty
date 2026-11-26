@@ -90,9 +90,9 @@ export type FirstDayStoryDay = "yesterday" | "today" | "dayBefore";
 /**
  * How the first story card opens: on focus; or, when focus fell short of the focus lead's minimum, on
  * the classified time it read, with the focus it found in the body ("overview"); or, with almost no
- * focus, on the classified time it read and where that time went ("sources").
+ * focus, on the classified time it read sorted by kind ("kinds").
  */
-export type FirstDayStoryLead = "focus" | "overview" | "sources";
+export type FirstDayStoryLead = "focus" | "overview" | "kinds";
 
 export type FirstDayRecap = {
   readonly day: string;
@@ -347,7 +347,7 @@ export function resolveFirstDayRecap({
   const classifiedSeconds = totals.focus + totals.neutral + totals.drift;
   if (classifiedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS) return { recap: null, decisionReason: "below_classified_minimum" };
   const lead: FirstDayStoryLead = totals.focus >= FIRST_DAY_RECAP_MIN_FOCUS_SECONDS ? "focus"
-    : totals.focus >= FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS ? "overview" : "sources";
+    : totals.focus >= FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS ? "overview" : "kinds";
   const chart = chartOf(timed);
   if (!chart) return { recap: null, decisionReason: "no_chart" };
 

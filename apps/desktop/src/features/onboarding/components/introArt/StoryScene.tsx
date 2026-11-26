@@ -11,7 +11,8 @@ import { useSiteIcon } from "../../../../components/SiteIconContext";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
 import { CATEGORY_COLORS } from "../../../../lib/activityLabels";
 import { useLocalization } from "../../../localization/LocalizationContext";
-import { noFocusCardVariant, readingRows, storyCategoryName } from "../../noFocusCardVariants";
+import { noFocusCardVariant, readingRows } from "../../noFocusCardVariants";
+import { storyCategoryName } from "../../storyCategories";
 
 /*
  * The post-onboarding introduction's illustrations, drawn from real Drifty surfaces. The menu bar and Dock
@@ -242,8 +243,9 @@ function FactMark({ source, duration, color, span, chart, name: nameOverride }: 
  */
 function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
   const { t } = useLocalization();
-  // Review prototype: a day with almost no focus can open on kinds, rhythm or stays (see noFocusCardVariants).
-  const variant = lit === "day" ? noFocusCardVariant() : "places";
+  // A day with almost no focus opens on its time by kind; the dev server can compare other cards
+  // (rhythm, stays, places; see noFocusCardVariants).
+  const variant = lit === "day" ? noFocusCardVariant() : null;
   const byCategory = variant === "kinds";
   const busiest = variant === "rhythm" ? recap.busiestHours : null;
   const stay = variant === "stays" ? recap.stays.longest : null;
@@ -288,13 +290,19 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
       ...(recap.categories.length > 3 ? [[otherFill, t("activity.category.custom")] as const] : []),
     ]
     : [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]];
-  const legendX = legend.reduce<number[]>((xs, _entry, i) => [...xs, i === 0 ? panel.x + 16 : xs[i - 1] + textWidth(legend[i - 1][1], 10, 600) + 24], []);
+  // Category names run long in some languages (エンターテインメント): tighten the gaps to fit the panel,
+  // and leave Other out of the legend when even that is not enough.
+  const legendRoom = panel.w - 32;
+  const legendWidth = (items: readonly (readonly [string, string])[]) => items.reduce((total, [, text]) => total + 12 + textWidth(text, 10, 600), 0);
+  const fittedLegend = byCategory && legend.length > 3 && legendWidth(legend) + 8 * (legend.length - 1) > legendRoom ? legend.slice(0, 3) : legend;
+  const legendGap = fittedLegend.length > 1 ? Math.max(8, Math.min(24, (legendRoom - legendWidth(fittedLegend)) / (fittedLegend.length - 1))) : 0;
+  const legendX = fittedLegend.reduce<number[]>((xs, _entry, i) => [...xs, i === 0 ? panel.x + 16 : xs[i - 1] + 12 + textWidth(fittedLegend[i - 1][1], 10, 600) + legendGap], []);
   const blockFill = (block: FirstDayRecapBlock) => !byCategory ? VERDICT_FILL[block[3]]
     : block[5] && namedCategories.has(block[5]) ? CATEGORY_COLORS[block[5]] : otherFill;
   const neutralMark = "var(--text-soft)";
   return <g>
     <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
-    {legend.map(([fill, text], i) => {
+    {(byCategory ? fittedLegend : legend).map(([fill, text], i) => {
       const x = byCategory ? legendX[i] : panel.x + 16 + i * (ko ? 52 : 64);
       const on = wholeDay || (clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2));
       return <g key={text} opacity={on ? 1 : 0.55}><circle cx={x + 4} cy={panel.y + 22} r={4} fill={fill} /><text x={x + 12} y={panel.y + 25.5} fontSize="10" fontWeight={on ? 700 : 500} fill="var(--text)">{text}</text></g>;
@@ -355,11 +363,11 @@ function ReadingScene({ recap, language }: { recap: FirstDayRecap; language: Dis
 export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if (step === "recap" && recap?.lead === "sources" && noFocusCardVariant() === "reading" && recap.examples.length > 0) {
+  if (step === "recap" && recap?.lead === "kinds" && noFocusCardVariant() === "reading" && recap.examples.length > 0) {
     return <ReadingScene recap={recap} language={language ?? (ko ? "ko" : "en")} />;
   }
   if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap}
-    lit={step === "drift" ? "drift" : recap.lead === "sources" ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
+    lit={step === "drift" ? "drift" : recap.lead === "kinds" ? "day" : "focus"} ko={ko} labels={labels} language={language} />;
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

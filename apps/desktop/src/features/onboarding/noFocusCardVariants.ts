@@ -1,4 +1,5 @@
-import type { ActivityCategory, BuiltInActivityCategory } from "@drifty/domain";
+import type { ActivityCategory } from "@drifty/domain";
+import { storyCategoryName } from "./storyCategories";
 import type { DisplayLanguage } from "../localization/languageCatalog";
 import type { TranslationKey } from "../localization/translations";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
@@ -6,7 +7,8 @@ import type { FirstDayRecap } from "./firstDayStory";
 
 /**
  * Review prototype: other ways to open the first story card on a day with almost no focus, so the
- * dev server can compare them (?driftyNoFocusCard=<variant>). Production always shows "places".
+ * dev server can compare them (?driftyNoFocusCard=<variant>). Production always shows "kinds", the
+ * chosen card, whose copy lives in the translations.
  * Copy is Korean and English only until one is chosen.
  */
 export const NO_FOCUS_CARD_QUERY_PARAM = "driftyNoFocusCard";
@@ -17,34 +19,15 @@ export function noFocusCardVariant(
   search: string = typeof window === "undefined" ? "" : window.location.search,
   isDevelopment: boolean = import.meta.env.DEV,
 ): NoFocusCardVariant {
-  if (!isDevelopment) return "places";
+  if (!isDevelopment) return "kinds";
   const raw = new URLSearchParams(search).get(NO_FOCUS_CARD_QUERY_PARAM);
-  return NO_FOCUS_CARD_VARIANTS.find((variant) => variant === raw) ?? "places";
+  return NO_FOCUS_CARD_VARIANTS.find((variant) => variant === raw) ?? "kinds";
 }
-
-const CATEGORY_KEYS: Record<BuiltInActivityCategory, TranslationKey> = {
-  workspace: "activity.category.workspace",
-  learning: "activity.category.learning",
-  communication: "activity.category.communication",
-  music: "activity.category.music",
-  game: "activity.category.game",
-  social_media: "activity.category.socialMedia",
-  entertainment: "activity.category.entertainment",
-  shopping: "activity.category.shopping",
-  utility: "activity.category.utility",
-  unknown: "activity.category.unknown",
-};
 
 type Translate = (key: TranslationKey, values?: Record<string, string | number>) => string;
 
-export function storyCategoryName(category: ActivityCategory, t: Translate): string {
-  return t((CATEGORY_KEYS as Record<string, TranslationKey>)[category] ?? "activity.category.custom");
-}
-
 const COPY = {
   ko: {
-    kindsTitle: "어제 브라우저에서 보낸 {total}을 종류별로 나눠 봤어요",
-    kindsBody: "많은 순서대로 {list}이었어요.",
     rhythmTitle: "어제는 {start}부터 {end}까지 브라우저를 썼어요",
     rhythmBody: "가장 많이 쓴 때는 {from}~{to} 사이로, {duration}이었어요.",
     staysTitle: "어제 브라우저에서는 한곳에 평균 {average} 머물렀어요",
@@ -54,8 +37,6 @@ const COPY = {
     readingPairBody: "같은 {source}에서도 ‘{first}’는 {firstKind}, ‘{second}’는 {secondKind} 봤어요.",
   },
   en: {
-    kindsTitle: "Drifty sorted {total} of your browsing yesterday by kind",
-    kindsBody: "From the most: {list}.",
     rhythmTitle: "Yesterday your browsing ran from {start} to {end}",
     rhythmBody: "It was busiest between {from} and {to}, with {duration}.",
     staysTitle: "Yesterday you stayed {average} on a site on average",
@@ -85,24 +66,18 @@ export function chartHourLabel(recap: FirstDayRecap, hourIndex: number, language
   return formatLocalizedTimeLabel(date, language);
 }
 
-/** Title and body of the first card for a non-default variant; null keeps the shipped card. */
+/** Title and body of the first card for a prototype variant; null for the shipped kinds card and the places card. */
 export function noFocusCardText(
   variant: NoFocusCardVariant,
   recap: FirstDayRecap,
   language: DisplayLanguage,
   t: Translate,
 ): { readonly title: string; readonly body: string } | null {
-  if (variant === "places") return null;
+  if (variant === "places" || variant === "kinds") return null;
   const copy = language === "ko" ? COPY.ko : COPY.en;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   const time = (iso: string) => formatLocalizedTimeLabel(iso, language);
   switch (variant) {
-    case "kinds": {
-      const list = recap.categories.slice(0, 3)
-        .map((entry) => storyCategoryName(entry.category, t) + " " + duration(entry.seconds))
-        .join(", ");
-      return { title: fill(copy.kindsTitle, { total: duration(recap.classifiedSeconds) }), body: fill(copy.kindsBody, { list }) };
-    }
     case "rhythm": {
       if (!recap.span) return null;
       const busiest = recap.busiestHours;

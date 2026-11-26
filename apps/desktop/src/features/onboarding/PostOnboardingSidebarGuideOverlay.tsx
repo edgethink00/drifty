@@ -21,6 +21,7 @@ import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
 import { noFocusCardText, noFocusCardVariant } from "./noFocusCardVariants";
+import { storyKindsList } from "./storyCategories";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
 import type { AutoCloseMode } from "../focus-session/focusSession";
@@ -150,6 +151,14 @@ const RECAP_OVERVIEW_TITLE_KEYS = {
   today: ["postOnboarding.story.recapOverviewTitleToday", "postOnboarding.story.recapOverviewTitleTodayBrowser"],
   dayBefore: ["postOnboarding.story.recapOverviewTitleDayBefore", "postOnboarding.story.recapOverviewTitleDayBeforeBrowser"],
 } as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
+/** The title when a day with almost no focus opens on its time sorted by kind; same layout as above. */
+const RECAP_KINDS_TITLE_KEYS = {
+  yesterday: ["postOnboarding.story.recapKindsTitleYesterday", "postOnboarding.story.recapKindsTitleYesterdayBrowser"],
+  today: ["postOnboarding.story.recapKindsTitleToday", "postOnboarding.story.recapKindsTitleTodayBrowser"],
+  dayBefore: ["postOnboarding.story.recapKindsTitleDayBefore", "postOnboarding.story.recapKindsTitleDayBeforeBrowser"],
+} as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
+/** How many categories a day with almost no focus names; the rest of its chart reads as Other. */
+const RECAP_KINDS_NAMED = 3;
 
 /**
  * The story cards tell the user's own first day; their copy is built from the recap's facts. A day
@@ -171,15 +180,28 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
       duration: duration(recap.longestFocus.seconds),
       source: recap.longestFocus.source.label,
     } : null;
-    if (recap.lead === "overview" || recap.lead === "sources") {
-      const variantText = recap.lead === "sources" ? noFocusCardText(noFocusCardVariant(), recap, language, t) : null;
+    if (recap.lead === "kinds") {
+      // Review prototype: the dev server can open this card on other facts (see noFocusCardVariants).
+      const variant = noFocusCardVariant();
+      const variantText = noFocusCardText(variant, recap, language, t);
       if (variantText) return variantText;
-      const places = recap.topSources.map((entry) => entry.source.label);
+      if (variant === "places") {
+        const places = recap.topSources.map((entry) => entry.source.label);
+        return {
+          title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
+          body: places.length > 0 ? t("postOnboarding.story.recapSourcesBody", { sources: sourceList(places, language) }) : "",
+        };
+      }
+      const kinds = recap.categories.slice(0, RECAP_KINDS_NAMED);
+      return {
+        title: t(RECAP_KINDS_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
+        body: kinds.length > 0 ? t("postOnboarding.story.recapKindsBody", { kinds: storyKindsList(kinds, language, t) }) : "",
+      };
+    }
+    if (recap.lead === "overview") {
       return {
         title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
-        body: recap.lead === "sources"
-          ? places.length > 0 ? t("postOnboarding.story.recapSourcesBody", { sources: sourceList(places, language) }) : ""
-          : stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
+        body: stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
       };
     }
     const title = t(RECAP_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { focus });

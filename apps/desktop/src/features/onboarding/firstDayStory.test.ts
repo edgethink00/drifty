@@ -65,7 +65,7 @@ describe("tutorial story", () => {
     expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY, 2), day: TODAY, today: TODAY }).decisionReason).toBe("below_classified_minimum");
   });
 
-  it("opens on focus from 30 minutes, on the time it read from 5, and on where the time went below that", () => {
+  it("opens on focus from 30 minutes, on the time it read from 5, and on its time by kind below that", () => {
     const segments = buildFirstDayReviewSegments(DAY).map((segment) => segment.classification?.productivity === "focus" && segment.siteDomain !== "docs.google.com"
       ? { ...segment, classification: { ...segment.classification, productivity: "neutral" as const } } : segment);
     // Only docs.google.com stays focus: 22 + 28 = 50 minutes, enough.
@@ -78,12 +78,23 @@ describe("tutorial story", () => {
     expect(thinStory.recap).toMatchObject({ lead: "overview", focusSeconds: 22 * 60, longestFocus: { seconds: 22 * 60, source: { label: "docs.google.com" } } });
     const trace = thin.map((segment) => segment.siteTitle === "Q4 planning"
       ? { ...segment, durationSeconds: 4 * 60, endedAt: new Date(Date.parse(segment.startedAt) + 4 * 60_000).toISOString() } : segment);
-    // 4 minutes of focus has no stretch worth naming: the story names the three places with the most time.
+    // 4 minutes of focus has no stretch worth naming: the story opens on the day's time by kind.
     const traceStory = resolveFirstDayRecap({ segments: trace, day: DAY, today: TODAY });
     expect(traceStory.decisionReason).toBe("story_no_focus");
-    expect(traceStory.recap).toMatchObject({ lead: "sources", focusSeconds: 4 * 60 });
-    expect(traceStory.recap?.topSources.map((entry) => [entry.source.label, entry.seconds / 60])).toEqual([
-      ["github.com", 125], ["youtube.com", 72], ["figma.com", 59],
+    expect(traceStory.recap).toMatchObject({ lead: "kinds", focusSeconds: 4 * 60 });
+    expect(traceStory.recap?.categories.slice(0, 3).map((entry) => [entry.category, entry.seconds / 60])).toEqual([
+      ["workspace", 259], ["entertainment", 86], ["communication", 39],
+    ]);
+  });
+
+  it("sorts a day off by kind and picks titles that say more than the site's own name", () => {
+    const recap = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => DAY), today: TODAY });
+    expect(recap?.categories.slice(0, 3).map((entry) => [entry.category, entry.seconds / 60])).toEqual([
+      ["entertainment", 101], ["utility", 48], ["communication", 40],
+    ]);
+    // Netflix (40 min) is longer than Street food tour (35 min) but its title is only the site's name.
+    expect(recap?.examples.map((example) => [example.title, example.category])).toEqual([
+      ["Street food tour", "entertainment"], ["Jeju trip plan", "utility"], ["Morning jazz playlist", "music"],
     ]);
   });
 
