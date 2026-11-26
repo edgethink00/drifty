@@ -22,6 +22,8 @@ type SidebarNavigationProps = {
   readonly activeTab: TabId;
   /** Dev-server design review only: one more item at the end of the activity group. */
   readonly activityExtra?: ReactNode;
+  /** Dev-server design review only: an item above every group (the Home preview). */
+  readonly topExtra?: ReactNode;
   readonly canOpenAgentsBeta: boolean;
   readonly canOpenProfileBeta: boolean;
   readonly canOpenTeamsBeta: boolean;
@@ -113,6 +115,7 @@ export function SidebarNavigation(props: SidebarNavigationProps) {
           className="sidebar-guide-section"
           data-sidebar-guide-anchor="dashboard"
         >
+          {props.topExtra}
           {flowNav.map((item) => (
               <SidebarNavButton
                 key={item.id}

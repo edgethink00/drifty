@@ -751,6 +751,9 @@ const LazyDayRecordPage = lazy(async () => ({ default: (await import("./features
 const LazyDayRecordNavItem = lazy(async () => ({ default: (await import("./features/day-note/DayRecordPage")).DayRecordNavItem }));
 // Dev mode's Chat preview (all builds, off by default): ask about this computer's records through an agent CLI.
 const LazyChatPage = lazy(async () => ({ default: (await import("./features/chat/ChatPage")).ChatPage }));
+// Dev-server review only (?homePreview=1, owner request 2026-11-26): Home rebuilt to match Insights › Achievements.
+const LazyHomeV2Page = lazy(async () => ({ default: (await import("./features/home/HomeV2Page")).HomeV2Page }));
+const LazyHomeNavItem = lazy(async () => ({ default: (await import("./features/home/HomeV2Page")).HomeNavItem }));
 const LazyChatNavItem = lazy(async () => ({ default: (await import("./features/chat/ChatPage")).ChatNavItem }));
 // Work memory (macOS): the work wiki with a graph of its pages. Browser review uses synthetic data.
 const LazyMemoryPage = lazy(async () => ({ default: (await import("./features/memory/MemoryPage")).MemoryPage }));
@@ -3251,6 +3254,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const [memoryStartResumes] = useState(() => !memoryPreviewForced && memoryStartReopens());
   const [memoryOpen, setMemoryOpen] = useState(memoryPreviewForced || memoryStartResumes);
   const memoryVisible = memoryOpen && memoryClient !== null && !dayNotePageOpen && !dayRecordVisible && !chatVisible;
+  const homePreviewForced = import.meta.env.DEV && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("homePreview") === "1";
+  const [homeOpen, setHomeOpen] = useState(homePreviewForced);
+  const homeVisible = homePreviewForced && homeOpen && !dayNotePageOpen && !dayRecordVisible && !chatVisible && !memoryVisible;
   // Settings › Agents says whether the added agents' skill can read memory right now.
   const memoryOnForAgents = useMemoryOnForAgents(settingsSection === "developer" ? memoryClient : null);
   const memoryAgentsOn = memoryAgentsPreview ?? (memoryClient ? memoryOnForAgents : null);
@@ -12276,7 +12282,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
         <div className="sidebar-scroll">
           <SidebarNavigation
-            activeTab={dayNotePageOpen || dayRecordVisible || chatVisible || memoryVisible ? "settings" : activeTab}
+            activeTab={dayNotePageOpen || dayRecordVisible || chatVisible || memoryVisible || homeVisible ? "settings" : activeTab}
             canOpenAgentsBeta={canOpenAgentsBeta}
             canOpenProfileBeta={canOpenProfileBeta}
             canOpenTeamsBeta={canOpenTeamsBeta}
@@ -12285,7 +12291,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             socialSection={socialSection}
             teamReviewVariant={sidebarTeamReviewVariant}
             t={localization.t}
-            onNavigate={(tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); setMemoryOpen(false); navigateToTab(tabId, period); }}
+            onNavigate={(tabId, period) => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); setMemoryOpen(false); setHomeOpen(false); navigateToTab(tabId, period); }}
+            topExtra={homePreviewForced ? (
+              <Suspense fallback={null}>
+                <LazyHomeNavItem active={homeVisible} collapsed={isSidebarVisuallyCollapsed} onOpen={() => { setDayNotePageOpen(false); setDayRecordOpen(false); setChatOpen(false); setMemoryOpen(false); setHomeOpen(true); }} />
+              </Suspense>
+            ) : null}
             activityExtra={DayNoteNavItemPreview && dayNotePreview?.place === "page" ? (
               <Suspense fallback={null}>
                 <DayNoteNavItemPreview active={dayNotePageOpen} collapsed={isSidebarVisuallyCollapsed} onOpen={() => setDayNotePageOpen(true)} />
@@ -12474,6 +12485,23 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       {/* ── Main content ── */}
       <MainContentShell activeTab={activeTab} loading={loading} hasLoadedOnce={hasLoadedOnce} error={error} contentRef={contentRef}>
         <Suspense fallback={<DeferredPageImportFallback label={activeTab} />}>
+        {homeVisible ? (
+          <Suspense fallback={null}>
+            <LazyHomeV2Page
+              loadHistory={loadCompactHistoryRange}
+              recentSegments={insightSegments}
+              classificationOptions={insightClassificationOptions}
+              startOfDayMinutes={startOfDayMinutes}
+              goalHours={readUserOnboardingState(user?.id ?? "local", ["local"])?.focusGoalHours ?? null}
+              achievements={achievements.snapshot.items}
+              appIcons={appIcons}
+              onOpenDay={() => { setHomeOpen(false); navigateToTab("dashboard", "Today"); }}
+              onOpenWeek={() => { setHomeOpen(false); navigateToTab("dashboard", "Week"); }}
+              onOpenAchievements={() => { setHomeOpen(false); setInsightsTabRequest({ tab: "achievements", nonce: Date.now() }); navigateToTab("trends"); }}
+              onAsk={(question) => { setHomeOpen(false); setChatDraft(question); setChatOpen(true); }}
+            />
+          </Suspense>
+        ) : null}
         {/* Dev-server review only: the day note's own page covers the tab under it. */}
         {DayNotePagePreview && dayNotePageOpen ? (
           <Suspense fallback={null}><DayNotePagePreview appIcons={appIcons} onConnect={openAiSetupSettings} /></Suspense>
