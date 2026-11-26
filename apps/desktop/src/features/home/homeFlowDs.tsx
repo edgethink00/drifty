@@ -15,6 +15,7 @@ import { C15Medal } from "../achievements/layouts/c15/C15Medal";
 import { DEEP_FOCUS_MIN_SECONDS, type HomeModel, type HomeSession } from "./homeModel";
 import { formatClock, formatDuration, formatShortDuration, topCard, type HomeLang } from "./homeCards";
 import { DriftyVoice, ItemIcon, type VoiceVariant } from "./homeVoice";
+import { StoryVoice, type StoryVariant } from "./homeStories";
 import "./home-ds.css";
 
 /*
@@ -83,8 +84,8 @@ function Title({ text, meta }: { readonly text: string; readonly meta?: string }
   );
 }
 
-export function FlowDsHome({ voice = "d0", model, lang, appIcons, achievements, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
-  readonly voice?: VoiceVariant; readonly model: HomeModel; readonly lang: HomeLang; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
+export function FlowDsHome({ voice = "d0", story = null, model, lang, appIcons, achievements, onOpenDay, onOpenWeek, onOpenAchievements, onAsk }: {
+  readonly voice?: VoiceVariant; readonly story?: StoryVariant | null; readonly model: HomeModel; readonly lang: HomeLang; readonly appIcons: AppIconMap; readonly achievements: readonly AchievementItem[];
   readonly onOpenDay: () => void; readonly onOpenWeek: () => void; readonly onOpenAchievements: () => void; readonly onAsk: (q: string) => void;
 }) {
   const c = COPY[lang];
@@ -126,7 +127,7 @@ export function FlowDsHome({ voice = "d0", model, lang, appIcons, achievements, 
       <div className="pg-head"><h1>{c.welcome}</h1></div>
       <div className="hf-grid">
         <div className="hf-main">
-          <DriftyVoice variant={voice} card={card} model={model} lang={lang} appIcons={appIcons} onAsk={onAsk} onOpenDay={onOpenDay} />
+          {story && story !== "n1" ? <StoryVoice story={story} model={model} lang={lang} onAsk={onAsk} /> : <DriftyVoice variant={story === "n1" ? "d4" : voice} card={card} model={model} lang={lang} appIcons={appIcons} onAsk={onAsk} onOpenDay={onOpenDay} />}
 
           <section className="hf-block hf-day" aria-label={c.dayTitle(dayLabel(listDay, lang, c))}>
             <div className="hf-day__top">

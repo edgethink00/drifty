@@ -45,6 +45,7 @@ const COPY = {
   },
 };
 type Copy = (typeof COPY)["ko"];
+export const voiceCopy = (lang: HomeLang): Copy => COPY[lang];
 
 export function ItemIcon({ item, appIcons }: { readonly item: HomeWorkItem; readonly appIcons: AppIconMap }) {
   const icon = appIcons[item.bundleId ?? item.appName] ?? appIcons[item.appName] ?? null;
@@ -66,7 +67,9 @@ function AskBox({ c, phase, onAsk }: { readonly c: Copy; readonly phase: HomeMod
 const weekdayOf = (day: string, c: Copy) => c.weekdays[new Date(day + "T12:00:00").getDay()];
 
 /** Today's focus added up against the usual same weekday, with the goal as the Insights gridline. */
-function PaceChart({ model, c }: { readonly model: HomeModel; readonly c: Copy }) {
+export type PaceProjection = { readonly points: readonly (readonly [number, number])[]; readonly label: string | null };
+
+export function PaceChart({ model, c, projection = null }: { readonly model: HomeModel; readonly c: Copy; readonly projection?: PaceProjection | null }) {
   const { today, usual, startMs } = model.focusCurve;
   const stepMs = CURVE_STEP_MINUTES * 60_000;
   // The exact clock time as a fractional step, so the line ends at now, not at the next quarter hour.
@@ -81,12 +84,13 @@ function PaceChart({ model, c }: { readonly model: HomeModel; readonly c: Copy }
   };
   const starts = [firstActive(today), usual ? firstActive(usual) : -1].filter((index) => index >= 0);
   const from = Math.max(0, (starts.length > 0 ? Math.min(...starts) : 0) - 2);
-  const to = Math.min(today.length - 1, Math.max(Math.ceil(at), usual ? lastRise(usual) : 0) + 2);
+  const projectionEnd = projection && projection.points.length > 0 ? projection.points[projection.points.length - 1][0] : 0;
+  const to = Math.min(today.length - 1, Math.max(Math.ceil(at), usual ? lastRise(usual) : 0, projectionEnd) + 2);
   // The figures are the ones the sentence uses; the dots sit on the drawn lines.
   const nowFocus = model.now.focus;
   const usualFigure = model.baseline.days > 0 ? model.baseline.focus : null;
   const usualDot = usual ? valueAt(usual, at) : null;
-  const top = Math.max(model.goalSeconds, usual?.[to] ?? 0, nowFocus) * 1.08;
+  const top = Math.max(model.goalSeconds, usual?.[to] ?? 0, nowFocus, ...(projection?.points.map(([, value]) => value) ?? [])) * 1.08;
   const x = (index: number) => ((index - from) / Math.max(1, to - from)) * 100;
   const y = (value: number) => 100 - (value / top) * 100;
   const pts = (values: readonly number[], end: number) => values.slice(from, end + 1).map((value, offset) => x(from + offset).toFixed(2) + "," + y(value).toFixed(2));
@@ -97,7 +101,8 @@ function PaceChart({ model, c }: { readonly model: HomeModel; readonly c: Copy }
     <div className="hf-pace">
       <div className="hf-pace__legend">
         <span><i className="productivity-dot productivity-dot--focus" aria-hidden="true" />{c.today} <b>{formatShortDuration(nowFocus)}</b></span>
-        {usualFigure !== null ? <span><i className="hf-pace__dash" aria-hidden="true" />{c.usual(weekday)} <b>{formatShortDuration(usualFigure)}</b></span> : null}
+        {usualFigure !== null && !projection ? <span><i className="hf-pace__dash" aria-hidden="true" />{c.usual(weekday)} <b>{formatShortDuration(usualFigure)}</b></span> : null}
+        {projection?.label ? <span><i className="hf-pace__dash hf-pace__dash--focus" aria-hidden="true" />{projection.label}</span> : null}
       </div>
       <div className="hf-pace__plot" role="img" aria-label={c.today + " " + formatDuration(nowFocus, "ko") + (usualFigure !== null ? ", " + c.usual(weekday) + " " + formatDuration(usualFigure, "ko") : "")}>
         <span className="wt-gridline" style={{ top: y(model.goalSeconds) + "%" }}><span className="wt-gridlabel">{formatShortDuration(model.goalSeconds)}</span></span>
@@ -105,9 +110,11 @@ function PaceChart({ model, c }: { readonly model: HomeModel; readonly c: Copy }
           {usual ? <polyline className="hf-pace__usual" points={pts(usual, to).join(" ")} /> : null}
           <polygon className="hf-pace__area" points={x(from) + ",100 " + todayLine + " " + x(at).toFixed(2) + ",100"} />
           <polyline className="hf-pace__today" points={todayLine} />
+          {projection && projection.points.length > 0 ? <polyline className="hf-pace__projection" points={[x(at).toFixed(2) + "," + y(nowFocus).toFixed(2), ...projection.points.map(([index, value]) => x(index).toFixed(2) + "," + y(value).toFixed(2))].join(" ")} /> : null}
         </svg>
-        {usualDot !== null ? <i className="productivity-dot productivity-dot--neutral hf-pace__dot" style={{ left: x(at) + "%", top: y(usualDot) + "%" }} /> : null}
+        {usualDot !== null && !projection ? <i className="productivity-dot productivity-dot--neutral hf-pace__dot" style={{ left: x(at) + "%", top: y(usualDot) + "%" }} /> : null}
         <i className="productivity-dot productivity-dot--focus hf-pace__dot" style={{ left: x(at) + "%", top: y(nowFocus) + "%" }} />
+        {projection && projection.points.length > 0 ? <i className="productivity-dot productivity-dot--neutral hf-pace__dot" style={{ left: x(projection.points[projection.points.length - 1][0]) + "%", top: y(projection.points[projection.points.length - 1][1]) + "%" }} /> : null}
       </div>
       <div className="hf-pace__axis"><span className="wt-daylabel">{clockAt(from)}</span><span className="wt-daylabel">{clockAt(to)}</span></div>
     </div>

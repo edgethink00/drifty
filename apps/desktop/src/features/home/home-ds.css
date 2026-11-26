@@ -127,3 +127,35 @@ button.hf-side__part { appearance: none; width: 100%; border-left: 0; border-rig
 .hf-figures__cell:first-child { padding-left: 0; border-left: 0; }
 .hf-figures dd { margin: 0; }
 
+
+/* Stories (N2–N7): the evidence parts beside the message. */
+.hf-pace__dash--focus { border-top-color: var(--flow-tone-focus); }
+.hf-pace__projection { fill: none; stroke: var(--flow-tone-focus); stroke-width: 1.5; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.hf-key { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-xs); }
+.hf-key--focus, .hf-key--deep { background: var(--flow-tone-focus); }
+.hf-key--short { background: var(--productivity-focus-soft); }
+.hf-key--drift { background: var(--flow-tone-drift); }
+.hf-key--muted { background: color-mix(in srgb, var(--text) 14%, transparent); }
+.hf-seg--focus { background: var(--flow-tone-focus); }
+.hf-seg--drift { background: var(--flow-tone-drift); }
+.hf-mini { position: relative; height: 6.5rem; }
+.hf-mini--grid { margin-right: 1.8rem; }
+.hf-mini--grid .wt-gridline { bottom: auto; }
+.hf-mini--grid .wt-gridlabel { right: -1.7rem; width: 1.5rem; }
+.hf-mini .wt-cols { height: 100%; }
+.hf-mini .wt-bar { min-height: 0; }
+.hf-strip { position: relative; height: 1.5rem; margin-top: var(--space-2); border-radius: var(--radius-xs); background: color-mix(in srgb, var(--text) 6%, transparent); overflow: hidden; }
+.hf-strip__block { position: absolute; top: 0; bottom: 0; border-radius: var(--radius-xs); }
+.hf-pace__axis--flush { margin-right: 0; }
+.hf-weekruns { display: grid; gap: var(--space-1); }
+.hf-weekruns__row { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); align-items: center; gap: var(--space-2); }
+.hf-weekruns__row .wt-daylabel { height: auto; }
+.hf-weekruns__row.is-today .wt-daylabel { color: var(--text); font-weight: 600; }
+.hf-weekruns__track { position: relative; height: 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--text) 6%, transparent); overflow: hidden; }
+.hf-weekruns__track .hf-strip__block { border-radius: var(--radius-pill); }
+.hf-weekruns__axis { margin: 0 0 0 calc(1.25rem + var(--space-2)); }
+.hf-note { margin-top: var(--space-4); }
+
+.hf-key--past { background: color-mix(in srgb, var(--flow-tone-focus) 45%, transparent); }
+.hf-weekruns__band { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--flow-tone-focus) 14%, transparent); }
+
