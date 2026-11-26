@@ -11,7 +11,6 @@ Notes for coding agents working in this repository. People should start with
 - `src-tauri`: Tauri 2 shell, Rust commands and native macOS and Windows code
 - `services/tracker-python`: activity capture and local storage
 - `integrations/skills`: the read-only agent skill for Drifty records
-- `browser-extension`: an archived experiment; the app does not use it
 
 Drifty Cloud's server and the iPhone app are not in this repository.
 
