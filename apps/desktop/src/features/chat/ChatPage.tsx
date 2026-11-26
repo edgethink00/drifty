@@ -809,11 +809,14 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   // Read again when the person may have just signed in from Terminal.
   const [statusVersion, setStatusVersion] = useState(0);
+  const [statusChecking, setStatusChecking] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    setStatusChecking(true);
     client.getStatus()
       .then((next) => { if (!cancelled) setStatus(next); })
-      .catch(() => { if (!cancelled) setStatus({ providers: [], toolsAvailable: false, toolsMessage: null }); });
+      .catch(() => { if (!cancelled) setStatus({ providers: [], toolsAvailable: false, toolsMessage: null }); })
+      .finally(() => { if (!cancelled) setStatusChecking(false); });
     return () => { cancelled = true; };
   }, [client, statusVersion]);
 
@@ -1250,6 +1253,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
   // The line under the composer speaks only when something needs the person: a missing
   // CLI or record tools, a Drifty Cloud sign-in or plan, and Cloud's credits left. A
   // ready Codex or Claude Code says nothing; the connection picker already names it.
+  const missingConnection = connection !== "cloud" && status !== null && !availability(connection)?.installed;
   const statusLine = (() => {
     if (connection === "cloud") {
       if (!cloudStatus) return copy.cloudChecking;
@@ -1275,6 +1279,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
       icon: <ConnectionIcon connection={value} />,
       statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
       statusTone: missing || needsSignIn ? "warning" : undefined,
+      disabled: missing,
       muted: missing,
     };
   });
@@ -1579,7 +1584,7 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                     onChange={setStoredCloudModel}
                   />
                 ) : null}
-                {cliProvider && cliChoice ? (
+                {cliProvider && cliChoice && !missingConnection ? (
                   <>
                     <SettingsSelect<string>
                       ariaLabel={copy.cliModel}
@@ -1613,7 +1618,24 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                 )}
               </div>
             </div>
-            {statusLine ? <p className="chat-usage">{statusLine}</p> : null}
+            {statusLine ? (
+              <div className={`chat-usage${missingConnection ? " chat-usage--recheck" : ""}`}>
+                <span>{statusLine}</span>
+                {missingConnection ? (
+                  <button
+                    type="button"
+                    className="chat-recheck"
+                    disabled={statusChecking}
+                    onClick={() => setStatusVersion((version) => version + 1)}
+                  >
+                    <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M13.2 6A5.3 5.3 0 0 0 4 3.6L2.8 4.8M2.8 4.8V2.4M2.8 4.8h2.4M2.8 10A5.3 5.3 0 0 0 12 12.4l1.2-1.2m0 0v2.4m0-2.4h-2.4" />
+                    </svg>
+                    {statusChecking ? copy.checkingConnection : copy.checkAgain}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </form>
           {isEmpty ? (
             <ul className="chat-tasks" aria-label={copy.tasks}>

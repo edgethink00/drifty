@@ -722,12 +722,27 @@ describe("Chat page", () => {
   });
 
   it("leaves the line under the composer empty for a ready CLI and uses it when the connection needs the person", async () => {
-    const { client } = fakeClient();
+    const { client: baseClient } = fakeClient();
+    const getStatus = vi.fn(async () => READY);
+    const client = { ...baseClient, getStatus };
     const { container } = render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
     await waitFor(() => expect((screen.getByRole("button", { name: "Yesterday’s work" }) as HTMLButtonElement).disabled).toBe(false));
     expect(container.querySelector(".chat-usage")).toBeNull();
     fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: /Claude Code/ }));
-    await waitFor(() => expect(container.querySelector(".chat-usage")?.textContent).toBe("Claude Code isn't on this computer. Install it and sign in to use it."));
+    expect(container.querySelector(".chat-usage")).toBeNull();
+
+    window.localStorage.setItem("drifty.chat.connection", "claude");
+    cleanup();
+    const unavailable = render(<LocalizationTestProvider language="en"><ChatPage client={client} /></LocalizationTestProvider>);
+    await waitFor(() => expect(unavailable.container.querySelector(".chat-usage")?.textContent).toContain("Claude Code isn't on this computer."));
+    expect(screen.queryByRole("combobox", { name: "Model" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: "Effort" })).toBeNull();
+    const checkAgain = screen.getByRole("button", { name: "Check again" });
+    fireEvent.click(within(openPicker("Connection")).getByRole("option", { name: /Claude Code/ }));
+    expect((within(screen.getByRole("listbox", { name: "Connection" })).getByRole("option", { name: /Claude Code/ }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("combobox", { name: "Connection" }));
+    fireEvent.click(checkAgain);
+    await waitFor(() => expect(getStatus).toHaveBeenCalledTimes(3));
   });
 });
 
