@@ -1020,6 +1020,11 @@
   opacity: 1;
 }
 
+.chat-picker--connection .settings-select-control__menu {
+  /* Keep the popup steady when the availability check replaces row actions. */
+  width: min(20rem, calc(100vw - 2rem));
+}
+
 .chat-picker--connection .settings-select-control__option.is-disabled {
   cursor: not-allowed;
 }
@@ -1028,7 +1033,7 @@
   opacity: 0.64;
 }
 
-.chat-picker--connection .settings-select-control__option.is-disabled .settings-select-control__option-status {
+.chat-picker--connection .settings-select-control__option-status {
   padding: 0;
   border: 0;
   color: var(--text-muted);
@@ -1037,6 +1042,7 @@
 }
 
 .chat-picker--connection .settings-select-control__option-action {
+  position: relative;
   margin-right: var(--space-1);
   border-color: var(--line-strong);
   border-radius: var(--radius-pill);
@@ -1057,6 +1063,29 @@
 .chat-picker--connection .settings-select-control__option-action:disabled {
   opacity: 0.66;
   pointer-events: none;
+}
+
+.chat-picker--connection .settings-select-control__option-action[aria-busy="true"] {
+  color: transparent;
+}
+
+.chat-picker--connection .settings-select-control__option-action[aria-busy="true"]::after {
+  position: absolute;
+  inset: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+  margin: auto;
+  border: 1.5px solid var(--line-strong);
+  border-top-color: var(--text-muted);
+  border-radius: 50%;
+  animation: action-label-spin 700ms linear infinite;
+  content: "";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-picker--connection .settings-select-control__option-action[aria-busy="true"]::after {
+    animation: none;
+  }
 }
 
 .chat-send {
@@ -1099,7 +1128,6 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 0.3rem;
   min-height: 2rem;
   padding: 0 var(--space-3);
   border: 1px solid var(--line-strong);
@@ -1111,6 +1139,12 @@
   font-weight: 500;
   cursor: pointer;
   transition: background var(--transition-fast);
+}
+
+.chat-recheck__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
 }
 
 .chat-recheck:hover:not(:disabled) {

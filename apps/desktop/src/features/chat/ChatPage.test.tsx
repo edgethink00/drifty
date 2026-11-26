@@ -767,6 +767,52 @@ describe("Chat page", () => {
     expect(chooser.textContent).toBe("Claude Code");
   });
 
+  it("rechecks a signed-out CLI without replacing the current connection or draft", async () => {
+    const { client: baseClient } = fakeClient();
+    const signedOut: ChatRuntimeStatus = {
+      ...BOTH_INSTALLED,
+      providers: BOTH_INSTALLED.providers.map((provider) => ({ ...provider, signedIn: provider.provider === "codex" })),
+    };
+    let finishCheck!: (status: ChatRuntimeStatus) => void;
+    const checking = new Promise<ChatRuntimeStatus>((resolve) => { finishCheck = resolve; });
+    const getStatus = vi.fn(async () => signedOut)
+      .mockResolvedValueOnce(signedOut)
+      .mockReturnValueOnce(checking);
+
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, getStatus }} initialDraft="Keep this draft" /></LocalizationTestProvider>);
+    const menu = within(openPicker("Connection"));
+    const action = await menu.findByRole<HTMLButtonElement>("button", { name: "Check again: Claude Code" });
+    const claude = menu.getByRole<HTMLButtonElement>("option", { name: "Claude Code" });
+    expect(claude.disabled).toBe(false);
+    expect(claude.textContent).toContain("Sign-in needed");
+    expect(claude.querySelector(".settings-select-control__option-status--warning")).toBeNull();
+    fireEvent.click(action);
+    expect(action.disabled).toBe(true);
+    expect(action.getAttribute("aria-busy")).toBe("true");
+    expect(action.textContent).toBe("Check again");
+    await act(async () => { finishCheck(BOTH_INSTALLED); });
+
+    expect(menu.queryByText("Sign-in needed")).toBeNull();
+    expect(menu.queryByRole("button", { name: "Check again: Claude Code" })).toBeNull();
+    expect(screen.getByRole("combobox", { name: "Connection" }).textContent).toBe("Codex");
+    expect(screen.getByRole<HTMLTextAreaElement>("textbox", { name: CHAT_COPY.en.placeholder }).value).toBe("Keep this draft");
+  });
+
+  it("rechecks a Cloud sign-in from the menu independently of the CLIs", async () => {
+    const { client: baseClient } = fakeClient(BOTH_INSTALLED);
+    const getStatus = vi.fn(baseClient.getStatus);
+    const cloudInvoke = vi.fn(async () => ({ status: 401, data: { code: "sign_in_required" } }));
+    render(<LocalizationTestProvider language="en"><ChatPage client={{ ...baseClient, getStatus }} cloudInvoke={cloudInvoke} /></LocalizationTestProvider>);
+    const menu = within(openPicker("Connection"));
+    const action = await menu.findByRole("button", { name: "Check again: Drifty Cloud" });
+    await act(async () => { fireEvent.click(action); });
+
+    expect(cloudInvoke.mock.calls).toHaveLength(2);
+    expect(getStatus).toHaveBeenCalledTimes(1);
+    expect(menu.getByRole("option", { name: "Drifty Cloud" }).textContent).toContain("Sign-in needed");
+    expect(screen.getByRole("combobox", { name: "Connection" }).textContent).toBe("Codex");
+  });
+
   it("restores the saved CLI's composer once a recheck detects the install", async () => {
     window.localStorage.setItem(CHAT_CONNECTION_STORAGE_KEY, "claude");
     const { client: baseClient } = fakeClient();

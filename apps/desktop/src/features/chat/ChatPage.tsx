@@ -1,6 +1,7 @@
 import { beginSupportOperation } from "../../lib/diagnostics/supportOperations";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 
+import { ActionLabel } from "../../components/ActionLabel";
 import { AnchoredPresence } from "../../components/AnchoredPresence";
 import { useDismissOnOutsidePress } from "../../lib/useDismissOnOutsidePress";
 import { useLocalization } from "../localization/LocalizationContext";
@@ -834,11 +835,18 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   // Re-read Cloud status when someone signs in or out while Chat is open.
   const [cloudAccountVersion, setCloudAccountVersion] = useState(0);
+  const [cloudStatusChecking, setCloudStatusChecking] = useState(false);
+  const recheckCloud = () => setCloudAccountVersion((version) => version + 1);
   useEffect(() => watchCloudAccount(() => setCloudAccountVersion((version) => version + 1)), [watchCloudAccount]);
 
   useEffect(() => {
     let cancelled = false;
-    void readChatCloudStatus(cloudInvoke).then((next) => { if (!cancelled) setCloudStatus(next); });
+    setCloudStatusChecking(true);
+    void readChatCloudStatus(cloudInvoke).then((next) => {
+      if (cancelled) return;
+      setCloudStatus(next);
+      setCloudStatusChecking(false);
+    });
     return () => { cancelled = true; };
   }, [cloudInvoke, cloudAccountVersion]);
 
@@ -1262,10 +1270,11 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   // Below the composer, show Cloud credits or an issue with the active connection.
   // A missing CLI has its own recovery state inside the composer.
+  const cloudNeedsSignIn = cloudStatus?.kind === "sign_in_required" || cloudStatus?.kind === "full_account_required";
   const statusLine = (() => {
     if (connection === "cloud") {
       if (!cloudStatus) return copy.cloudChecking;
-      if (cloudStatus.kind === "sign_in_required" || cloudStatus.kind === "full_account_required") return copy.cloudSignIn;
+      if (cloudNeedsSignIn) return copy.cloudSignIn;
       if (cloudStatus.kind !== "ready") return copy.cloudUnavailable;
       if (!cloudStatus.available) return copy.cloudPlanRequired;
       return copy.cloudCredits(cloudStatus.credits.remaining, cloudStatus.credits.renewsAt);
@@ -1277,24 +1286,23 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
 
   const connectionOptions: SettingsSelectOption<ChatConnection>[] = (["codex", "claude", "cloud"] as const).map((value) => {
     const missing = value !== "cloud" && status !== null && !availability(value)?.installed;
-    const needsSignIn = value !== "cloud" && signedOut(value);
+    const needsSignIn = value === "cloud" ? cloudNeedsSignIn : signedOut(value);
+    const checking = value === "cloud" ? cloudStatusChecking : statusChecking;
     const label = value === "codex" ? copy.codex : value === "claude" ? copy.claude : copy.cloud;
     return {
       value,
       label,
-      description: missing ? undefined : copy.connectionDescription(value),
+      description: missing || needsSignIn ? undefined : copy.connectionDescription(value),
       icon: <ConnectionIcon connection={value} />,
       statusLabel: missing ? copy.notInstalled : needsSignIn ? copy.signInNeeded : undefined,
-      statusTone: needsSignIn ? "warning" : undefined,
       disabled: missing,
-      actions: missing ? [{
+      actions: missing || needsSignIn ? [{
         key: "recheck",
         label: `${copy.checkAgain}: ${label}`,
         text: copy.checkAgain,
-        busyText: copy.checkingConnection,
-        busy: statusChecking,
-        disabled: statusChecking,
-        onAction: recheckConnection,
+        busy: checking,
+        disabled: checking,
+        onAction: value === "cloud" ? recheckCloud : recheckConnection,
       }] : undefined,
     };
   });
@@ -1642,13 +1650,18 @@ export function ChatPage({ client: providedClient, now = () => new Date(), proje
                   <button
                     type="button"
                     className="chat-recheck"
+                    aria-busy={statusChecking}
                     disabled={statusChecking}
                     onClick={recheckConnection}
                   >
-                    <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M13.2 6A5.3 5.3 0 0 0 4 3.6L2.8 4.8M2.8 4.8V2.4M2.8 4.8h2.4M2.8 10A5.3 5.3 0 0 0 12 12.4l1.2-1.2m0 0v2.4m0-2.4h-2.4" />
-                    </svg>
-                    {statusChecking ? copy.checkingConnection : copy.checkAgain}
+                    <ActionLabel busy={statusChecking}>
+                      <span className="chat-recheck__label">
+                        <svg viewBox="0 0 16 16" width={12} height={12} fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M13.2 6A5.3 5.3 0 0 0 4 3.6L2.8 4.8M2.8 4.8V2.4M2.8 4.8h2.4M2.8 10A5.3 5.3 0 0 0 12 12.4l1.2-1.2m0 0v2.4m0-2.4h-2.4" />
+                        </svg>
+                        {copy.checkAgain}
+                      </span>
+                    </ActionLabel>
                   </button>
                 ) : (
                   <button type="submit" className="chat-send" aria-label={copy.send} disabled={!canSend}>
