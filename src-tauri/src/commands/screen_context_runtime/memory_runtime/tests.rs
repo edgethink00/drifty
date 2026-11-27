@@ -117,3 +117,24 @@ fn published_engine_cold_install_gatekeeper_launch_and_reuse() {
     spec.team = "AAAAAAAAAA".into();
     assert!(verify(&bundle, &spec).is_err());
 }
+
+#[test]
+#[ignore = "downloads the published, signed engine into a disposable directory"]
+fn published_engine_replaces_an_earlier_one() {
+    let folder = tempfile::tempdir().unwrap();
+    // The app's store is canonical (root() refuses a redirected one); /var is not.
+    let store = folder.path().canonicalize().unwrap();
+    let spec = artifact().unwrap();
+    let earlier = store.join("20261115.1");
+    let program = earlier.join(APP).join(PROGRAM);
+    fs::create_dir_all(program.parent().unwrap()).unwrap();
+    fs::write(&program, b"earlier engine").unwrap();
+    assert!(needs_update(&store, &spec));
+    install_into(&store, &spec).unwrap();
+    let worker = store.join(&spec.version).join(APP).join(PROGRAM);
+    verify(&store.join(&spec.version).join(APP), &spec).unwrap();
+    let output = std::process::Command::new(&worker).arg("--self-test").output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(!earlier.exists());
+    assert!(!needs_update(&store, &spec));
+}

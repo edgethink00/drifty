@@ -27,13 +27,12 @@ pub(super) fn invocation(app: &AppHandle) -> Option<(PathBuf, Vec<PathBuf>)> {
     if !cfg!(target_os = "macos") {
         return None;
     }
-    let installed = app
-        .path()
-        .resource_dir()
-        .ok()?
-        .join("memory-runtime/drifty-memory");
-    if installed.is_file() {
-        return Some((installed, Vec::new()));
+    // A build without a resource folder (`tauri dev`) still runs a downloaded engine.
+    if let Ok(resources) = app.path().resource_dir() {
+        let installed = resources.join("memory-runtime/drifty-memory");
+        if installed.is_file() {
+            return Some((installed, Vec::new()));
+        }
     }
     if let Some(installed) = super::super::memory_runtime::program(app) {
         return Some((installed, Vec::new()));
