@@ -38,6 +38,10 @@ _MACOS_BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Chromium": Path.home() / "Library/Application Support/Chromium",
     "Arc": Path.home() / "Library/Application Support/Arc/User Data",
     "Aside": Path.home() / "Library/Application Support/Aside",
+    # Dia nests its profiles under User Data like Arc; Comet keeps them directly
+    # in its Application Support folder like Chrome.
+    "Dia": Path.home() / "Library/Application Support/Dia/User Data",
+    "Comet": Path.home() / "Library/Application Support/Comet",
     "Vivaldi": Path.home() / "Library/Application Support/Vivaldi",
     "Opera": Path.home() / "Library/Application Support/com.operasoftware.Opera",
     "Whale": Path.home() / "Library/Application Support/Naver/Whale",
@@ -49,10 +53,15 @@ _MACOS_BROWSER_ROOTS: Final[dict[str, Path]] = {
     "Firefox Developer Edition": Path.home() / "Library/Application Support/Firefox/Profiles",
     "Zen": Path.home() / "Library/Application Support/zen/Profiles",
     "Floorp": Path.home() / "Library/Application Support/Floorp/Profiles",
+    "LibreWolf": Path.home() / "Library/Application Support/librewolf/Profiles",
+    "Waterfox": Path.home() / "Library/Application Support/Waterfox/Profiles",
     # Safari keeps a single History.db directly under ~/Library/Safari (no
     # Chromium Default/ or Firefox profile layout). The database is TCC-protected
     # and only readable with Full Disk Access.
     "Safari": Path.home() / "Library/Safari",
+    # Safari Technology Preview keeps its own History.db, behind the same
+    # Full Disk Access gate.
+    "Safari Technology Preview": Path.home() / "Library/SafariTechnologyPreview",
 }
 
 
@@ -76,12 +85,12 @@ _BROWSER_ROOTS: Final[dict[str, Path]] = _platform_browser_roots()
 # places.sqlite history database and unix-microsecond visit timestamps, unlike
 # the Chromium family (Default/History with WebKit-epoch timestamps).
 _FIREFOX_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset(
-    {"Firefox", "Firefox Developer Edition", "Zen", "Floorp"}
+    {"Firefox", "Firefox Developer Edition", "Zen", "Floorp", "LibreWolf", "Waterfox"}
 )
 
 # Safari-family browsers use a single History.db (history_items join history_visits)
 # with Cocoa-epoch second timestamps, gated behind Full Disk Access.
-_SAFARI_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Safari"})
+_SAFARI_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Safari", "Safari Technology Preview"})
 
 _SAFARI_HISTORY_ROOT: Final[Path] = Path.home() / "Library/Safari"
 # Records the default URL scheme handler chosen in System Settings > Desktop & Dock.
@@ -133,7 +142,7 @@ class _HistoryReadOutcome:
 
 
 def is_browser_history_supported_app(app_name: str | None) -> bool:
-    return app_name in _BROWSER_ROOTS and app_name != "Safari"
+    return app_name in _BROWSER_ROOTS and not is_safari_family_browser(app_name)
 
 
 def chromium_history_paths_for_root(root: Path) -> list[Path]:

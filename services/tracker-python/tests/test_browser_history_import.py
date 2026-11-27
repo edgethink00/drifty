@@ -253,6 +253,43 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["site_url"], "https://docs.example.test/zen")
 
+    def test_import_reads_newly_listed_browsers_under_their_live_names(self) -> None:
+        # Each new name reaches its family's reader (Chromium, Firefox, Safari) and keeps
+        # the app name the live tracker reports, so day one and later days line up.
+        visited = self.now - timedelta(days=1, hours=3)
+        home = self.root
+        try:
+            for browser, family in (
+                ("Dia", "chromium"),
+                ("Comet", "chromium"),
+                ("LibreWolf", "firefox"),
+                ("Waterfox", "firefox"),
+                ("Safari Technology Preview", "safari"),
+            ):
+                with self.subTest(browser=browser):
+                    self.root = home / browser
+                    rows = [
+                        ("https://docs.example.test/" + family, browser + " Docs", visited),
+                        ("https://docs.example.test/" + family + "/next", browser + " next", visited + timedelta(minutes=3)),
+                    ]
+                    if family == "chromium":
+                        self._write_chromium_history(rows)
+                    elif family == "firefox":
+                        self._write_firefox_places("abcd.default-release", rows)
+                    else:
+                        write_safari_history(self.root, rows)
+                    db = TrackerDatabase(self.root / "tracker.sqlite3")
+                    request = BrowserHistoryImportRequest(lookback_days=7, observed_at=self.now, profile_roots={browser: self.root})
+
+                    imported = import_browser_history(db, request).to_payload()
+                    timeline = db.timeline(start=(self.now - timedelta(days=2)).isoformat(), end=self.now.isoformat())
+
+                    self.assertEqual(imported["insertedCount"], 1)
+                    self.assertEqual([row["app_name"] for row in timeline], [browser])
+                    self.assertEqual(timeline[0]["site_url"], "https://docs.example.test/" + family)
+        finally:
+            self.root = home
+
     def test_import_skips_only_a_browser_whose_profile_folder_cannot_be_listed(self) -> None:
         # macOS 1.11.23 (DRIFTY-MAC-NATIVE-4J): listing Chrome's profile folder
         # raised PermissionError and failed the whole import.
