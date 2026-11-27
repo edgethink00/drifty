@@ -10,28 +10,28 @@ AI time tracker for Mac and Windows.
 <tr>
 <td width="40%" valign="middle">
 <h3>Your day, tracked automatically</h3>
-Drifty records the app, window and browser tab in front of you. AI names each block of work and sorts it into focus, drift or neutral. No timers, no tags.
+Drifty records your apps and tabs. AI names each block of work and marks it focus or drift.
 </td>
 <td width="60%" align="center"><img src=".github/assets/readme/day.png" alt="A day in Drifty: blocks of work named by AI, such as Dashboard page refactor and Reddit and YouTube break, colored as focus, drift or neutral" width="100%"></td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>Project time without bookkeeping</h3>
-Describe a project once and Drifty sorts matching work into it, day by day.
+Describe a project once. Drifty fills in the time.
 </td>
 <td width="60%" align="center"><img src=".github/assets/readme/projects.png" alt="Project time over the latest seven days, stacked by project" width="100%"></td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>A way back when you drift</h3>
-When a stretch looks like drift, Companion offers to take you back. Drifty's desk cat can keep you company too.
+Companion offers a way back when you drift. The cat keeps you company.
 </td>
 <td width="60%" align="center"><img src=".github/assets/readme/way-back.png" alt="Companion card offering Return to focus, Take a break or Not a drift, next to Drifty's desk cat" width="100%"></td>
 </tr>
 <tr>
 <td width="40%" valign="middle">
 <h3>Bring your own AI</h3>
-Pick where classification runs, from a model on your own computer to Drifty Cloud. Switch any time.
+Run it on your own computer, with your own key or in Drifty Cloud.
 </td>
 <td width="60%" align="center"><img src=".github/assets/readme/bring-your-own-ai.png" alt="Ways to run Drifty AI: Local AI, a custom endpoint, Claude Code, Codex CLI, your own OpenAI, Anthropic or OpenRouter key, or Drifty Cloud" width="100%"></td>
 </tr>
