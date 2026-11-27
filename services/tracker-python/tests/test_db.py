@@ -1674,6 +1674,24 @@ class TrackerDatabaseTests(unittest.TestCase):
         self.assertNotEqual(first_id, requested_id)
         self.assertEqual([segment["id"] for segment in unclassified], [str(requested_id)])
 
+    def test_longest_first_selects_the_longest_unclassified_segments_before_earlier_short_ones(self) -> None:
+        def insert(started_at: str, ended_at: str, seconds: int, app_name: str) -> str:
+            self.database.insert_segment(
+                {"started_at": started_at, "ended_at": ended_at, "duration_seconds": seconds, "app_name": app_name}
+            )
+            with self.database.connect() as conn:
+                return str(conn.execute("SELECT MAX(id) AS id FROM activity_segments").fetchone()["id"])
+
+        short_early = insert("2026-04-06T09:00:00+00:00", "2026-04-06T09:01:00+00:00", 60, "Notes")
+        long_later = insert("2026-04-06T10:00:00+00:00", "2026-04-06T10:30:00+00:00", 1800, "Code")
+        medium_latest = insert("2026-04-06T11:00:00+00:00", "2026-04-06T11:05:00+00:00", 300, "Mail")
+
+        longest = self.database.fetch_unclassified_segments(limit=2, longest_first=True)
+        in_time_order = self.database.fetch_unclassified_segments(limit=2)
+
+        self.assertEqual([segment["id"] for segment in longest], [long_later, medium_latest])
+        self.assertEqual([segment["id"] for segment in in_time_order], [short_early, long_later])
+
     def test_saved_classification_is_serialized_with_timeline(self) -> None:
         self.database.record_snapshot(
             Snapshot(

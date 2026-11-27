@@ -160,6 +160,7 @@ impl TrackerController {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn get_unclassified_segments(
         &self,
         app: &AppHandle,
@@ -168,11 +169,12 @@ impl TrackerController {
         end: Option<String>,
         limit: Option<u32>,
         segment_ids: Option<Vec<String>>,
+        order: Option<String>,
     ) -> Result<Value, TrackerError> {
         self.invoke::<Value>(
             app,
             "get_unclassified_segments",
-            build_unclassified_segments_payload(day, start, end, limit, segment_ids),
+            build_unclassified_segments_payload(day, start, end, limit, segment_ids, order),
         )
     }
 
@@ -266,12 +268,17 @@ fn build_unclassified_segments_payload(
     end: Option<String>,
     limit: Option<u32>,
     segment_ids: Option<Vec<String>>,
+    order: Option<String>,
 ) -> Value {
     let mut payload = build_period_payload(day, start, end);
     if let Some(payload_object) = payload.as_object_mut() {
         payload_object.insert("limit".into(), json!(limit.unwrap_or(50)));
         if let Some(segment_ids) = segment_ids {
             payload_object.insert("segmentIds".into(), json!(segment_ids));
+        }
+        // Only the one known order is forwarded; anything else keeps the tracker's time order.
+        if order.as_deref() == Some("longest_first") {
+            payload_object.insert("order".into(), json!("longest_first"));
         }
     }
     payload
@@ -437,6 +444,7 @@ mod tests {
             None,
             Some(20),
             Some(vec!["42".into(), "43".into()]),
+            None,
         );
 
         assert_eq!(
@@ -447,10 +455,42 @@ mod tests {
 
     #[test]
     fn unclassified_segments_payload_preserves_default_limit() {
-        let payload =
-            build_unclassified_segments_payload(Some("2026-04-06".into()), None, None, None, None);
+        let payload = build_unclassified_segments_payload(
+            Some("2026-04-06".into()),
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
 
         assert_eq!(payload, json!({ "day": "2026-04-06", "limit": 50 }));
+    }
+
+    #[test]
+    fn unclassified_segments_payload_forwards_only_the_longest_first_order() {
+        let longest = build_unclassified_segments_payload(
+            Some("2026-04-06".into()),
+            None,
+            None,
+            Some(10),
+            None,
+            Some("longest_first".into()),
+        );
+        assert_eq!(
+            longest,
+            json!({ "day": "2026-04-06", "limit": 10, "order": "longest_first" })
+        );
+
+        let unknown = build_unclassified_segments_payload(
+            Some("2026-04-06".into()),
+            None,
+            None,
+            Some(10),
+            None,
+            Some("random".into()),
+        );
+        assert_eq!(unknown, json!({ "day": "2026-04-06", "limit": 10 }));
     }
 
     #[test]

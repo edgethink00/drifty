@@ -2306,6 +2306,20 @@ class TrackerMainTests(unittest.TestCase):
             {"segment-2", "unknown-segment"},
         )
 
+    def test_get_unclassified_segments_asks_for_the_longest_first_only_when_requested(self) -> None:
+        mock_db = MagicMock()
+        mock_db.fetch_unclassified_segments.return_value = []
+
+        with patch.object(tracker_main, "database", return_value=mock_db):
+            tracker_main.get_unclassified_segments({"limit": 10, "order": "longest_first"})
+            tracker_main.get_unclassified_segments({"limit": 10, "order": "random"})
+
+        self.assertEqual(
+            mock_db.fetch_unclassified_segments.call_args_list[0],
+            call(None, None, 10, None, longest_first=True),
+        )
+        self.assertEqual(mock_db.fetch_unclassified_segments.call_args_list[1], call(None, None, 10, None))
+
     def test_get_unclassified_segments_returns_no_segments_for_empty_segment_ids(self) -> None:
         mock_db = MagicMock()
 
