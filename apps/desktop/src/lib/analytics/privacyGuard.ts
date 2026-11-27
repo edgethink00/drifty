@@ -22,6 +22,7 @@ const POSTHOG_BLOCKED_PROPERTY_KEYS = [
   "analytics_schema_version",
   "app_version",
   "build_commit",
+  "build_origin",
   "identity_scope",
   "reporting_time_zone",
   "email",
