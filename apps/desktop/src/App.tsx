@@ -771,11 +771,6 @@ export default function App() {
 
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
-/**
- * How long the intro waits, at most, while the prepared day holds enough time but too little of it is
- * classified yet and classification is still running (the dashboard opened before it finished).
- */
-const INTRO_STORY_SORT_WAIT_MS = 30_000;
 const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before", recentDays: "recent_days" } as const satisfies Record<FirstDayStoryDay, string>;
 
 type HistoryReturnPoint = {
@@ -2023,10 +2018,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const introReviewFileRequestedRef = useRef(false);
   // A prepared day too short for a story reads the recent days once, to tell them together instead.
   const introRecentDaysRequestedRef = useRef(false);
-  // While the prepared day's time is still being classified, the intro waits until this moment at most.
-  const [introSortWaitUntil, setIntroSortWaitUntil] = useState<number | null>(null);
-  const [introSortWaitOver, setIntroSortWaitOver] = useState(false);
-  const introClassificationRunning = useClassificationActivity().running;
   // A story of a day with almost no focus has no focus card, so it is one card shorter.
   const introSequence = introStory.recap ? postOnboardingStorySteps(storyHasFocusCard(introStory.recap)) : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
@@ -2407,8 +2398,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!postOnboardingSidebarGuideActive) {
       if (introStory.resolved) setIntroStory({ resolved: false, recap: null });
       introRecentDaysRequestedRef.current = false;
-      if (introSortWaitUntil !== null) setIntroSortWaitUntil(null);
-      if (introSortWaitOver) setIntroSortWaitOver(false);
       return;
     }
     if (introStory.resolved || preparingFirstDay) return;
@@ -2437,12 +2426,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
     const decision = resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes });
-    // The day holds enough time but too little of it is classified yet, and classification is still
-    // running: wait for it (each saved batch reloads the day and runs this again), up to a limit.
-    if (decision.decisionReason === "below_classified_unsorted" && introClassificationRunning && !introSortWaitOver) {
-      if (introSortWaitUntil === null) setIntroSortWaitUntil(Date.now() + INTRO_STORY_SORT_WAIT_MS);
-      return;
-    }
     const settle = (next: { readonly recap: FirstDayRecap | null; readonly decisionReason: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }) => setIntroStory((current) => current.resolved ? current : {
       resolved: true,
       recap: next.recap,
@@ -2466,22 +2449,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         startOfDayMinutes,
       })))
       .catch(() => settle(decision));
-  }, [error, introClassificationRunning, introSortWaitOver, introSortWaitUntil, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
-  // A day that is still loading after a few seconds does not hold the intro back either; a day still
-  // being classified holds it until the sort wait ends, and then the intro decides on what is classified.
+  }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
+  // A day that is still loading after a few seconds does not hold the intro back either.
   const introStoryPending = postOnboardingSidebarGuideActive && !introStory.resolved && !preparingFirstDay;
   useEffect(() => {
     if (!introStoryPending) return undefined;
-    const sorting = introSortWaitUntil !== null && !introSortWaitOver;
     const timer = window.setTimeout(() => {
-      if (sorting) {
-        setIntroSortWaitOver(true);
-        return;
-      }
       setIntroStory((current) => (current.resolved ? current : { resolved: true, recap: null, decisionReason: "history_wait_timed_out" }));
-    }, sorting ? Math.max(0, introSortWaitUntil - Date.now()) : INTRO_STORY_WAIT_MS);
+    }, INTRO_STORY_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [introSortWaitOver, introSortWaitUntil, introStoryPending]);
+  }, [introStoryPending]);
   /* The intro reports each card it shows and, when it ends, the focus-support choices it settled
      (the same three booleans onboarding_completed carried while setup still asked about them) and
      whether the cat has a name. Only that boolean leaves the computer, never the name. */

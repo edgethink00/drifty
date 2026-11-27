@@ -1620,7 +1620,7 @@ describe("App onboarding", () => {
     }
   });
 
-  it("holds the intro while the day's time is still being classified, then decides on what was sorted", async () => {
+  it("opens a long day with too little classified on the sample cards at once and says why", async () => {
     const { trackerClient } = await import("./lib/api/trackerClient");
     const { buildFirstDayReviewSegments } = await import("./features/onboarding/introStoryReview");
     const { beginClassificationRun, endClassificationRun } = await import("./features/classification/classificationActivity");
@@ -1635,14 +1635,11 @@ describe("App onboarding", () => {
     window.localStorage.setItem(postOnboardingSidebarGuideStorageKey("user-1"), JSON.stringify({
       version: 1, status: "active", step: "welcome", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
     }));
-    const introViewed = () => capturePostHogEvent.mock.calls.some(([event, properties]) => event === "onboarding_intro" && (properties as { action?: string }).action === "step_viewed");
 
+    // Classification still running does not hold the intro back (a wait was tried and dropped on 2026-11-27).
     beginClassificationRun();
     try {
       render(<App />);
-      await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1_500)); });
-      expect(introViewed()).toBe(false);
-      act(() => endClassificationRun());
       await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
         action: "step_viewed", sequence: "sample", decision_reason: "below_classified_unsorted",
       })), { timeout: 4_000 });
