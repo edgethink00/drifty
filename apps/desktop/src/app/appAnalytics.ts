@@ -9,6 +9,7 @@ import {
   toDailyDedupKey,
   type PostHogEventPropertiesByName,
 } from "../lib/analytics/posthogClient";
+import { toAiRoute } from "../lib/analytics/eventHelpers";
 import type { TabId } from "./navigation";
 
 type AppSurfaceAnalyticsValue = PostHogEventPropertiesByName["app_surface_opened"]["surface"];
@@ -16,6 +17,8 @@ type DashboardPeriodAnalyticsValue = NonNullable<PostHogEventPropertiesByName["a
 type DashboardLayoutAnalyticsValue = NonNullable<PostHogEventPropertiesByName["app_surface_opened"]["dashboard_layout"]>;
 type TrackerModeAnalyticsValue = NonNullable<PostHogEventPropertiesByName["tracker_action"]["tracker_mode"]>;
 type AiProviderAnalyticsValue = PostHogEventPropertiesByName["ai_classification_run"]["provider_kind"];
+/** provider_kind, plus the exact connection when a non-Cloud provider ran. */
+export type AiProviderAnalytics = Pick<PostHogEventPropertiesByName["ai_classification_run"], "provider_kind" | "ai_route">;
 type AiClassificationResultAnalyticsValue = PostHogEventPropertiesByName["ai_classification_run"]["result"];
 type AiClassificationRangeAnalyticsValue = NonNullable<PostHogEventPropertiesByName["ai_classification_run"]["range"]>;
 type AiClassificationTriggerAnalyticsValue = PostHogEventPropertiesByName["ai_classification_run"]["trigger"];
@@ -77,14 +80,16 @@ export function toTrackerModeAnalytics(trackerMode: string | null | undefined): 
 }
 
 export function toAiProviderAnalytics(
-  hasLocalProvider: boolean,
+  localProvider: string | null | undefined,
   canUseCloudProvider: boolean,
-  provider?: string,
-): AiProviderAnalyticsValue {
-  if (hasLocalProvider && (provider === "codex_cli" || provider === "claude_cli")) return provider;
-  if (hasLocalProvider) return "local";
-  if (canUseCloudProvider) return "cloud";
-  return "none";
+): AiProviderAnalytics {
+  if (localProvider) {
+    const providerKind: AiProviderAnalyticsValue = localProvider === "codex_cli" || localProvider === "claude_cli" ? localProvider : "local";
+    const aiRoute = toAiRoute(localProvider);
+    return aiRoute ? { provider_kind: providerKind, ai_route: aiRoute } : { provider_kind: providerKind };
+  }
+  if (canUseCloudProvider) return { provider_kind: "cloud" };
+  return { provider_kind: "none" };
 }
 
 function toAiClassificationResultAnalytics(summary: AiClassificationSummary): AiClassificationResultAnalyticsValue {
@@ -106,13 +111,13 @@ function toAiClassificationResultAnalytics(summary: AiClassificationSummary): Ai
 
 export function captureAiClassificationRun(
   trigger: AiClassificationTriggerAnalyticsValue,
-  providerKind: AiProviderAnalyticsValue,
+  provider: AiProviderAnalytics,
   range: AiClassificationRangeAnalyticsValue,
   summary: AiClassificationSummary,
 ) {
   const properties: PostHogEventPropertiesByName["ai_classification_run"] = {
     trigger,
-    provider_kind: providerKind,
+    ...provider,
     result: toAiClassificationResultAnalytics(summary),
     selected_count_bucket: toCountBucket(summary.selectedSegments),
     saved_count_bucket: toCountBucket(summary.savedRecords),

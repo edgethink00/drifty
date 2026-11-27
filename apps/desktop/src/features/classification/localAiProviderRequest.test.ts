@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AdaptiveContextItem } from "@drifty/domain";
+import { LIVE_REASON_WORD_LIMIT_INSTRUCTION, type AdaptiveContextItem } from "@drifty/domain";
 import {
   buildProviderSafeEnhancedContext,
   type EnhancedContextProviderPayload,
@@ -100,6 +100,18 @@ function promptFromRequest(request: LocalAiProviderRequest | null): string {
 }
 
 describe("toLocalProviderRequest", () => {
+  it.each([
+    { provider: "managed_local", baseUrl: "http://127.0.0.1:39217/v1", model: "drifty-qwen3.5-4b-local", modelId: "drifty-qwen3-5-4b-default" },
+    { provider: "openai", apiKey: "test-key", model: "gpt-test" },
+    { provider: "anthropic", apiKey: "test-key", model: "claude-haiku-5-5" },
+    { provider: "openrouter_byok", apiKey: "test-key", model: "google/gemini-test" },
+    { provider: "self_hosted", baseUrl: "http://127.0.0.1:11434", model: "qwen-test" },
+    { provider: "codex_cli", model: "codex-default" },
+    { provider: "claude_cli", model: "claude-default" },
+  ] as const)("asks $provider for reasons of eight words or fewer", (provider) => {
+    expect(JSON.stringify(toLocalProviderRequest(provider, [basePayload], null)?.request)).toContain(LIVE_REASON_WORD_LIMIT_INSTRUCTION);
+  });
+
   it("adds an optional bearer key to custom-endpoint Classification requests", () => {
     const request = toLocalProviderRequest(
       {

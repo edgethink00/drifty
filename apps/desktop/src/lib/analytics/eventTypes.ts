@@ -13,6 +13,7 @@ import type {
   MEMORY_SUGGESTION_KINDS,
   APP_ACTIVE_TRIGGERS,
   AI_PROVIDER_KINDS,
+  AI_ROUTES,
   AI_SETUP_ACTIONS,
   AI_ISSUE_KINDS,
   APP_ERROR_ACTIONS,
@@ -169,6 +170,7 @@ export type PostHogEventPropertiesByName = {
     readonly classification_batch_count_bucket?: (typeof COUNT_BUCKETS)[number];
     readonly initial_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
     readonly remaining_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
+    readonly ai_route?: (typeof AI_ROUTES)[number];
   };
   readonly first_day_backlog: {
     readonly source: (typeof FIRST_DAY_BACKLOG_SOURCES)[number];
@@ -253,6 +255,7 @@ export type PostHogEventPropertiesByName = {
     // error_kind so the two can be compared while error_kind still re-derives
     // its value from prose; see lib/analytics/eventHelpers.test.ts.
     readonly ai_issue_kind?: (typeof AI_ISSUE_KINDS)[number];
+    readonly ai_route?: (typeof AI_ROUTES)[number];
   };
   readonly project_classification_run: {
     readonly trigger: (typeof PROJECT_CLASSIFICATION_TRIGGERS)[number];

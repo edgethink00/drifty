@@ -167,6 +167,12 @@ export const LEADERBOARD_ACTIONS = ["load", "publish", "opt_out"] as const;
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none", "codex_cli", "claude_cli"] as const;
+/**
+ * The connection a non-Cloud classification used. provider_kind folds the
+ * direct-key and self-hosted connections into one value (and, on
+ * ai_classification_run, into "local"); this separates them.
+ */
+export const AI_ROUTES = ["managed_local", "openai", "anthropic", "openrouter", "self_hosted", "codex_cli", "claude_cli"] as const;
 export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
 export const FIRST_DAY_PREPARATION_PRESENTATIONS = ["dashboard_complete", "dashboard_partial", "retry_screen"] as const;
 export const FIRST_DAY_PREPARATION_FAILURE_KINDS = ["quota", "transient", "content"] as const;
@@ -331,6 +337,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     classification_batch_count_bucket: COUNT_BUCKETS,
     initial_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
     remaining_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+    ai_route: AI_ROUTES,
   },
   first_day_backlog: {
     source: FIRST_DAY_BACKLOG_SOURCES,
@@ -411,6 +418,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     error_kind: ERROR_KINDS,
     failure_kind: CLASSIFICATION_FAILURE_KINDS,
     ai_issue_kind: AI_ISSUE_KINDS,
+    ai_route: AI_ROUTES,
   },
   project_classification_run: {
     trigger: PROJECT_CLASSIFICATION_TRIGGERS,

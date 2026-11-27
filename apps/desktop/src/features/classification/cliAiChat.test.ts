@@ -38,6 +38,14 @@ describe("CLI classification transport", () => {
     });
     await expect(invokeCliAiChat({ cliProvider: "claude", messages: [{}] }, () => true, "analysis", connection)).rejects.toMatchObject({ reason: "invalid_response" });
   });
+  it("reads an answer with prose around its code fence and a trailing comma", async () => {
+    const connection = client(async (_, line) => {
+      line(JSON.stringify({ type: "result", subtype: "success", result: 'Here are the results:\n\u0060\u0060\u0060json\n{"results":[{"id":"a","category":"workspace"},]}\n\u0060\u0060\u0060\nLet me know if you need more.' }));
+      return { code: 0, cancelled: false, stderrTail: "" };
+    });
+    const response = await invokeCliAiChat({ cliProvider: "claude", messages: [{}] }, () => true, "classification", connection);
+    expect(JSON.parse(String(response.body)).choices[0].message.content).toBe('{"results":[{"id":"a","category":"workspace"}]}');
+  });
   it("classifies a provider refusal without exposing its stderr or credentials", async () => {
     const connection = client(async () => ({ code: 1, cancelled: false, stderrTail: "OAuth token private-value expired. Please sign in." }));
     const error = await invokeCliAiChat({ cliProvider: "codex", messages: [{}] }, () => true, "classification", connection).catch(error => error);

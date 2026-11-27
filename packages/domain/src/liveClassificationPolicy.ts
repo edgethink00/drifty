@@ -657,6 +657,15 @@ export function normalizeLiveUserProductivity(value: unknown): LiveProductivityL
   return value === "focus" || value === "neutral" || value === "drift" ? value : null;
 }
 
+/**
+ * Reasons are capped at eight words for every connection, Drifty Cloud
+ * included. On the bundled 4B model this halved the output and doubled batch
+ * speed with no measurable change in focus error (2026-11-27, 580 labelled
+ * activities); API and CLI models answered 5–27% faster. Five words cost
+ * accuracy, and dropping the reason broke JSON on small models.
+ */
+export const LIVE_REASON_WORD_LIMIT_INSTRUCTION = "Keep each reason to eight words or fewer.";
+
 /** The intent-first prompt's JSON shape line, with userProductivity when the user wrote productivity definitions. */
 export function liveIntentFirstShapeLine(
   guidance: readonly LiveCategoryGuidance[] | null | undefined,
@@ -665,7 +674,7 @@ export function liveIntentFirstShapeLine(
   const match = hasLiveProductivityGuidance(guidance) ? '"userProductivity":string,' : "";
   return omitReason
     ? 'Return compact JSON only in the shape {"results":[{"id":string,"category":string,"intent":string,' + match + '"confidence":number}]}. Do not output productivity or reason.'
-    : 'Return JSON only in the shape {"results":[{"id":string,"category":string,"intent":string,' + match + '"confidence":number,"reason":string}]}. Do not output productivity. Do not include raw titles, domains, or work profile details in the reason.';
+    : 'Return JSON only in the shape {"results":[{"id":string,"category":string,"intent":string,' + match + '"confidence":number,"reason":string}]}. ' + LIVE_REASON_WORD_LIMIT_INSTRUCTION + ' Do not output productivity. Do not include raw titles, domains, or work profile details in the reason.';
 }
 
 export const LIVE_CATEGORY_REMOVAL_INSTRUCTION =
