@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
+import { toAiRoute, toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "../../lib/browserHistoryImportWindow";
@@ -425,14 +425,19 @@ export function useFirstDayPreparation({
       if (cloudAiSelected) return "cloud" as const;
       return "none" as const;
     };
+    const aiRoute = () => toAiRoute(
+      localAiClassificationOptionsRef.current?.localProvider.provider ?? (managedLocalSelected ? "managed_local" : null),
+    );
     const captureOutcome = (
       outcome: "success" | FirstDayPreparationFailureReason,
       presentation: "dashboard_complete" | "dashboard_partial" | "retry_screen",
       errorKind: AnalyticsErrorKind | null = null,
     ) => {
       try {
+        const route = aiRoute();
         capturePostHogEvent("first_day_preparation", {
           provider_kind: providerKind(),
+          ...(route ? { ai_route: route } : {}),
           outcome,
           presentation,
           ...(outcome === "success" ? {} : { phase: currentPhase }),

@@ -6733,7 +6733,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               contextSegments: driftAlarmSegments,
               persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
             };
-          const liveAiProviderKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+          const liveAiProvider = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
             if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
@@ -6757,7 +6757,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               case "classified":
                 captureAiClassificationRunOncePerDay({
                   trigger: "live",
-                  provider_kind: liveAiProviderKind,
+                  ...liveAiProvider,
                   result: "success",
                   selected_count_bucket: "1",
                   saved_count_bucket: result.classification.category === "unknown" ? "none" : "1",
@@ -6774,7 +6774,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               case "unavailable":
                 captureAiClassificationRunOncePerDay({
                   trigger: "live",
-                  provider_kind: liveAiProviderKind,
+                  ...liveAiProvider,
                   result: "unavailable",
                   selected_count_bucket: "1",
                   saved_count_bucket: "none",
@@ -6819,7 +6819,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             });
             captureAiClassificationRunOncePerDay({
               trigger: "live",
-              provider_kind: liveAiProviderKind,
+              ...liveAiProvider,
               result: "error",
               selected_count_bucket: "1",
               saved_count_bucket: "none",
@@ -10452,7 +10452,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (!forceBacklogBatch && !probeRecoveryBacklog && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const trigger = options.firstDayResume ? "first_day_resume" as const
       : isFocused ? "focused_idle" as const : "background_threshold" as const;
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
@@ -11181,7 +11181,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
       showClassificationRunNotice(disabledSummary);
-      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
+      captureAiClassificationRun("manual", { provider_kind: "none" }, selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
@@ -11193,7 +11193,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -11239,7 +11239,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!hasSelectedAiClassificationProvider) {
       const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
-      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
+      captureAiClassificationRun("manual", { provider_kind: "none" }, selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
@@ -11248,7 +11248,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;

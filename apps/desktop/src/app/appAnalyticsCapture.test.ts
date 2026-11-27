@@ -17,6 +17,7 @@ vi.mock("../lib/analytics/posthogClient", () => ({
 const {
   captureAiClassificationRun,
   captureScheduledProjectPass,
+  toAiProviderAnalytics,
 } = await import("./appAnalytics");
 
 beforeEach(() => {
@@ -62,7 +63,7 @@ describe("scheduled project pass capture policy", () => {
 
 describe("AI classification capture policy", () => {
   it("routes every run through the daily cap", () => {
-    captureAiClassificationRun("background_threshold", "cloud", "current_day", {
+    captureAiClassificationRun("background_threshold", { provider_kind: "cloud" }, "current_day", {
       status: "saved",
       selectedSegments: 1,
       savedRecords: 1,
@@ -74,7 +75,7 @@ describe("AI classification capture policy", () => {
   });
 
   it("carries the failure dimensions into the key so a failure never hides behind a success", () => {
-    captureAiClassificationRun("live", "local", "current_day", {
+    captureAiClassificationRun("live", { provider_kind: "local", ai_route: "self_hosted" }, "current_day", {
       status: "error",
       selectedSegments: 1,
       savedRecords: 0,
@@ -85,5 +86,16 @@ describe("AI classification capture policy", () => {
     expect(dedupKey).toContain("result=error");
     expect(dedupKey).toContain("error_kind=network");
     expect(dedupKey).toContain("trigger=live");
+    expect(dedupKey).toContain("ai_route=self_hosted");
+  });
+
+  it("names the connection a non-Cloud run used while keeping the older provider kinds", () => {
+    expect(toAiProviderAnalytics("managed_local", true)).toEqual({ provider_kind: "local", ai_route: "managed_local" });
+    expect(toAiProviderAnalytics("openrouter_byok", false)).toEqual({ provider_kind: "local", ai_route: "openrouter" });
+    expect(toAiProviderAnalytics("anthropic", false)).toEqual({ provider_kind: "local", ai_route: "anthropic" });
+    expect(toAiProviderAnalytics("self_hosted", false)).toEqual({ provider_kind: "local", ai_route: "self_hosted" });
+    expect(toAiProviderAnalytics("codex_cli", false)).toEqual({ provider_kind: "codex_cli", ai_route: "codex_cli" });
+    expect(toAiProviderAnalytics(null, true)).toEqual({ provider_kind: "cloud" });
+    expect(toAiProviderAnalytics(undefined, false)).toEqual({ provider_kind: "none" });
   });
 });
