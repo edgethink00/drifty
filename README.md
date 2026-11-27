@@ -5,30 +5,43 @@ AI time tracker for Mac and Windows.
 **[Download](https://drifty.so/download/)** · [Website](https://drifty.so/) · [Docs](https://docs.drifty.so/) · [Releases](https://github.com/edgethink00/drifty/releases) · [Changelog](https://drifty.so/changelog/) · [Discord](https://discord.gg/UGCtQAaDGN) · [X](https://x.com/driftyso)
 
 Drifty records the app, window and supported browser tab
-in front of you, and AI sorts each stretch into focus, drift or neutral. You
-never start a timer or tag anything. The official app asks you to sign in with
-a Drifty account; a build from source runs without one.
-
-## Release history
-
-[GitHub Releases](https://github.com/edgethink00/drifty/releases) lists desktop
-release notes starting with 1.23.0. For the original stable installers, see
-[Legacy releases](https://github.com/edgethink00/drifty_releases/releases)
-(Mac 1.6.0–1.23.0, Windows 1.11.26–1.19.2). Get the current installer from
-[drifty.so/download](https://drifty.so/download/).
+in front of you, and AI sorts each stretch into focus, drift or neutral. The
+official app asks you to sign in with a Drifty account; a build from source runs
+without one.
 
 ## What it does
 
-- **Records on its own.** Drifty builds the timeline from the app, window and
-  browser tab in front of you, and notices when you step away.
-- **Reads the context.** The same browser or editor can be focus for one task
-  and drift for another, so Drifty classifies from what was on screen, not only
-  from the app name.
-- **Bring your own AI.** A local model Drifty downloads for you, a self-hosted
-  endpoint, your own OpenAI, Anthropic or OpenRouter key, Codex CLI or Claude
-  Code, or Drifty Cloud.
-- **Projects without bookkeeping.** Describe a project once and Drifty sorts
-  matching work into it.
+<table>
+<tr>
+<td width="40%" valign="middle">
+<h3>Your day, tracked automatically</h3>
+Drifty records the app, window and browser tab in front of you. AI names each block of work and sorts it into focus, drift or neutral. No timers, no tags.
+</td>
+<td width="60%" align="center"><img src=".github/assets/readme/day.png" alt="A day in Drifty: blocks of work named by AI, such as Dashboard page refactor and Reddit and YouTube break, colored as focus, drift or neutral" width="100%"></td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Project time without bookkeeping</h3>
+Describe a project once and Drifty sorts matching work into it, day by day.
+</td>
+<td width="60%" align="center"><img src=".github/assets/readme/projects.png" alt="Project time over the latest seven days, stacked by project" width="100%"></td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>A way back when you drift</h3>
+When a stretch looks like drift, Companion offers to take you back. Drifty's desk cat can keep you company too.
+</td>
+<td width="60%" align="center"><img src=".github/assets/readme/way-back.png" alt="Companion card offering Return to focus, Take a break or Not a drift, next to Drifty's desk cat" width="100%"></td>
+</tr>
+<tr>
+<td width="40%" valign="middle">
+<h3>Bring your own AI</h3>
+Run classification on a local model or your own server, through Claude Code or Codex CLI, with your own key, or in Drifty Cloud. Switch any time.
+</td>
+<td width="60%" align="center"><img src=".github/assets/readme/bring-your-own-ai.png" alt="Ways to run Drifty AI: Local AI, a custom endpoint, Claude Code, Codex CLI, your own OpenAI, Anthropic or OpenRouter key, or Drifty Cloud" width="100%"></td>
+</tr>
+</table>
+
 - **Ask about your day.** Chat answers questions about your records, and agents
   such as Claude Code can read them through the Drifty connector or the
   read-only skill in [`integrations/skills`](integrations/skills/drifty/SKILL.md).
@@ -94,6 +107,14 @@ npm test              # web, Python and Rust tests
 A source build uses the same app identifier as the official app, so quit the
 official Drifty before running one. Windows source builds work but are not
 documented here yet.
+
+## Release history
+
+[GitHub Releases](https://github.com/edgethink00/drifty/releases) lists desktop
+release notes starting with 1.23.0. For the original stable installers, see
+[Legacy releases](https://github.com/edgethink00/drifty_releases/releases)
+(Mac 1.6.0–1.23.0, Windows 1.11.26–1.19.2). Get the current installer from
+[drifty.so/download](https://drifty.so/download/).
 
 ## Roadmap
 
