@@ -366,7 +366,7 @@ function DayBars({ recap, days, chart, cw, byCategory, isLit, fill, language }: 
       let y = base;
       return <g key={days[column]}>
         {height > 0 ? <g className="story-day__block" data-lit style={{ "--hour": column * 2 } as CSSProperties}>
-          <clipPath id={clip + column}><rect x={x} y={base - height} width={barW} height={height} rx={Math.min(5, height / 2)} /></clipPath>
+          <clipPath id={clip + column}><path d={topRoundedBar(x, base - height, barW, height, Math.min(5, height, barW / 2))} /></clipPath>
           <g clipPath={"url(#" + clip + column + ")"}>
             {runs.map((run, i) => {
               const h = (run.minutes / top) * base;
@@ -382,6 +382,12 @@ function DayBars({ recap, days, chart, cw, byCategory, isLit, fill, language }: 
       </g>;
     })}
   </>;
+}
+
+/** A bar standing on the baseline: rounded at the top, square where it meets the line. */
+function topRoundedBar(x: number, y: number, w: number, h: number, r: number): string {
+  return "M" + x + " " + (y + h) + "V" + (y + r) + "Q" + x + " " + y + " " + (x + r) + " " + y
+    + "H" + (x + w - r) + "Q" + (x + w) + " " + y + " " + (x + w) + " " + (y + r) + "V" + (y + h) + "Z";
 }
 
 /** A logical day as its short weekday in the display language ("수", "Wed", "水"). */
