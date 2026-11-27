@@ -120,6 +120,12 @@
   white-space: nowrap;
 }
 
+/* The first-year offer's badge: the same chip, filled, so the price reads as an offer. */
+.pro-sheet__badge.is-offer {
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
 .pro-sheet__price {
   display: flex;
   align-items: baseline;

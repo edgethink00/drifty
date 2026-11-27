@@ -49,6 +49,11 @@
   word-break: keep-all;
 }
 
+/* The first-year offer names its price in the accent, the way the sheet's offer badge does. */
+.trial-end-notice.is-offer .trial-end-notice__copy strong {
+  color: var(--accent-strong);
+}
+
 .trial-end-notice__dismiss {
   appearance: none;
   display: grid;

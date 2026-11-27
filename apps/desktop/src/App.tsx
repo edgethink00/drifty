@@ -109,6 +109,7 @@ import { ProLooksProvider, useProLooksController } from "./features/pro-looks/us
 import { ProStartedNotice } from "./features/billing/ProStartedNotice";
 import { TrialEndNotice } from "./features/billing/TrialEndNotice";
 import { getTrialEndFollowUpKey, useTrialEndFollowUp } from "./features/billing/trialEndFollowUp";
+import { activeFirstYearOffer, useFirstYearOfferNotice } from "./features/billing/firstYearOffer";
 import { recordProFunnelStep } from "./lib/analytics/proFunnel";
 import { resolvePlanCardState } from "./features/billing/planCardState";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
@@ -2081,6 +2082,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const shareAccountScope = isPolicySignedIn ? user?.id ?? null : null;
   useEffect(() => { setShareCardRankAccountScope(shareAccountScope); }, [shareAccountScope]);
   const requestCloudBillingAuth = openDefaultAuthModal;
+  // Classification on Drifty Cloud. Local AI and own-key setups never see the
+  // trial-end follow-up, so only this route asks the server for an offer.
+  const classificationOnCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
   const {
     billingActionError,
     billingActionErrorCode,
@@ -2116,11 +2120,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     shouldCheckBillingEntitlement,
     user,
     onAuthRequired: requestCloudBillingAuth,
+    requestFirstYearOffer: classificationOnCloudRoute,
   });
+  // The server's first-year offer (owner decision 2026-11-27), shown wherever checkout would apply it.
+  const firstYearOffer = activeFirstYearOffer(billingEntitlement?.firstYearOffer, individualPricingQuote);
+  const firstYearOfferNotice = useFirstYearOfferNotice(firstYearOffer?.id ?? null);
   // A Pro purchase made from the app moves classification to Cloud AI once. Only the
   // route changes, so the Local AI (or own-provider) setup stays in AI settings as the way back.
   const [proStartedNoticeVisible, setProStartedNoticeVisible] = useState(false);
-  const classificationOnCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
   useEffect(() => {
     if (!proPurchaseConfirmed) return;
     acknowledgeProPurchase();
@@ -11914,10 +11921,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     now: recordingCheckedNow,
   });
   // The daily notice waits for other notices, alerts and dialogs, and shows on today's dashboard only.
-  const trialEndNoticeVisible = trialEndStage === "notice" && unclassifiedTodaySeconds !== null
+  const trialEndNoticeSlotFree = unclassifiedTodaySeconds !== null
     && activeTab === "dashboard" && !upgradePlanModalOpen && !onboardingOpen && !isDashboardDemoReplayActive
     && !cloudTrialStartedNotice && !proStartedNoticeVisible && driftAlarmEvent === null
     && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
+  // The first-year offer's notice takes the daily notice's place once per offer, for an account
+  // in the trial-end follow-up that has not already seen the offer in the sheet.
+  const firstYearOfferNoticeVisible = firstYearOffer !== null && !firstYearOfferNotice.seen
+    && trialEndFollowUpKey !== null && !planInactiveFollowUp && trialEndStage !== null && trialEndStage !== "sheet"
+    && trialEndNoticeSlotFree;
+  const trialEndNoticeVisible = !firstYearOfferNoticeVisible && trialEndStage === "notice" && trialEndNoticeSlotFree;
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
     ? "Offline mode"
@@ -12246,7 +12259,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }}
         />
       ) : null}
-      {trialEndNoticeVisible ? (
+      {firstYearOfferNoticeVisible ? (
+        <TrialEndNotice
+          funnelEnabled={funnelEnabled}
+          unclassifiedSeconds={unclassifiedTodaySeconds ?? 0}
+          firstYearOffer={firstYearOffer}
+          onViewPlans={() => {
+            firstYearOfferNotice.markSeen();
+            markTrialEndNoticeSeen();
+            handleOpenUpgradePlanModal();
+          }}
+          onDismiss={() => {
+            firstYearOfferNotice.markSeen();
+            markTrialEndNoticeSeen();
+          }}
+        />
+      ) : trialEndNoticeVisible ? (
         <TrialEndNotice
           planInactive={planInactiveFollowUp}
           funnelEnabled={funnelEnabled}
@@ -13386,6 +13414,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
         billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
         individualPricingQuote={individualPricingQuote}
+        firstYearOffer={firstYearOffer}
         billingActionError={billingActionError}
         billingActionErrorCode={billingActionErrorCode}
         onCheckForUpdates={handleManualCheckForUpdates}
@@ -13399,6 +13428,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }
           // Closing the sheet ends today's follow-up, however it was opened.
           if (trialEndFollowUpKey !== null) markTrialEndSheetSeen();
+          // A sheet that already showed the offer replaces its notice.
+          if (firstYearOffer !== null) firstYearOfferNotice.markSeen();
           setUpgradePlanModalOpen(false);
         }}
       />
