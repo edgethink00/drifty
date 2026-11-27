@@ -21,7 +21,7 @@ from app.storage.timestamps import parse_iso_datetime
 from app.cli.analytics import summarize, timestamp
 
 SCHEMA_VERSION = 1
-CLI_VERSION = "1.24.0"
+CLI_VERSION = "1.24.1"
 CLI_COMMANDS = frozenset({"status", "summary", "timeline", "search", "memory", "mcp"})
 DEFAULT_LIMIT = 100
 MAX_LIMIT = 500
