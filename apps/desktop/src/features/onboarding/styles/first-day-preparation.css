@@ -228,6 +228,14 @@
   transform: none;
 }
 
+/* The time-limit question sits where the reassurance was, under the bar that keeps moving. */
+.first-day-prep__slow {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  animation: firstDayPrepLineIn 420ms ease both;
+}
+
 .first-day-prep__actions {
   display: flex;
   flex-wrap: wrap;

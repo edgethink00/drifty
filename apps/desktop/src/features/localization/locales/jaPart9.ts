@@ -177,6 +177,8 @@ export const JAPANESE_PART_9 = {
   "onboarding.preparing.checkModel": "モデルの状態を確認",
   "onboarding.preparing.retry": "再試行",
   "onboarding.preparing.continue": "ひとまず続行",
+  "onboarding.preparing.slowLine": "予想より時間がかかっています。分類は続いています。もう少し待つか、先に見て回るあいだに残りを仕上げることもできます。",
+  "onboarding.preparing.keepWaiting": "このまま待つ",
   "onboarding.dropdown.noResults": "検索結果がありません",
   "onboarding.dropdown.clearSelection": "選択を解除",
   "onboarding.dropdown.tellUsMore": "詳しく教えてください…",

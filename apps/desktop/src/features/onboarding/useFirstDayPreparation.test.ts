@@ -293,7 +293,7 @@ describe("useFirstDayPreparation", () => {
     expect(result.current.failure).toBeNull();
   });
 
-  it("reuses a still-running timed-out batch when the user retries", async () => {
+  it("keeps waiting on a slow batch past its stall windows instead of pausing", async () => {
     const firstBatch = deferred<AiClassificationSummary>();
     const runAiClassification = vi
       .fn<(...args: unknown[]) => Promise<AiClassificationSummary>>()
@@ -303,30 +303,212 @@ describe("useFirstDayPreparation", () => {
 
     const { result } = renderHook(() => useFirstDayPreparation(options));
     await flushAsync(20);
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
 
-    // Three consecutive stall windows on the same pending batch trip the
-    // transient-failure limit without launching a second in-flight call.
+    // Three stall windows used to end the run on the retry screen while the batch was still working.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(CLASSIFY_STALL_MS * FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT);
+      await vi.advanceTimersByTimeAsync(CLASSIFY_STALL_MS * 3);
       await flushAsync(30);
     });
-    expect(result.current.failure).toBe("classification_incomplete");
+    expect(result.current.failure).toBeNull();
+    expect(result.current.slowWait).toBe(false);
     expect(runAiClassification).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      result.current.retry();
-      await flushAsync(30);
-    });
-    expect(runAiClassification).toHaveBeenCalledTimes(1);
-    expect(options.onReveal).not.toHaveBeenCalled();
 
     await act(async () => {
       firstBatch.resolve(savedSummary);
       await flushAsync(40);
     });
     expect(runAiClassification).toHaveBeenCalledTimes(2);
-    expect(options.onReveal).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+  });
+
+  it("opens a day the intro can already tell at the time limit and finishes it in the background", async () => {
+    const firstBatch = deferred<AiClassificationSummary>();
+    const runAiClassification = vi.fn().mockReturnValueOnce(firstBatch.promise);
+    const background = vi.fn().mockResolvedValue(emptySummary);
+    const isStoryReady = vi.fn().mockResolvedValue(true);
+    const options = makeLocalOptions({ runAiClassification, runAiClassificationUntilEmpty: background, isStoryReady });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS);
+      await flushAsync(30);
+    });
+
+    expect(isStoryReady).toHaveBeenCalledWith("2026-07-03");
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.failure).toBeNull();
+    expect(result.current.slowWait).toBe(false);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      provider_kind: "custom", ai_route: "self_hosted", outcome: "preparation_timed_out", presentation: "dashboard_partial",
+      time_limit_reached: true, keep_waiting_count_bucket: "none", time_limit_exit: "story_ready",
+    }));
+
+    // The batch that was running at the limit finishes first; then the prepared day is finished
+    // in the background on the local route, without waiting for Cloud.
+    expect(background).not.toHaveBeenCalled();
+    await act(async () => {
+      firstBatch.resolve(savedSummary);
+      await flushAsync(40);
+    });
+    expect(background).toHaveBeenCalledWith(
+      expect.objectContaining({ day: "2026-07-03" }),
+      undefined,
+      expect.objectContaining({ localProvider: expect.objectContaining({ provider: "self_hosted" }) }),
+    );
+  });
+
+  it("keeps classifying past the time limit and asks whether to keep waiting while the day cannot be told", async () => {
+    const runAiClassification = vi.fn(() => new Promise<AiClassificationSummary>((resolve) => {
+      setTimeout(() => resolve(savedSummary), 60_000);
+    }));
+    const background = vi.fn().mockResolvedValue(emptySummary);
+    const isStoryReady = vi.fn().mockResolvedValue(false);
+    const options = makeLocalOptions({ runAiClassification, runAiClassificationUntilEmpty: background, isStoryReady });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS);
+      await flushAsync(30);
+    });
+    expect(result.current.slowWait).toBe(true);
+    expect(result.current.failure).toBeNull();
+    expect(options.onReveal).not.toHaveBeenCalled();
+
+    // The question does not stop the work: batches keep landing while it is on screen.
+    const callsAtLimit = runAiClassification.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+      await flushAsync(30);
+    });
+    expect(runAiClassification.mock.calls.length).toBeGreaterThan(callsAtLimit);
+    expect(result.current.slowWait).toBe(true);
+
+    // Keep waiting gives another full limit before asking again.
+    act(() => result.current.keepWaiting());
+    expect(result.current.slowWait).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS - 1_000);
+      await flushAsync(30);
+    });
+    expect(result.current.slowWait).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flushAsync(30);
+    });
+    expect(result.current.slowWait).toBe(true);
+
+    // Continue for now opens the dashboard and hands the day to the background pass.
+    act(() => result.current.continueNow());
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.slowWait).toBe(false);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      outcome: "preparation_timed_out", presentation: "dashboard_partial",
+      time_limit_reached: true, keep_waiting_count_bucket: "1", time_limit_exit: "continued",
+    }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flushAsync(40);
+    });
+    expect(background).toHaveBeenCalledWith(expect.objectContaining({ day: "2026-07-03" }), undefined, expect.anything());
+  });
+
+  it("opens the day once a batch past the time limit lets the intro tell it", async () => {
+    const runAiClassification = vi.fn(() => new Promise<AiClassificationSummary>((resolve) => {
+      setTimeout(() => resolve(savedSummary), 60_000);
+    }));
+    let storyAfterLimit = false;
+    const isStoryReady = vi.fn(async () => storyAfterLimit);
+    const options = makeLocalOptions({ runAiClassification, isStoryReady });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS);
+      await flushAsync(30);
+    });
+    expect(result.current.slowWait).toBe(true);
+
+    storyAfterLimit = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flushAsync(30);
+    });
+    expect(options.onReveal).toHaveBeenCalledWith("continue");
+    expect(result.current.slowWait).toBe(false);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      time_limit_reached: true, time_limit_exit: "story_ready",
+    }));
+  });
+
+  it("finishes a day that completes while the time-limit question is on screen", async () => {
+    let calls = 0;
+    const runAiClassification = vi.fn(() => new Promise<AiClassificationSummary>((resolve) => {
+      calls += 1;
+      setTimeout(() => resolve(calls > 6 ? emptySummary : savedSummary), 60_000);
+    }));
+    const options = makeLocalOptions({ runAiClassification, isStoryReady: vi.fn().mockResolvedValue(false) });
+
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await flushAsync(20);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS);
+      await flushAsync(30);
+    });
+    expect(result.current.slowWait).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+      await flushAsync(40);
+    });
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+    expect(result.current.slowWait).toBe(false);
+    expect(analyticsMocks.capturePostHogEvent).toHaveBeenCalledWith("first_day_preparation", expect.objectContaining({
+      outcome: "success", presentation: "dashboard_complete", time_limit_reached: true,
+    }));
+  });
+
+  it("goes on from a finished browser import when the person retries a real failure", async () => {
+    const contentMiss = summary({ status: "error", selectedSegments: 3, savedRecords: 0, failureKind: "content" });
+    const runAiClassification = vi.fn()
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValue(emptySummary);
+    const options = makeLocalOptions({ runAiClassification });
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(50));
+    expect(result.current.failure).toBe("classification_incomplete");
+    expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.retry();
+      await flushAsync(40);
+    });
+    expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(1);
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+  });
+
+  it("imports again on retry when the earlier import could not read every browser", async () => {
+    trackerMocks.importBrowserHistory.mockResolvedValue({ ...emptyImportPreview(), errorCount: 1, insertedCount: 0, skippedDuplicateCount: 0 });
+    const contentMiss = summary({ status: "error", selectedSegments: 3, savedRecords: 0, failureKind: "content" });
+    const runAiClassification = vi.fn()
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValueOnce(contentMiss)
+      .mockResolvedValue(emptySummary);
+    const options = makeLocalOptions({ runAiClassification });
+    const { result } = renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(50));
+    expect(result.current.failure).toBe("classification_incomplete");
+
+    await act(async () => {
+      result.current.retry();
+      await flushAsync(40);
+    });
+    expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(2);
   });
 
   it("classifies the whole target day instead of limiting batches to visible flow blocks", async () => {

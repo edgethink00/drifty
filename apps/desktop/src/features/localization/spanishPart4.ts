@@ -66,6 +66,8 @@ export const SPANISH_PART_4 = {
   "onboarding.preparing.checkModel": "Comprobar el modelo",
   "onboarding.preparing.retry": "Intentar de nuevo",
   "onboarding.preparing.continue": "Continuar por ahora",
+  "onboarding.preparing.slowLine": "Está tardando más de lo esperado. La clasificación sigue: espera un poco más o explora ahora mientras Drifty termina el resto.",
+  "onboarding.preparing.keepWaiting": "Seguir esperando",
   "onboarding.dropdown.noResults": "Sin resultados",
   "onboarding.dropdown.clearSelection": "Borrar selección",
   "onboarding.dropdown.tellUsMore": "Cuéntanos más…",

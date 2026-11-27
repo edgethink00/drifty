@@ -183,6 +183,11 @@ export const FIRST_DAY_PREPARATION_DURATION_BUCKETS = ["under_30s", "30_90s", "9
 export const FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS = ["under_5s", "5_15s", "15_30s", "30_60s", "60s_plus"] as const;
 export const FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS = ["none", "1_20", "21_50", "51_100", "100_plus"] as const;
 export const FIRST_DAY_BACKLOG_SOURCES = ["foreground", "background", "resume"] as const;
+/**
+ * How a local first-day run past its time limit opened the dashboard: on its own once the intro
+ * could tell the day (story_ready), or because the person chose to look around now (continued).
+ */
+export const FIRST_DAY_TIME_LIMIT_EXITS = ["story_ready", "continued"] as const;
 /** The Star on GitHub corner card and the Settings sidebar GitHub row. */
 export const GITHUB_STAR_PROMPT_ACTIONS = ["shown", "clicked", "dismissed"] as const;
 export const GITHUB_STAR_PROMPT_PLACEMENTS = ["corner", "settings", "onboarding"] as const;
@@ -338,6 +343,9 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     initial_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
     remaining_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
     ai_route: AI_ROUTES,
+    time_limit_reached: "boolean",
+    keep_waiting_count_bucket: COUNT_BUCKETS,
+    time_limit_exit: FIRST_DAY_TIME_LIMIT_EXITS,
   },
   first_day_backlog: {
     source: FIRST_DAY_BACKLOG_SOURCES,

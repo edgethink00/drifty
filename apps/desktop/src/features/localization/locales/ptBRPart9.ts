@@ -177,6 +177,8 @@ export const BRAZILIAN_PORTUGUESE_PART_9 = {
   "onboarding.preparing.checkModel": "Verificar modelo",
   "onboarding.preparing.retry": "Tentar novamente",
   "onboarding.preparing.continue": "Continuar por enquanto",
+  "onboarding.preparing.slowLine": "Está demorando mais que o esperado. A classificação continua: espere mais um pouco ou explore agora enquanto o Drifty termina o resto.",
+  "onboarding.preparing.keepWaiting": "Continuar esperando",
   "onboarding.dropdown.noResults": "Nenhum resultado",
   "onboarding.dropdown.clearSelection": "Limpar seleção",
   "onboarding.dropdown.tellUsMore": "Conte mais…",

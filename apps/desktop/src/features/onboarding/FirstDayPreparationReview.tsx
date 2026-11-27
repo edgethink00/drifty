@@ -54,6 +54,13 @@ const REAL_PACE: Pace = {
   dashboardAfterMs: FIRST_DAY_PREPARATION_READY_HOLD_MS,
 };
 
+/**
+ * ?driftyFirstDayState=slow: a local run past its time limit, compressed. Batches keep landing slowly;
+ * the time-limit question appears at SLOW_LIMIT_MS and again that long after each "keep waiting".
+ */
+const SLOW_PACE: Pace = { batches: FIRST_DAY_REVIEW_BATCHES, readMs: 1800, loadedMs: 2200, batchMs: 9000, tailMs: 400, dashboardAfterMs: null };
+const SLOW_LIMIT_MS = 12_000;
+
 const classifiedEntries = (pace: Pace, batchesDone: number) => pace.batches.slice(0, batchesDone).reduce((sum, batch) => sum + batch.length, 0);
 const classifyingProgress = (pace: Pace, batchesDone: number) => 0.32 + 0.66 * (classifiedEntries(pace, batchesDone) / FIRST_DAY_REVIEW_ENTRY_COUNT);
 const readyAt = (pace: Pace) => pace.readMs + pace.loadedMs + pace.batchMs * pace.batches.length + pace.tailMs;
@@ -85,29 +92,48 @@ function playedStage(pace: Pace, elapsedMs: number): Stage {
 
 /**
  * Development review of the first-day preparation screen with a synthetic browser-history day.
- * Plays every stage in turn, or holds one with ?driftyFirstDayStage=0..5.
+ * Plays every stage in turn, or holds one with ?driftyFirstDayStage=0..5. ?driftyFirstDayState=slow
+ * adds the time-limit question (at once on a held stage); =paused shows the retry screen a real
+ * failure still gets. With =slow, ?driftyFirstDayLimitIn=5 starts mid-classification that many seconds
+ * before the limit. ?driftyFirstDayStartAt=<epoch ms> starts the clock at that moment, so frames
+ * shown side by side play in step.
  */
 export function FirstDayPreparationReview({ appIcons = {} }: { readonly appIcons?: AppIconMap }) {
   useIntroReviewOverrides(true, "macos");
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const pace = params.get("driftyFirstDayPace") === "real" ? REAL_PACE : COMPACT_PACE;
+  const reviewState = params.get("driftyFirstDayState");
+  const slowReview = reviewState === "slow";
+  const pace = slowReview ? SLOW_PACE : params.get("driftyFirstDayPace") === "real" ? REAL_PACE : COMPACT_PACE;
   const held = useMemo(() => {
     const value = params.get("driftyFirstDayStage");
     const stage = value === null ? NaN : Number(value);
     return Number.isInteger(stage) && stage >= 0 && stage < STAGES.length ? stage : null;
   }, [params]);
   const endAt = readyAt(pace) + (pace.dashboardAfterMs ?? 0);
-  const [elapsed, setElapsed] = useState(0);
+  const limitInMs = useMemo(() => {
+    const value = params.get("driftyFirstDayLimitIn");
+    const seconds = value === null ? NaN : Number(value);
+    return slowReview && Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+  }, [params, slowReview]);
+  const startAt = useMemo(() => {
+    const epoch = Number(params.get("driftyFirstDayStartAt"));
+    return Number.isFinite(epoch) && epoch > 0 ? epoch : null;
+  }, [params]);
+  // One batch already classified, so the run is visibly underway when the limit nears.
+  const startOffsetMs = limitInMs === null ? 0 : pace.readMs + pace.loadedMs + pace.batchMs;
+  const [elapsed, setElapsed] = useState(startOffsetMs);
+  const [askAfterMs, setAskAfterMs] = useState(limitInMs === null ? SLOW_LIMIT_MS : startOffsetMs + limitInMs);
+  const [continuedNow, setContinuedNow] = useState(false);
   useEffect(() => {
-    if (held !== null) return undefined;
-    const startedAt = Date.now();
+    if (held !== null || continuedNow) return undefined;
+    const startedAt = startAt ?? Date.now();
     const timer = window.setInterval(() => {
-      const next = Date.now() - startedAt;
+      const next = startOffsetMs + Math.max(0, Date.now() - startedAt);
       setElapsed(next);
       if (next >= endAt + 400) window.clearInterval(timer);
     }, 100);
     return () => window.clearInterval(timer);
-  }, [endAt, held]);
+  }, [continuedNow, endAt, held, startAt, startOffsetMs]);
   // Capture scripts wait on this to take every capture at the same moment of the playback.
   useEffect(() => {
     document.documentElement.dataset.firstDayReviewElapsed = String(held !== null ? -1 : elapsed);
@@ -127,7 +153,8 @@ export function FirstDayPreparationReview({ appIcons = {} }: { readonly appIcons
   );
   const siteIcons = useMemo(buildFirstDayReviewSiteIcons, []);
   const reviewAppIcons = useMemo(() => ({ ...buildFirstDayReviewAppIcons(params.get("driftyReviewIconBase")), ...appIcons }), [appIcons, params]);
-  if (held === null && pace.dashboardAfterMs !== null && elapsed >= endAt) {
+  const slowWait = slowReview && (held !== null || elapsed >= askAfterMs);
+  if (continuedNow || (held === null && pace.dashboardAfterMs !== null && elapsed >= endAt)) {
     // Stand-in for the dashboard, so a real-speed review shows how briefly ready is on screen.
     return (
       <div className="first-day-prep" data-first-day-review-dashboard="">
@@ -147,6 +174,12 @@ export function FirstDayPreparationReview({ appIcons = {} }: { readonly appIcons
         dayRelation="yesterday"
         workActivityLabel="Designing"
         reading={reading}
+        failure={reviewState === "paused" ? "classification_incomplete" : null}
+        onRetry={() => undefined}
+        onContinueAnyway={() => undefined}
+        slowWait={slowWait}
+        onKeepWaiting={() => setAskAfterMs(elapsed + SLOW_LIMIT_MS)}
+        onContinueNow={() => setContinuedNow(true)}
       />
     </SiteIconProvider>
   );

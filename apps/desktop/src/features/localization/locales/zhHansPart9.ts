@@ -177,6 +177,8 @@ export const SIMPLIFIED_CHINESE_PART_9 = {
   "onboarding.preparing.checkModel": "检查模型状态",
   "onboarding.preparing.retry": "重试",
   "onboarding.preparing.continue": "暂时继续",
+  "onboarding.preparing.slowLine": "耗时比预期长。分类仍在继续：可以再等一会儿，也可以先四处看看，Drifty 会完成剩下的部分。",
+  "onboarding.preparing.keepWaiting": "继续等待",
   "onboarding.dropdown.noResults": "没有结果",
   "onboarding.dropdown.clearSelection": "清除选择",
   "onboarding.dropdown.tellUsMore": "详细说说…",

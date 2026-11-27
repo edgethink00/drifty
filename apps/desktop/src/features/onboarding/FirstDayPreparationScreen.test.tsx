@@ -59,6 +59,38 @@ describe("FirstDayPreparationScreen", () => {
     expect(screen.getByText("Reading through your day…")).toBeTruthy();
   });
 
+  it("asks past the time limit whether to keep waiting while the bar stays on screen", () => {
+    const onKeepWaiting = vi.fn();
+    const onContinueNow = vi.fn();
+    render(
+      <FirstDayPreparationScreen
+        phase="classifying"
+        progress={0.46}
+        slowWait
+        onKeepWaiting={onKeepWaiting}
+        onContinueNow={onContinueNow}
+      />,
+    );
+
+    // The run keeps going, so this is no failure dialog: the progress stays and the question sits under it.
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("46");
+    expect(screen.getByText("This is taking longer than expected. Sorting keeps going: wait a little longer, or look around now while Drifty finishes the rest.")).toBeTruthy();
+    expect(screen.queryByText("This only happens once. Drifty keeps up in the background from now on.")).toBeNull();
+    const keepWaiting = screen.getByRole("button", { name: "Keep waiting" });
+    expect(document.activeElement).toBe(keepWaiting);
+    fireEvent.click(keepWaiting);
+    fireEvent.click(screen.getByRole("button", { name: "Continue for now" }));
+    expect(onKeepWaiting).toHaveBeenCalledOnce();
+    expect(onContinueNow).toHaveBeenCalledOnce();
+  });
+
+  it("drops the time-limit question once the day is ready", () => {
+    render(<FirstDayPreparationScreen phase="ready" progress={1} slowWait onKeepWaiting={vi.fn()} onContinueNow={vi.fn()} />);
+
+    expect(screen.queryByRole("button", { name: "Keep waiting" })).toBeNull();
+  });
+
   it("offers an explicit retry or continue choice after repeated preparation failures", () => {
     const onRetry = vi.fn();
     const onContinueAnyway = vi.fn();

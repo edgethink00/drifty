@@ -177,6 +177,8 @@ export const FRENCH_PART_9 = {
   "onboarding.preparing.checkModel": "Vérifier le modèle",
   "onboarding.preparing.retry": "Réessayer",
   "onboarding.preparing.continue": "Continuer pour le moment",
+  "onboarding.preparing.slowLine": "Cela prend plus de temps que prévu. Le tri continue : patientez encore un peu, ou explorez dès maintenant pendant que Drifty termine le reste.",
+  "onboarding.preparing.keepWaiting": "Continuer d’attendre",
   "onboarding.dropdown.noResults": "Aucun résultat",
   "onboarding.dropdown.clearSelection": "Effacer la sélection",
   "onboarding.dropdown.tellUsMore": "Dites-nous en plus…",
