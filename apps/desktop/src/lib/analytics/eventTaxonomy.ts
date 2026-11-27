@@ -72,15 +72,25 @@ export const ONBOARDING_STEPS = [
 ] as const;
 export const SETUP_CHOICES = ["simple", "local_ai", "byok", "custom_endpoint", "codex_cli", "claude_cli"] as const;
 /** The post-setup introduction: its cards, which sequence it opened on, and what happened to it. */
-export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "drift", "account", "activity", "tracking", "handoff"] as const;
+export const ONBOARDING_INTRO_STEPS = ["welcome", "day", "recap", "focus", "drift", "account", "activity", "tracking", "handoff"] as const;
 export const ONBOARDING_INTRO_SEQUENCES = ["story", "sample"] as const;
 /** The day a story intro tells, relative to the install day. */
-export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before"] as const;
+export const ONBOARDING_INTRO_STORY_DAYS = ["yesterday", "today", "day_before", "recent_days"] as const;
 export const ONBOARDING_INTRO_ACTIONS = ["step_viewed", "completed", "dismissed", "skipped"] as const;
-/** First matching decision, in the same order as the local introduction rules. */
+/**
+ * First matching decision, in the same order as the local introduction rules. story_no_focus is a story
+ * that opens on where the time went because it held almost no focus (below_focus_minimum is its earlier
+ * sample-card label). Three labels split a sample intro by what first-run preparation saw:
+ * no_history_import_off and no_history_safari_locked narrow no_usable_history, and
+ * below_classified_window_enough narrows below_classified_minimum to a short day whose three imported
+ * days together held enough time. below_classified_unsorted is a day whose recorded time reached the
+ * minimum while too little of it was classified yet. A story of the three recent days together reports
+ * story_day recent_days.
+ */
 export const ONBOARDING_INTRO_DECISION_REASONS = [
-  "story_ready", "story_low_focus", "prepared_today", "prepared_other_day", "no_usable_history",
-  "below_classified_minimum", "below_focus_minimum", "no_chart",
+  "story_ready", "story_low_focus", "story_no_focus", "prepared_today", "prepared_other_day", "no_usable_history",
+  "no_history_import_off", "no_history_safari_locked", "below_classified_window_enough",
+  "below_classified_minimum", "below_classified_unsorted", "below_focus_minimum", "no_chart",
   "history_read_failed", "history_wait_timed_out",
 ] as const;
 export type OnboardingIntroDecisionReason = (typeof ONBOARDING_INTRO_DECISION_REASONS)[number];
@@ -136,12 +146,33 @@ export const BILLING_ACTIONS = [
   "friend_invite_menu_opened",
 ] as const;
 export const BILLING_INTERVALS = ["monthly", "quarterly", "yearly", "unknown"] as const;
+/** Why checkout creation refused, as the server coded it; "uncoded" covers transport and older server errors. */
+export const CHECKOUT_FAILURE_CODES = [
+  "checkout_maintenance",
+  "pricing_revision_mismatch",
+  "pricing_quote_mismatch",
+  "checkout_in_progress",
+  "checkout_payment_pending",
+  "checkout_session_closed",
+  "checkout_interval_conflict",
+  "already_subscribed",
+  "offer_unavailable",
+  "uncoded",
+] as const;
+/** The server-issued price shown with an offer, when one was. */
+export const PRICE_OFFERS = ["first_year_yearly"] as const;
 export const ENTITLEMENT_STATUSES = ["active", "trialing", "locked", "unknown"] as const;
 export const LOCKED_REASONS = ["trial_expired", "payment_required", "billing_missing", "device_limit_reached", "unavailable", "unknown"] as const;
 export const LEADERBOARD_ACTIONS = ["load", "publish", "opt_out"] as const;
 export const LEADERBOARD_PERIODS = ["daily", "weekly", "monthly"] as const;
 export const AI_SETUP_ACTIONS = ["open", "test_connection", "save_provider", "disable"] as const;
 export const AI_PROVIDER_KINDS = ["cloud", "local", "custom", "none", "codex_cli", "claude_cli"] as const;
+/**
+ * The connection a non-Cloud classification used. provider_kind folds the
+ * direct-key and self-hosted connections into one value (and, on
+ * ai_classification_run, into "local"); this separates them.
+ */
+export const AI_ROUTES = ["managed_local", "openai", "anthropic", "openrouter", "self_hosted", "codex_cli", "claude_cli"] as const;
 export const FIRST_DAY_PREPARATION_OUTCOMES = ["success", "cloud_not_ready", "classification_incomplete", "preparation_timed_out"] as const;
 export const FIRST_DAY_PREPARATION_PRESENTATIONS = ["dashboard_complete", "dashboard_partial", "retry_screen"] as const;
 export const FIRST_DAY_PREPARATION_FAILURE_KINDS = ["quota", "transient", "content"] as const;
@@ -306,6 +337,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     classification_batch_count_bucket: COUNT_BUCKETS,
     initial_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
     remaining_segment_count_bucket: FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS,
+    ai_route: AI_ROUTES,
   },
   first_day_backlog: {
     source: FIRST_DAY_BACKLOG_SOURCES,
@@ -346,6 +378,8 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     entitlement_status: ENTITLEMENT_STATUSES,
     locked_reason: LOCKED_REASONS,
     error_kind: ERROR_KINDS,
+    failure_code: CHECKOUT_FAILURE_CODES,
+    price_offer: PRICE_OFFERS,
   },
   pro_funnel_step: {
     step: ["classified_result_viewed", "pro_offer_viewed", "pro_offer_acted", "checkout_opened"],
@@ -355,6 +389,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     offer_context: ["trial_active", "trial_ended", "plan_inactive", "upgrade", "upgrade_local"],
     offer_action: ["view_plans", "dismiss"],
     billing_interval: BILLING_INTERVALS,
+    price_offer: PRICE_OFFERS,
   },
   leaderboard_action: {
     action: LEADERBOARD_ACTIONS,
@@ -383,6 +418,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     error_kind: ERROR_KINDS,
     failure_kind: CLASSIFICATION_FAILURE_KINDS,
     ai_issue_kind: AI_ISSUE_KINDS,
+    ai_route: AI_ROUTES,
   },
   project_classification_run: {
     trigger: PROJECT_CLASSIFICATION_TRIGGERS,

@@ -28,6 +28,9 @@ import { toPostHogPersonPlan } from "../../lib/analytics/accountProfile";
 import { canStartIndividualCheckout } from "./billingEligibility";
 import { useNativeTrialStatus } from "./useNativeTrialStatus";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
+import type { AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
+import { activeFirstYearOffer } from "./firstYearOffer";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
@@ -35,6 +38,11 @@ type UseCloudBillingControllerInput = {
   readonly shouldCheckBillingEntitlement: boolean;
   readonly user: AuthState["user"];
   readonly onAuthRequired: () => void;
+  /**
+   * This app would show a first-year offer: classification runs on Drifty Cloud.
+   * Only then does the entitlement request ask the server for one.
+   */
+  readonly requestFirstYearOffer?: boolean;
 };
 
 type UseCloudBillingControllerResult = {
@@ -93,13 +101,31 @@ function cloudEntitlementRetryDelay(): Promise<void> {
 
 async function fetchBillingEntitlementWithConfirmation(
   shouldContinue: () => boolean,
+  options: Parameters<typeof fetchBillingEntitlement>[1] = {},
 ): Promise<Awaited<ReturnType<typeof fetchBillingEntitlement>>> {
-  const firstResult = await fetchBillingEntitlement();
+  const firstResult = await fetchBillingEntitlement(undefined, options);
   if (firstResult.success || !shouldContinue()) return firstResult;
   await cloudEntitlementRetryDelay();
   if (!shouldContinue()) return firstResult;
-  return fetchBillingEntitlement();
+  return fetchBillingEntitlement(undefined, options);
 }
+
+/**
+ * What the person reads when the server refuses to open checkout, and the
+ * analytics kind it is filed under. The server sends the same refusals as codes
+ * so every supported language gets its own sentence.
+ */
+const CHECKOUT_FAILURE_COPY: Readonly<Record<CheckoutFailureCode, { readonly message: TranslationKey; readonly errorKind: AnalyticsErrorKind }>> = {
+  checkout_maintenance: { message: "billing.checkout.maintenance", errorKind: "unavailable" },
+  pricing_revision_mismatch: { message: "billing.checkout.updateRequired", errorKind: "validation" },
+  pricing_quote_mismatch: { message: "billing.checkout.priceChanged", errorKind: "validation" },
+  checkout_in_progress: { message: "billing.checkout.inProgress", errorKind: "unavailable" },
+  checkout_payment_pending: { message: "billing.checkout.paymentPending", errorKind: "unavailable" },
+  checkout_session_closed: { message: "billing.checkout.sessionClosed", errorKind: "unavailable" },
+  checkout_interval_conflict: { message: "billing.checkout.intervalConflict", errorKind: "unavailable" },
+  already_subscribed: { message: "billing.checkout.alreadySubscribed", errorKind: "validation" },
+  offer_unavailable: { message: "billing.checkout.offerUnavailable", errorKind: "validation" },
+};
 
 export function useCloudBillingController({
   hasRequiredAccountAuth,
@@ -107,8 +133,12 @@ export function useCloudBillingController({
   shouldCheckBillingEntitlement,
   user,
   onAuthRequired,
+  requestFirstYearOffer = false,
 }: UseCloudBillingControllerInput): UseCloudBillingControllerResult {
   const { t } = useLocalization();
+  // Read at request time, so a change of classification route never refetches by itself.
+  const requestFirstYearOfferRef = useRef(requestFirstYearOffer);
+  requestFirstYearOfferRef.current = requestFirstYearOffer;
   const [billingEntitlement, setBillingEntitlement] = useState<BillingEntitlement | null>(null);
   // The account a stored entitlement belongs to, so a previous account's trial never reaches the menu.
   const [billingEntitlementAccountId, setBillingEntitlementAccountId] = useState<string | null>(null);
@@ -257,6 +287,7 @@ export function useCloudBillingController({
     try {
       result = await fetchBillingEntitlementWithConfirmation(
         () => requestId === billingEntitlementRequestRef.current,
+        { requestFirstYearOffer: requestFirstYearOfferRef.current },
       );
     } catch (error) {
       if (requestId !== billingEntitlementRequestRef.current) return null;
@@ -402,33 +433,36 @@ export function useCloudBillingController({
     let openedCheckout = false;
     setBillingCheckoutLoadingInterval(billingInterval);
     try {
-      const checkoutResult = individualPricingQuote
-        ? await createIndividualCheckout(billingInterval, individualPricingQuote)
-        : await createIndividualCheckout(billingInterval);
+      // The first-year offer applies to the yearly plan only; the server checks it again.
+      const offer = billingInterval === "yearly"
+        ? activeFirstYearOffer(billingEntitlement?.firstYearOffer, individualPricingQuote)
+        : null;
+      const priceOffer = offer ? { price_offer: offer.kind } : {};
+      const checkoutResult = offer
+        ? await createIndividualCheckout(billingInterval, individualPricingQuote, undefined, { offerId: offer.id })
+        : individualPricingQuote
+          ? await createIndividualCheckout(billingInterval, individualPricingQuote)
+          : await createIndividualCheckout(billingInterval);
       if (!isCurrentRequest()) return;
       if (!checkoutResult.success) {
-        const checkoutError = checkoutResult.code === "checkout_maintenance"
-          ? t("billing.checkout.maintenance")
-          : checkoutResult.code === "pricing_revision_mismatch"
-            ? t("billing.checkout.updateRequired")
-            : checkoutResult.code === "pricing_quote_mismatch"
-              ? t("billing.checkout.priceChanged")
-              : checkoutResult.error;
-        setBillingActionError(checkoutError);
-        setBillingActionErrorCode(checkoutResult.code ?? null);
+        const code = checkoutResult.code ?? null;
+        setBillingActionError(code ? t(CHECKOUT_FAILURE_COPY[code].message) : checkoutResult.error);
+        setBillingActionErrorCode(code);
         capturePostHogEvent("billing_action", {
           action: "checkout_created",
           result: "error",
           billing_interval: billingInterval,
-          error_kind: checkoutResult.code === "checkout_maintenance"
-            ? "unavailable"
-            : checkoutResult.code === "pricing_revision_mismatch"
-              ? "validation"
-              : checkoutResult.code === "pricing_quote_mismatch"
-                ? "validation"
-              : toAnalyticsErrorKind(checkoutResult.error),
+          error_kind: code ? CHECKOUT_FAILURE_COPY[code].errorKind : toAnalyticsErrorKind(checkoutResult.error),
+          failure_code: code ?? "uncoded",
+          ...priceOffer,
         });
-        if (checkoutResult.code === "pricing_quote_mismatch") void refreshIndividualPricingQuote();
+        if (code === "pricing_quote_mismatch") void refreshIndividualPricingQuote();
+        // A payment still processing, or a plan that is already active, can turn
+        // Pro on without another checkout, and an ended offer leaves the regular
+        // price. Read the plan again instead.
+        if (code === "checkout_payment_pending" || code === "already_subscribed" || code === "offer_unavailable") {
+          void refreshBillingEntitlement();
+        }
         return;
       }
 
@@ -436,11 +470,12 @@ export function useCloudBillingController({
         action: "checkout_created",
         result: "success",
         billing_interval: billingInterval,
+        ...priceOffer,
       });
       const openedNatively = await openExternalUrl(checkoutResult.data.url, isCurrentRequest);
       if (!isCurrentRequest()) return;
       if (openedNatively && user.is_anonymous !== true && canRecordCheckout()) {
-        void recordProFunnelStep({ step: "checkout_opened", billing_interval: billingInterval });
+        void recordProFunnelStep({ step: "checkout_opened", billing_interval: billingInterval, ...priceOffer });
       }
       // Payment happens in the browser. Hold duplicate attempts until the app
       // returns and finishes a bounded entitlement confirmation.
@@ -585,6 +620,7 @@ export function useCloudBillingController({
     setCloudDeviceActionError(null);
     void fetchBillingEntitlementWithConfirmation(
       () => !cancelled && requestId === billingEntitlementRequestRef.current,
+      { requestFirstYearOffer: requestFirstYearOfferRef.current },
     ).then((result) => {
       if (cancelled) return;
       if (requestId !== billingEntitlementRequestRef.current) return;

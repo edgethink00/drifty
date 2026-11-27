@@ -167,6 +167,21 @@ export function resolveBuildCommit(env = process.env, readGitState = gitCheckout
   return candidate.toLowerCase();
 }
 
+// Official Mac and Windows builds run inside the prepared release candidate,
+// with RELEASE_SOURCE_SHA naming that candidate. Every other production build
+// (QA, review, a branch) is "local". Analytics reports this so internal builds
+// can be filtered out while their events are still collected.
+export function resolveBuildOrigin(env = process.env, buildCommit = null, production = false) {
+  const declared = (env.RELEASE_SOURCE_SHA ?? "").trim().toLowerCase();
+  if (!production || !declared) return "local";
+  if (declared !== buildCommit) {
+    // A release build of another commit would be reported as local and drop
+    // real users from the analytics filter; stop instead.
+    throw new Error("RELEASE_SOURCE_SHA does not match the checked-out build commit; unset it outside a release candidate.");
+  }
+  return "release";
+}
+
 export function windowsReleaseConfig(env = process.env) {
   const thumbprint = (env.DRIFTY_WINDOWS_CERTIFICATE_THUMBPRINT ?? "")
     .replace(/\s/gu, "")
@@ -328,6 +343,7 @@ async function main(argv = process.argv.slice(2)) {
   }
   validateGoogleCalendarBuildConfig(buildEnvironment);
   const buildCommit = resolveBuildCommit(buildEnvironment, gitCheckoutState, production);
+  const buildOrigin = resolveBuildOrigin(buildEnvironment, buildCommit, production);
 
   const releaseEnvironment = {
     ...buildEnvironment,
@@ -400,7 +416,7 @@ async function main(argv = process.argv.slice(2)) {
     VITE_DRIFTY_HOST_PLATFORM: hostPlatform,
     ...(buildCommit ? { VITE_DRIFTY_BUILD_COMMIT: buildCommit } : {}),
     ...(production
-      ? { VITE_DRIFTY_AUTH_MODE: "required", VITE_DRIFTY_CHANNEL: "production" }
+      ? { VITE_DRIFTY_AUTH_MODE: "required", VITE_DRIFTY_CHANNEL: "production", VITE_DRIFTY_BUILD_ORIGIN: buildOrigin }
       : {}),
   };
   run(

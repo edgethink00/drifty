@@ -74,6 +74,7 @@ def windows_browser_roots() -> dict:
         "Microsoft Edge": local / "Microsoft" / "Edge" / "User Data",
         "Brave Browser": local / "BraveSoftware" / "Brave-Browser" / "User Data",
         "Chromium": local / "Chromium" / "User Data",
+        "Comet": local / "Perplexity" / "Comet" / "User Data",
         "Vivaldi": local / "Vivaldi" / "User Data",
         "Opera": roaming / "Opera Software" / "Opera Stable",
         "Whale": local / "Naver" / "Naver Whale" / "User Data",
@@ -81,6 +82,8 @@ def windows_browser_roots() -> dict:
         "Firefox Developer Edition": roaming / "Mozilla" / "Firefox" / "Profiles",
         "Zen": roaming / "zen" / "Profiles",
         "Floorp": roaming / "Floorp" / "Profiles",
+        "LibreWolf": roaming / "librewolf" / "Profiles",
+        "Waterfox": roaming / "Waterfox" / "Profiles",
     }
 
 

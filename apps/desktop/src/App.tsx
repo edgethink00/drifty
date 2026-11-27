@@ -109,6 +109,7 @@ import { ProLooksProvider, useProLooksController } from "./features/pro-looks/us
 import { ProStartedNotice } from "./features/billing/ProStartedNotice";
 import { TrialEndNotice } from "./features/billing/TrialEndNotice";
 import { getTrialEndFollowUpKey, useTrialEndFollowUp } from "./features/billing/trialEndFollowUp";
+import { activeFirstYearOffer, useFirstYearOfferNotice } from "./features/billing/firstYearOffer";
 import { recordProFunnelStep } from "./lib/analytics/proFunnel";
 import { resolvePlanCardState } from "./features/billing/planCardState";
 import { canStartIndividualCheckout } from "./features/billing/billingEligibility";
@@ -245,8 +246,8 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { resolveFirstDayRecap, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
-import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataMode } from "./features/onboarding/introStoryReview";
+import { firstDayRecentDays, firstDayStoryMayUseRecentDays, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
+import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataFile, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
@@ -256,7 +257,7 @@ import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImp
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
+import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, postOnboardingStorySteps } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -771,7 +772,7 @@ export default function App() {
 
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
-const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before" } as const satisfies Record<FirstDayStoryDay, string>;
+const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before", recentDays: "recent_days" } as const satisfies Record<FirstDayStoryDay, string>;
 
 type HistoryReturnPoint = {
   readonly query: string;
@@ -2012,7 +2013,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   /* The intro opens on the user's own first day when the preparation left enough classified time.
      The recap is read once, when the intro is first shown, so its facts do not shift while it is open. */
   const [introStory, setIntroStory] = useState<{ readonly resolved: boolean; readonly recap: FirstDayRecap | null; readonly decisionReason?: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }>({ resolved: false, recap: null });
-  const introSequence = introStory.recap ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
+  // What first-run preparation saw of the readable history; it only narrows a sample intro's label.
+  const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
+  // Dev review only: one request for a local file of real records (see introReviewDataFile).
+  const introReviewFileRequestedRef = useRef(false);
+  // A prepared day too short for a story reads the recent days once, to tell them together instead.
+  const introRecentDaysRequestedRef = useRef(false);
+  // A story of a day with almost no focus has no focus card, so it is one card shorter.
+  const introSequence = introStory.recap ? postOnboardingStorySteps(storyHasFocusCard(introStory.recap)) : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {
@@ -2076,6 +2084,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const shareAccountScope = isPolicySignedIn ? user?.id ?? null : null;
   useEffect(() => { setShareCardRankAccountScope(shareAccountScope); }, [shareAccountScope]);
   const requestCloudBillingAuth = openDefaultAuthModal;
+  // Classification on Drifty Cloud. Local AI and own-key setups never see the
+  // trial-end follow-up, so only this route asks the server for an offer.
+  const classificationOnCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
   const {
     billingActionError,
     billingActionErrorCode,
@@ -2111,11 +2122,14 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     shouldCheckBillingEntitlement,
     user,
     onAuthRequired: requestCloudBillingAuth,
+    requestFirstYearOffer: classificationOnCloudRoute,
   });
+  // The server's first-year offer (owner decision 2026-11-27), shown wherever checkout would apply it.
+  const firstYearOffer = activeFirstYearOffer(billingEntitlement?.firstYearOffer, individualPricingQuote);
+  const firstYearOfferNotice = useFirstYearOfferNotice(firstYearOffer?.id ?? null);
   // A Pro purchase made from the app moves classification to Cloud AI once. Only the
   // route changes, so the Local AI (or own-provider) setup stays in AI settings as the way back.
   const [proStartedNoticeVisible, setProStartedNoticeVisible] = useState(false);
-  const classificationOnCloudRoute = localAiSetup.provider === "managed_local" && localAiSetup.driftyRoute === "cloud";
   useEffect(() => {
     if (!proPurchaseConfirmed) return;
     acknowledgeProPurchase();
@@ -2390,13 +2404,27 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!postOnboardingSidebarGuideActive) {
       if (introStory.resolved) setIntroStory({ resolved: false, recap: null });
+      introRecentDaysRequestedRef.current = false;
       return;
     }
     if (introStory.resolved || preparingFirstDay) return;
     const today = logicalTodayIsoDate(startOfDayMinutes);
     if (postOnboardingSidebarGuideReviewEnabled) {
+      const reviewFile = introReviewDataFile(window.location.search);
+      if (reviewFile) {
+        if (introReviewFileRequestedRef.current) return;
+        introReviewFileRequestedRef.current = true;
+        void fetch(reviewFile)
+          .then((response) => response.json() as Promise<{ readonly day: string; readonly segments: ActivitySegment[] }>)
+          .then((file) => setIntroStory({
+            resolved: true,
+            ...resolveFirstDayStory({ segments: file.segments, recentSegments: file.segments, day: file.day, today: shiftIsoDate(file.day, 1), startOfDayMinutes }),
+          }))
+          .catch(() => setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" }));
+        return;
+      }
       const review = buildIntroReviewCase(introReviewDataMode(window.location.search), (offset) => shiftIsoDate(today, offset));
-      setIntroStory({ resolved: true, ...resolveFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
+      setIntroStory({ resolved: true, ...resolveFirstDayStory({ segments: review.segments, recentSegments: review.segments, day: review.day, today, startOfDayMinutes }) });
       return;
     }
     if (segmentsLoadedDay !== selectedDay) {
@@ -2404,10 +2432,30 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       if (error) setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" });
       return;
     }
-    setIntroStory({
+    const decision = resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes });
+    const settle = (next: { readonly recap: FirstDayRecap | null; readonly decisionReason: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }) => setIntroStory((current) => current.resolved ? current : {
       resolved: true,
-      ...resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes }),
+      recap: next.recap,
+      decisionReason: refineIntroDecisionReason(next.decisionReason, firstDayPreparedFactsRef.current),
     });
+    if (decision.recap || !firstDayStoryMayUseRecentDays(decision.decisionReason)) {
+      settle(decision);
+      return;
+    }
+    // Too short on its own: read the three recent days once and tell them together when they hold enough.
+    if (introRecentDaysRequestedRef.current) return;
+    introRecentDaysRequestedRef.current = true;
+    const recentDays = firstDayRecentDays(today);
+    void trackerClient.getTimeline(getLogicalDayRange(recentDays[0], today, startOfDayMinutes))
+      .then((recentSegments) => settle(resolveFirstDayStory({
+        segments,
+        recentSegments,
+        day: selectedDay,
+        today,
+        options: { ...selectedDayClassificationOptions, fallbackCandidates: recentSegments },
+        startOfDayMinutes,
+      })))
+      .catch(() => settle(decision));
   }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
   // A day that is still loading after a few seconds does not hold the intro back either.
   const introStoryPending = postOnboardingSidebarGuideActive && !introStory.resolved && !preparingFirstDay;
@@ -5170,6 +5218,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     setProgress: setFirstDayPreparationProgress,
     setReadingSegmentIds: setFirstDayReadingSegmentIds,
     setPreparedDay: setFirstDayPreparedDay,
+    onPreparedFacts: (facts) => { firstDayPreparedFactsRef.current = facts; },
     shouldBlockLocalTrackerAccess,
     startOfDayMinutes,
   });
@@ -6684,7 +6733,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               contextSegments: driftAlarmSegments,
               persistenceAllowed: () => currentAiClassificationProviderKeyRef.current === providerKeyAtStart,
             };
-          const liveAiProviderKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+          const liveAiProvider = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
           const refreshAfterLiveAiClassification = async () => {
             const alarmDay = currentDriftAlarmDay();
             if (shouldUpdateRendererState && selectedDayRef.current === alarmDay) {
@@ -6708,7 +6757,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               case "classified":
                 captureAiClassificationRunOncePerDay({
                   trigger: "live",
-                  provider_kind: liveAiProviderKind,
+                  ...liveAiProvider,
                   result: "success",
                   selected_count_bucket: "1",
                   saved_count_bucket: result.classification.category === "unknown" ? "none" : "1",
@@ -6725,7 +6774,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
               case "unavailable":
                 captureAiClassificationRunOncePerDay({
                   trigger: "live",
-                  provider_kind: liveAiProviderKind,
+                  ...liveAiProvider,
                   result: "unavailable",
                   selected_count_bucket: "1",
                   saved_count_bucket: "none",
@@ -6770,7 +6819,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             });
             captureAiClassificationRunOncePerDay({
               trigger: "live",
-              provider_kind: liveAiProviderKind,
+              ...liveAiProvider,
               result: "error",
               selected_count_bucket: "1",
               saved_count_bucket: "none",
@@ -10403,7 +10452,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       : isFocused ? AI_CLASSIFICATION_FOCUSED_IDLE_THRESHOLD : AI_CLASSIFICATION_BACKGROUND_THRESHOLD;
     if (!forceBacklogBatch && !probeRecoveryBacklog && isFocused && Date.now() - lastRendererInteractionAtRef.current < AI_CLASSIFICATION_FOCUSED_IDLE_MS) return null;
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const trigger = options.firstDayResume ? "first_day_resume" as const
       : isFocused ? "focused_idle" as const : "background_threshold" as const;
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
@@ -11132,7 +11181,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
       showClassificationRunNotice(disabledSummary);
-      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
+      captureAiClassificationRun("manual", { provider_kind: "none" }, selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
@@ -11144,7 +11193,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const range = selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -11190,7 +11239,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     if (!hasSelectedAiClassificationProvider) {
       const disabledSummary = { status: "disabled", selectedSegments: 0, savedRecords: 0, message: "Configure or reconnect the selected AI provider to run classification." } satisfies AiClassificationSummary;
       setClassificationSummary(disabledSummary);
-      captureAiClassificationRun("manual", "none", selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
+      captureAiClassificationRun("manual", { provider_kind: "none" }, selectedDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent", disabledSummary);
       return;
     }
 
@@ -11199,7 +11248,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
 
     const executionUsageDay = todayIsoDate();
     const providerKeyAtStart = aiClassificationProviderKey;
-    const providerKind = toAiProviderAnalytics(Boolean(selectedLocalAiClassificationOptions), canUseSelectedCloudAiClassification, localAiSetup.provider);
+    const providerKind = toAiProviderAnalytics(selectedLocalAiClassificationOptions?.localProvider.provider, canUseSelectedCloudAiClassification);
     const range = targetDay === logicalTodayIsoDate(startOfDayMinutes) ? "current_day" : "recent";
     const cloudAiConnectionGeneration = cloudAiConnectionGenerationRef.current;
     aiClassificationInFlightRef.current = true;
@@ -11893,10 +11942,16 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     now: recordingCheckedNow,
   });
   // The daily notice waits for other notices, alerts and dialogs, and shows on today's dashboard only.
-  const trialEndNoticeVisible = trialEndStage === "notice" && unclassifiedTodaySeconds !== null
+  const trialEndNoticeSlotFree = unclassifiedTodaySeconds !== null
     && activeTab === "dashboard" && !upgradePlanModalOpen && !onboardingOpen && !isDashboardDemoReplayActive
     && !cloudTrialStartedNotice && !proStartedNoticeVisible && driftAlarmEvent === null
     && !authModalOpen && !feedbackModalOpen && !accountDeletionModalOpen && !aiSetupDialogOpen && !cmdOpen && !deleteHistoryModalOpen;
+  // The first-year offer's notice takes the daily notice's place once per offer, for an account
+  // in the trial-end follow-up that has not already seen the offer in the sheet.
+  const firstYearOfferNoticeVisible = firstYearOffer !== null && !firstYearOfferNotice.seen
+    && trialEndFollowUpKey !== null && !planInactiveFollowUp && trialEndStage !== null && trialEndStage !== "sheet"
+    && trialEndNoticeSlotFree;
+  const trialEndNoticeVisible = !firstYearOfferNoticeVisible && trialEndStage === "notice" && trialEndNoticeSlotFree;
   const effectiveCloudConnectionStatus: AuthConnectionStatus = isDashboardAiUnavailablePreviewActive ? "online" : cloudConnectionStatus;
   const cloudStatusLabel = effectiveCloudConnectionStatus === "offline"
     ? "Offline mode"
@@ -12225,7 +12280,22 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }}
         />
       ) : null}
-      {trialEndNoticeVisible ? (
+      {firstYearOfferNoticeVisible ? (
+        <TrialEndNotice
+          funnelEnabled={funnelEnabled}
+          unclassifiedSeconds={unclassifiedTodaySeconds ?? 0}
+          firstYearOffer={firstYearOffer}
+          onViewPlans={() => {
+            firstYearOfferNotice.markSeen();
+            markTrialEndNoticeSeen();
+            handleOpenUpgradePlanModal();
+          }}
+          onDismiss={() => {
+            firstYearOfferNotice.markSeen();
+            markTrialEndNoticeSeen();
+          }}
+        />
+      ) : trialEndNoticeVisible ? (
         <TrialEndNotice
           planInactive={planInactiveFollowUp}
           funnelEnabled={funnelEnabled}
@@ -13365,6 +13435,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
         billingCheckoutAwaitingConfirmation={billingCheckoutAwaitingConfirmation}
         billingPlansDisabled={billingCheckoutAwaitingConfirmation || billingEntitlementLoading || individualPricingQuoteLoading || isSidebarCtaPreviewActive}
         individualPricingQuote={individualPricingQuote}
+        firstYearOffer={firstYearOffer}
         billingActionError={billingActionError}
         billingActionErrorCode={billingActionErrorCode}
         onCheckForUpdates={handleManualCheckForUpdates}
@@ -13378,6 +13449,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           }
           // Closing the sheet ends today's follow-up, however it was opened.
           if (trialEndFollowUpKey !== null) markTrialEndSheetSeen();
+          // A sheet that already showed the offer replaces its notice.
+          if (firstYearOffer !== null) firstYearOfferNotice.markSeen();
           setUpgradePlanModalOpen(false);
         }}
       />

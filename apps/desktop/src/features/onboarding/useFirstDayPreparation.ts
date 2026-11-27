@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { shiftIsoDate } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
-import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
+import { toAiRoute, toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "../../lib/browserHistoryImportWindow";
-import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecordedSeconds } from "./firstDayStory";
+import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecentDays, firstDayRecordedSeconds, type FirstDayPreparedFacts } from "./firstDayStory";
 import { getClassificationActivitySnapshot } from "../classification/classificationActivity";
 import {
   describeAiClassificationFailure,
@@ -68,6 +68,13 @@ const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS = 60 * 60 * 1000;
 export const FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS = 30 * 1000;
 const FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS = 500;
 const FIRST_DAY_PREPARATION_BACKGROUND_RETRY_MAX_MS = 60 * 1000;
+// The Safari readability check only labels why a sample intro was shown, so it never holds the run.
+const FIRST_DAY_PREPARATION_ENVIRONMENT_WAIT_MS = 1_500;
+/**
+ * The other recent days are classified before the reveal only in what is left of the preparation's
+ * limit, less this margin, so a fully prepared day never ends on the retry screen because of them.
+ */
+const FIRST_DAY_PREPARATION_RECENT_DAYS_MARGIN_MS = 5_000;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -149,6 +156,11 @@ export type UseFirstDayPreparationOptions = {
   readonly setReadingSegmentIds?: (segmentIds: readonly string[]) => void;
   /** The logical day this run prepares, once chosen; null while it is still being chosen. */
   readonly setPreparedDay?: (day: string | null) => void;
+  /**
+   * What this run learned about the history it could read (see FirstDayPreparedFacts); null when a new
+   * run starts. Only a fixed analytics label is derived from it.
+   */
+  readonly onPreparedFacts?: (facts: FirstDayPreparedFacts | null) => void;
   readonly runAiClassification: RunAiClassificationBatch;
   readonly runAiClassificationUntilEmpty: RunAiClassificationBatch;
   readonly selectedAiProviderKeyRef: MutableRefObject<string>;
@@ -159,10 +171,24 @@ export type UseFirstDayPreparationOptions = {
 // A candidate is chosen by the time it holds as well as its segment count, so a day of many short
 // visits does not win over a later day that can actually tell a story, and a day of a few long visits
 // is not skipped. In order: the first day with both enough segments and enough recorded time, else the
-// first with enough recorded time, else the first with enough segments (the earlier rule), else today.
+// first with enough recorded time, else the day with the most recorded time (so a nearly empty today
+// never wins over a yesterday that holds more), else the first with enough segments (when no time
+// could be read), else today.
 // The recorded-time floor is the recap's classified minimum: a day under it cannot open the story.
 // Exported for unit tests.
 export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayMinutes = 0): Promise<string> {
+  return (await resolveFirstDayTarget(logicalToday, startOfDayMinutes)).day;
+}
+
+/**
+ * The chosen day and its recorded time, plus the recorded time of all three candidate days together
+ * (null when none could be read), which tells whether the whole import window held a story's worth of time.
+ */
+export async function resolveFirstDayTarget(logicalToday: string, startOfDayMinutes = 0): Promise<{
+  readonly day: string;
+  readonly dayRecordedSeconds: number | null;
+  readonly windowRecordedSeconds: number | null;
+}> {
   const candidates = [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)];
   const facts = await Promise.all(candidates.map(async (day) => {
     const [segmentCount, recordedSeconds] = await Promise.all([
@@ -178,10 +204,18 @@ export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayM
   type DayFacts = (typeof facts)[number];
   const enoughSegments = (facts: DayFacts) => facts.segmentCount !== null && facts.segmentCount >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS;
   const enoughTime = (facts: DayFacts) => facts.recordedSeconds !== null && facts.recordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS;
+  const mostRecorded = facts.reduce<DayFacts | null>((best, candidate) => (candidate.recordedSeconds ?? 0) > (best?.recordedSeconds ?? 0) ? candidate : best, null);
   const chosen = facts.find((candidate) => enoughSegments(candidate) && enoughTime(candidate))
     ?? facts.find(enoughTime)
+    ?? mostRecorded
     ?? facts.find(enoughSegments);
-  return chosen?.day ?? logicalToday;
+  const readDays = facts.filter((candidate) => candidate.recordedSeconds !== null);
+  return {
+    day: chosen?.day ?? logicalToday,
+    dayRecordedSeconds: chosen ? chosen.recordedSeconds : null,
+    windowRecordedSeconds: readDays.length === 0 ? null
+      : readDays.reduce((total, candidate) => total + (candidate.recordedSeconds ?? 0), 0),
+  };
 }
 
 // First-day preparation gate: import the opted-in last 72h browser history and
@@ -208,6 +242,7 @@ export function useFirstDayPreparation({
   setProgress,
   setReadingSegmentIds,
   setPreparedDay,
+  onPreparedFacts,
   shouldBlockLocalTrackerAccess,
   startOfDayMinutes,
 }: UseFirstDayPreparationOptions): {
@@ -264,6 +299,18 @@ export function useFirstDayPreparation({
     let partialCloudReveal = false;
     const attemptStartedAt = Date.now();
     setPreparedDay?.(null);
+    onPreparedFacts?.(null);
+    // Read in parallel with the import; a slow or failed read leaves the Safari label unknown.
+    const environmentRead: Promise<boolean | null> = browserHistoryImportEnabled
+      ? firstDayPreparationRaceTimeout(
+        Promise.resolve()
+          .then(() => trackerClient.getBrowserHistoryEnvironment())
+          .then((environment) => environment.defaultBrowserIsSafari && !environment.safariHistoryReadable)
+          .catch(() => null),
+        FIRST_DAY_PREPARATION_ENVIRONMENT_WAIT_MS,
+        null,
+      )
+      : Promise.resolve(null);
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
     let quotaWaitCount = 0;
     let lastForegroundFailure: "quota" | "transient" | "content" | null = null;
@@ -378,14 +425,19 @@ export function useFirstDayPreparation({
       if (cloudAiSelected) return "cloud" as const;
       return "none" as const;
     };
+    const aiRoute = () => toAiRoute(
+      localAiClassificationOptionsRef.current?.localProvider.provider ?? (managedLocalSelected ? "managed_local" : null),
+    );
     const captureOutcome = (
       outcome: "success" | FirstDayPreparationFailureReason,
       presentation: "dashboard_complete" | "dashboard_partial" | "retry_screen",
       errorKind: AnalyticsErrorKind | null = null,
     ) => {
       try {
+        const route = aiRoute();
         capturePostHogEvent("first_day_preparation", {
           provider_kind: providerKind(),
+          ...(route ? { ai_route: route } : {}),
           outcome,
           presentation,
           ...(outcome === "success" ? {} : { phase: currentPhase }),
@@ -444,11 +496,13 @@ export function useFirstDayPreparation({
       setFailure(reason);
       captureOutcome(reason === "local_model_unavailable" ? "classification_incomplete" : reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
     };
+    const preparationLimitMs = cloudAiSelected ? FIRST_DAY_PREPARATION_CLOUD_MAX_MS : FIRST_DAY_PREPARATION_MAX_MS;
+    const preparationEndsAt = Date.now() + preparationLimitMs;
     const safetyTimeout = setTimeout(
       () => cloudAiSelected
         ? revealPartialCloudDay("preparation_timed_out")
         : fail("preparation_timed_out"),
-      cloudAiSelected ? FIRST_DAY_PREPARATION_CLOUD_MAX_MS : FIRST_DAY_PREPARATION_MAX_MS,
+      preparationLimitMs,
     );
 
     const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
@@ -730,7 +784,23 @@ export function useFirstDayPreparation({
         }
         // Complete + reveal yesterday when it has data (otherwise today, then the day before), and
         // open the dashboard there.
-        today = await resolveFirstDayTargetDay(today, startOfDayMinutes);
+        const logicalToday = today;
+        const target = await resolveFirstDayTarget(today, startOfDayMinutes);
+        today = target.day;
+        // No single day holds a story but the import window together does: the intro then tells the
+        // recent days, so those are classified now too. Each is short, since none reached the minimum.
+        const recentDaysToClassify = target.dayRecordedSeconds !== null && target.dayRecordedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS
+          && target.windowRecordedSeconds !== null && target.windowRecordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS
+          ? firstDayRecentDays(logicalToday).filter((day) => day !== today)
+          : [];
+        const safariLocked = await environmentRead;
+        if (!cancelled) {
+          onPreparedFacts?.({
+            importEnabled: browserHistoryImportEnabled,
+            safariLocked,
+            windowRecordedSeconds: target.windowRecordedSeconds,
+          });
+        }
         updateCloudBacklog({ day: today });
         // Once the cap has revealed the dashboard, preserve any day the user
         // selected while the import was still finishing.
@@ -790,6 +860,18 @@ export function useFirstDayPreparation({
             setProgress(null);
             const complete = await classifyTodayWithProgress(today, classifyOptions);
             if (complete) await completeCloudBacklogIfEmpty(today, "foreground");
+            for (const day of complete ? recentDaysToClassify : []) {
+              if (settled || cancelled || !selectedProviderUnchanged()) break;
+              // Best effort, in what is left of the limit: a day left unsorted only keeps the intro on its
+              // sample cards. A run cut short goes on after the reveal; the background pass waits for it.
+              const left = preparationEndsAt - FIRST_DAY_PREPARATION_RECENT_DAYS_MARGIN_MS - Date.now();
+              if (left <= 0) break;
+              const finished = await Promise.race([
+                runClassificationForDay(day, classifyOptions).then(() => true, () => true),
+                firstDayPreparationDelay(left).then(() => false),
+              ]);
+              if (!finished) break;
+            }
             if (!complete && !settled) {
               // Only quota pacing may bypass the retry choice. A confirmed
               // non-quota failure remains visible as the product decision requires.

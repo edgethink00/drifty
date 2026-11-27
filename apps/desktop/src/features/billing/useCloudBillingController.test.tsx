@@ -295,6 +295,13 @@ describe("useCloudBillingController", () => {
     ["ko", "checkout_maintenance", "가격 정보를 업데이트하고 있어요. 잠시 후 다시 시도해 주세요."],
     ["en", "pricing_revision_mismatch", "Update Drifty to confirm the current price."],
     ["ko", "pricing_revision_mismatch", "현재 가격을 확인하려면 Drifty를 업데이트해 주세요."],
+    ["en", "checkout_in_progress", "Checkout is getting ready. Try again in a moment."],
+    ["ko", "checkout_in_progress", "결제창을 준비하고 있어요. 잠시 뒤 다시 눌러 주세요."],
+    ["en", "checkout_payment_pending", "Your last payment is still processing. Pro turns on when it finishes."],
+    ["ko", "checkout_payment_pending", "이전 결제를 처리하고 있어요. 끝나면 Pro가 바로 켜져요."],
+    ["ko", "checkout_session_closed", "이전 결제창이 닫혔어요. 잠시 뒤 다시 시도해 주세요."],
+    ["ko", "checkout_interval_conflict", "다른 결제 주기의 결제창이 아직 열려 있어요. 그 창에서 마쳐 주세요."],
+    ["ko", "already_subscribed", "이미 Pro를 쓰고 있어요. 플랜 상태를 새로 고칠게요."],
   ] as const)("localizes the %s %s checkout failure", async (language, code, expected) => {
     const trialExpiredEntitlement: BillingEntitlement = {
       plan: "individual",
@@ -328,6 +335,119 @@ describe("useCloudBillingController", () => {
     });
 
     expect(result.current.billingActionError).toBe(expected);
+  });
+
+  it("asks for the first-year offer only when told to and sends its id with a yearly checkout", async () => {
+    const offer = {
+      id: "55555555-5555-4555-8555-555555555555", kind: "first_year_yearly", billingInterval: "yearly", currency: "USD",
+      regularAmountMinor: 6_000, amountMinor: 5_000, monthlyAmountMinor: 700, expiresAt: "2099-12-08T06:00:00.000Z",
+    } as const;
+    const withOffer: BillingEntitlement = {
+      plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null,
+      lockedReason: "trial_expired", firstYearOffer: offer,
+    };
+    billingMocks.fetchBillingEntitlement.mockResolvedValue({ success: true, data: withOffer });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: false, code: "checkout_in_progress", error: "Server text" });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      requestFirstYearOffer: true,
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement?.firstYearOffer?.id).toBe(offer.id));
+    expect(billingMocks.fetchBillingEntitlement).toHaveBeenCalledWith(undefined, { requestFirstYearOffer: true });
+    await act(async () => {
+      await result.current.startCloudCheckout("yearly");
+    });
+    expect(billingMocks.createIndividualCheckout).toHaveBeenLastCalledWith("yearly", null, undefined, { offerId: offer.id });
+    await act(async () => {
+      await result.current.startCloudCheckout("monthly");
+    });
+    expect(billingMocks.createIndividualCheckout).toHaveBeenLastCalledWith("monthly");
+  });
+
+  it("reads the plan again when the offer has ended, back to the regular price", async () => {
+    const offer = {
+      id: "55555555-5555-4555-8555-555555555555", kind: "first_year_yearly", billingInterval: "yearly", currency: "USD",
+      regularAmountMinor: 6_000, amountMinor: 5_000, monthlyAmountMinor: 700, expiresAt: "2099-12-08T06:00:00.000Z",
+    } as const;
+    const base: BillingEntitlement = {
+      plan: "individual", status: "locked", canUseApp: false, trialEndsAt: null, currentPeriodEnd: null, lockedReason: "trial_expired",
+    };
+    billingMocks.fetchBillingEntitlement
+      .mockResolvedValueOnce({ success: true, data: { ...base, firstYearOffer: offer } })
+      .mockResolvedValue({ success: true, data: base });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: false, code: "offer_unavailable", error: "Server text" });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <LocalizationTestProvider language="ko">{children}</LocalizationTestProvider>
+    );
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+      requestFirstYearOffer: true,
+    }), { wrapper });
+
+    await waitFor(() => expect(result.current.billingEntitlement?.firstYearOffer).toBeTruthy());
+    await act(async () => {
+      await result.current.startCloudCheckout("yearly");
+    });
+    expect(result.current.billingActionError).toBe("첫해 할인 기간이 끝났어요. 지금 가격으로 다시 골라 주세요.");
+    await waitFor(() => expect(result.current.billingEntitlement?.firstYearOffer).toBeUndefined());
+  });
+
+  it.each([
+    ["checkout_payment_pending", true],
+    ["already_subscribed", true],
+    ["checkout_in_progress", false],
+  ] as const)("reads the plan again after %s only when Pro may already be on", async (code, rereads) => {
+    const trialExpired: BillingEntitlement = {
+      plan: "individual",
+      status: "locked",
+      canUseApp: false,
+      trialEndsAt: null,
+      currentPeriodEnd: null,
+      lockedReason: "trial_expired",
+    };
+    const active: BillingEntitlement = {
+      plan: "individual",
+      status: "active",
+      canUseApp: true,
+      trialEndsAt: null,
+      currentPeriodEnd: "2026-12-27T00:00:00.000Z",
+    };
+    billingMocks.fetchBillingEntitlement
+      .mockResolvedValueOnce({ success: true, data: trialExpired })
+      .mockResolvedValue({ success: true, data: active });
+    billingMocks.createIndividualCheckout.mockResolvedValue({ success: false, code, error: "Server text" });
+
+    const { result } = renderHook(() => useCloudBillingController({
+      hasRequiredAccountAuth: true,
+      isSupabaseConfigured: true,
+      shouldCheckBillingEntitlement: true,
+      user: signedInUser,
+      onAuthRequired: vi.fn(),
+    }));
+
+    await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("locked"));
+    const readsBefore = billingMocks.fetchBillingEntitlement.mock.calls.length;
+    await act(async () => {
+      await result.current.startCloudCheckout("monthly");
+    });
+
+    if (rereads) {
+      await waitFor(() => expect(result.current.billingEntitlement?.status).toBe("active"));
+    } else {
+      expect(billingMocks.fetchBillingEntitlement.mock.calls.length).toBe(readsBefore);
+      expect(result.current.billingEntitlement?.status).toBe("locked");
+    }
   });
 
   it("opens the billing portal instead of a second checkout when payment is blocked", async () => {

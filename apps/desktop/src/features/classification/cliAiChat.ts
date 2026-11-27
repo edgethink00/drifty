@@ -4,6 +4,7 @@ import { CLI_FAILURE_MESSAGES, isCliNotInstalledMessage, type CliAiFailureReason
 import { isCliClassificationModel } from "../settings/cliClassificationModels";
 import { ManagedLocalAiQueue } from "./managedLocalAiQueue";
 import type { NativeOpenAiChatResponse } from "./managedLocalAiChat";
+import { parseModelJson } from "./modelJson";
 
 const queue = new ManagedLocalAiQueue();
 export type { CliAiFailureReason } from "../../lib/cliFailure";
@@ -66,10 +67,13 @@ export function invokeCliAiChat(
         // No CLI output or credential-bearing stderr is forwarded to analytics.
         throw new CliAiChatError(exit.cancelled ? "cancelled" : failureReason((state.error ?? "") + " " + exit.stderrTail));
       }
-      const text = chatStreamAnswer(state).answer.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
-      if (!state.completed || !text) throw new CliAiChatError("invalid_response");
-      try { JSON.parse(text); } catch { throw new CliAiChatError("invalid_response"); }
-      return { status: 200, latencyMs: Date.now() - started, body: JSON.stringify({ choices: [{ message: { role: "assistant", content: text }, finish_reason: "stop" }] }) };
+      const answer = chatStreamAnswer(state).answer.trim();
+      if (!state.completed || !answer) throw new CliAiChatError("invalid_response");
+      let content: string;
+      // The same reading as other providers' answers, so a note after the JSON
+      // or a trailing comma does not lose the whole batch.
+      try { content = JSON.stringify(parseModelJson(answer)); } catch { throw new CliAiChatError("invalid_response"); }
+      return { status: 200, latencyMs: Date.now() - started, body: JSON.stringify({ choices: [{ message: { role: "assistant", content }, finish_reason: "stop" }] }) };
     } finally { clearInterval(timer); if (stop) await stop; }
   });
 }

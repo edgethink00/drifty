@@ -8,7 +8,10 @@ import type { FirstDayRecap, FirstDayRecapBlock, FirstDayVerdict } from "../../f
 import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { FirstDaySource } from "../../firstDayPreparationStory";
 import { useSiteIcon } from "../../../../components/SiteIconContext";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel, localeForDisplayLanguage } from "../../../../lib/formatting";
+import { CATEGORY_COLORS } from "../../../../lib/activityLabels";
+import { useLocalization } from "../../../localization/LocalizationContext";
+import { storyCategoryName } from "../../storyCategories";
 
 /*
  * The post-onboarding introduction's illustrations, drawn from real Drifty surfaces. The menu bar and Dock
@@ -153,10 +156,10 @@ const onWin = (ax: number, ay: number) => ({ x: WIN.x + ax * WK, y: WIN.y + ay *
 const VERDICT_FILL: Record<FirstDayVerdict, string> = {
   focus: "var(--productivity-focus)", drift: "var(--productivity-drift)", neutral: "var(--productivity-neutral)", pending: "var(--line-strong)",
 };
-const minuteOf = (hourIndex: number, minute: number) => hourIndex * 60 + minute;
 function inLongestRun(block: FirstDayRecapBlock, recap: FirstDayRecap): boolean {
   const run = recap.longestFocus;
   if (!run || block[3] !== "focus") return false;
+  const minuteOf = (column: number, minute: number) => column * recap.columnMinutes + minute;
   const from = minuteOf(run.from.hourIndex, run.from.minute) - 0.01, to = minuteOf(run.to.hourIndex, run.to.minute) + 0.01;
   return minuteOf(block[0], block[1]) >= from && minuteOf(block[0], block[2]) <= to;
 }
@@ -199,11 +202,13 @@ function SourceGlyph({ x, y, size, source }: { x: number; y: number; size: numbe
  * selected (a light tint with dashed edges) and a dark tooltip above them names the source and its time.
  * The tooltip is centred over the hours and, near an edge, aligned with the chart's own edge.
  */
-function FactMark({ source, duration, color, span, chart }: {
+function FactMark({ source, duration, color, span, chart, name: nameOverride }: {
   source: FirstDaySource | null; duration: string; color: string;
   span: { x0: number; x1: number }; chart: { x: number; y: number; w: number; h: number };
+  /** Names the fact by the page title Drifty read instead of its source's name. */
+  name?: string;
 }) {
-  const name = source?.label ?? "";
+  const name = nameOverride ?? source?.label ?? "";
   const icon = 14, gap = 6, pad = 6, padEnd = 10, h = 26, sep = 6;
   const nameW = textWidth(name, 10, 600), durW = textWidth(duration, 10, 700);
   const width = pad + (source ? icon + gap : 0) + nameW + (name ? sep : 0) + durW + padEnd;
@@ -231,18 +236,29 @@ function FactMark({ source, duration, color, span, chart }: {
 
 
 /**
- * The first day as the Today canvas draws it: one column per hour, blocks by minute, coloured by
- * productivity. "focus" lights the longest focus stretch, "drift" lights the drift; the rest steps back.
+ * The first day as the Today canvas draws it: one column per hour, blocks by minute. The recent days are
+ * a few short visits each, too thin to see on a clock, so each day is one bar of its minutes instead, its
+ * total above and its weekday below. "day" colours every classified block by its kind (the first card);
+ * "focus" and "drift" colour by productivity and light the longest focus stretch (on the days, all focus)
+ * or the drift, so the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: {
+  recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage;
+}) {
+  const { t } = useLocalization();
+  const byCategory = lit === "day";
   const panel = { x: 14, y: 34, w: 372, h: 282 };
+  const days = recap.days;
   const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
   const cw = chart.w / recap.hourCount;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
   // With almost no drift there is no source to point at: the drift card lights the day's focus and
   // neutral time instead, a day that stayed mostly on track, and shows no label.
   const clean = lit === "drift" && !recap.topDrift;
-  const isLit = (block: FirstDayRecapBlock) => lit === "focus" ? inLongestRun(block, recap)
+  const wholeDay = lit === "day";
+  const isLit = (block: FirstDayRecapBlock) => wholeDay
+    ? block[3] !== "pending"
+    : lit === "focus" ? (days ? block[3] === "focus" : inLongestRun(block, recap))
     : clean ? block[3] === "focus" || block[3] === "neutral" : block[3] === "drift";
   const litColumns = recap.blocks.filter(isLit).map((block) => block[0]);
   // Drift: point at the hour holding the most drift; focus: at the stretch's first hour.
@@ -259,31 +275,142 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
   const spanTo = lit === "focus" && recap.longestFocus ? recap.longestFocus.to.hourIndex : pillColumn;
   const color = lit === "focus" ? VERDICT_FILL.focus : VERDICT_FILL.drift;
   const step = recap.hourCount > 12 ? 3 : 2;
-  const legend = [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]] as const;
+  // By kind, the three largest categories keep their colours and the rest share one quiet "Other". Time
+  // Drifty could not sort (a browser with no page) is no kind at all, so it is left out of this chart.
+  const namedCategories = new Set(recap.categories.slice(0, 3).map((entry) => entry.category));
+  const otherFill = "var(--line-strong)";
+  const legend: readonly (readonly [string, string])[] = byCategory
+    ? [
+      ...recap.categories.slice(0, 3).map((entry) => [CATEGORY_COLORS[entry.category], storyCategoryName(entry.category, t)] as const),
+      ...(recap.categories.length > 3 ? [[otherFill, t("activity.category.custom")] as const] : []),
+    ]
+    : [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]];
+  // Category names run long in some languages (エンターテインメント): tighten the gaps to fit the panel,
+  // and leave Other out of the legend when even that is not enough.
+  const legendRoom = panel.w - 32;
+  const legendWidth = (items: readonly (readonly [string, string])[]) => items.reduce((total, [, text]) => total + 12 + textWidth(text, 10, 600), 0);
+  // Productivity labels run long too (Concentration, Neutre), so both legends are placed by their width.
+  const fittedLegend = byCategory && legend.length > 3 && legendWidth(legend) + 8 * (legend.length - 1) > legendRoom ? legend.slice(0, 3) : legend;
+  const legendGap = fittedLegend.length > 1 ? Math.max(8, Math.min(24, (legendRoom - legendWidth(fittedLegend)) / (fittedLegend.length - 1))) : 0;
+  const legendX = fittedLegend.reduce<number[]>((xs, _entry, i) => [...xs, i === 0 ? panel.x + 16 : xs[i - 1] + 12 + textWidth(fittedLegend[i - 1][1], 10, 600) + legendGap], []);
+  const blockFill = (block: FirstDayRecapBlock) => !byCategory ? VERDICT_FILL[block[3]]
+    : block[5] && namedCategories.has(block[5]) ? CATEGORY_COLORS[block[5]] : otherFill;
+  const span = days
+    ? daySpan(cw, spanFrom, spanTo)
+    : { x0: Math.floor(spanFrom) * cw, x1: (Math.floor(spanTo) + 1) * cw };
   return <g>
     <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
-    {legend.map(([fill, text], i) => {
-      const x = panel.x + 16 + i * (ko ? 52 : 64);
-      const on = clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2);
+    {fittedLegend.map(([fill, text], i) => {
+      const x = legendX[i];
+      const on = wholeDay || (clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2));
       return <g key={text} opacity={on ? 1 : 0.55}><circle cx={x + 4} cy={panel.y + 22} r={4} fill={fill} /><text x={x + 12} y={panel.y + 25.5} fontSize="10" fontWeight={on ? 700 : 500} fill="var(--text)">{text}</text></g>;
     })}
     <g transform={"translate(" + chart.x + " " + chart.y + ")"}>
-      {Array.from({ length: recap.hourCount }, (_, i) => <rect key={i} x={i * cw} width={cw} height={chart.h} fill="var(--line)" opacity={i % 2 ? 0.16 : 0.34} />)}
-      {recap.blocks.map((block, i) => <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
-        x={block[0] * cw} y={(block[1] / 60) * chart.h} width={cw + 0.4} height={Math.max(1, ((block[2] - block[1]) / 60) * chart.h)}
-        fill={VERDICT_FILL[block[3]]} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
-      {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
-        <text key={i} x={i * cw + cw / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{formatLocalizedCompactHourLabel((recap.firstHour + i) % 24, language)}</text>)}
+      {days ? <DayBars recap={recap} days={days} chart={chart} cw={cw} byCategory={byCategory} isLit={isLit} fill={blockFill} language={language} /> : <>
+        {Array.from({ length: recap.hourCount }, (_, i) => <rect key={i} x={i * cw} width={cw} height={chart.h} fill="var(--line)" opacity={i % 2 ? 0.16 : 0.34} />)}
+        {recap.blocks.map((block, i) => byCategory && block[3] === "pending" ? null : <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
+          x={block[0] * cw} y={(block[1] / 60) * chart.h} width={cw + 0.4} height={Math.max(1, ((block[2] - block[1]) / 60) * chart.h)}
+          fill={blockFill(block)} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
+        {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
+          <text key={i} x={i * cw + cw / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{formatLocalizedCompactHourLabel((recap.firstHour + i) % 24, language)}</text>)}
+      </>}
     </g>
-    {clean ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
-      span={{ x0: chart.x + Math.floor(spanFrom) * cw, x1: chart.x + (Math.floor(spanTo) + 1) * cw }} />}
+    {clean || wholeDay ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+      name={lit === "focus" && recap.longestFocus?.title ? clipText(recap.longestFocus.title, 10, chart.w - 110, 600) : undefined}
+      span={{ x0: chart.x + span.x0, x1: chart.x + span.x1 }} />}
   </g>;
+}
+
+/** How wide a day's bar is, and the selection the card's fact draws around the bars it names. */
+const dayBarWidth = (cw: number) => Math.min(56, cw * 0.46);
+function daySpan(cw: number, from: number, to: number): { readonly x0: number; readonly x1: number } {
+  const bar = dayBarWidth(cw), pad = 10;
+  return { x0: Math.floor(from) * cw + (cw - bar) / 2 - pad, x1: Math.floor(to) * cw + (cw + bar) / 2 + pad };
+}
+
+/**
+ * The recent days as one bar each: the day's classified minutes stacked by kind on the first card (the
+ * largest at the bottom, Other on top) or by productivity on the others (focus, neutral, drift), all on
+ * one scale with room above the tallest for its total. A bar rises as a whole.
+ */
+function DayBars({ recap, days, chart, cw, byCategory, isLit, fill, language }: {
+  recap: FirstDayRecap; days: readonly string[]; chart: { readonly w: number; readonly h: number }; cw: number; byCategory: boolean;
+  isLit: (block: FirstDayRecapBlock) => boolean; fill: (block: FirstDayRecapBlock) => string; language: DisplayLanguage;
+}) {
+  const clip = useId();
+  const rank = (block: FirstDayRecapBlock) => {
+    if (!byCategory) return ["focus", "neutral", "drift"].indexOf(block[3]);
+    const index = recap.categories.findIndex((entry) => entry.category === block[5]);
+    return index < 0 || index > 2 ? 3 : index;
+  };
+  // Each day's pieces in stacking order, neighbours of the same colour and light joined into one run.
+  const columns = days.map((_, column) => recap.blocks
+    .filter((block) => block[0] === column && block[3] !== "pending")
+    .sort((left, right) => rank(left) - rank(right) || left[1] - right[1])
+    .reduce<{ fill: string; lit: boolean; minutes: number }[]>((runs, block) => {
+      const last = runs[runs.length - 1];
+      const run = { fill: fill(block), lit: isLit(block), minutes: block[2] - block[1] };
+      if (last && last.fill === run.fill && last.lit === run.lit) last.minutes += run.minutes;
+      else runs.push(run);
+      return runs;
+    }, []));
+  const totals = columns.map((runs) => runs.reduce((total, run) => total + run.minutes, 0));
+  const top = Math.max(1, ...totals) * 1.22;
+  const barW = dayBarWidth(cw);
+  const base = chart.h - 2;
+  return <>
+    <rect x={0} y={base} width={chart.w} height={1} fill="var(--line-strong)" opacity=".8" />
+    {columns.map((runs, column) => {
+      const x = column * cw + (cw - barW) / 2;
+      const height = (totals[column] / top) * base;
+      let y = base;
+      return <g key={days[column]}>
+        {height > 0 ? <g className="story-day__block" data-lit style={{ "--hour": column * 2 } as CSSProperties}>
+          <clipPath id={clip + column}><path d={topRoundedBar(x, base - height, barW, height, Math.min(5, height, barW / 2))} /></clipPath>
+          <g clipPath={"url(#" + clip + column + ")"}>
+            {runs.map((run, i) => {
+              const h = (run.minutes / top) * base;
+              y -= h;
+              return <rect key={i} x={x} y={y} width={barW} height={h} fill={run.fill} opacity={run.lit ? 0.95 : 0.2} />;
+            })}
+          </g>
+        </g> : null}
+        <text x={x + barW / 2} y={base - height - 7} fontSize="10" fontWeight="600" fill="var(--text-muted)" textAnchor="middle">
+          {formatLocalizedCompactDurationFromSeconds(Math.round(totals[column]) * 60, language)}
+        </text>
+        <text x={x + barW / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{weekdayLabel(days[column], language)}</text>
+      </g>;
+    })}
+  </>;
+}
+
+/** A bar standing on the baseline: rounded at the top, square where it meets the line. */
+function topRoundedBar(x: number, y: number, w: number, h: number, r: number): string {
+  return "M" + x + " " + (y + h) + "V" + (y + r) + "Q" + x + " " + y + " " + (x + r) + " " + y
+    + "H" + (x + w - r) + "Q" + (x + w) + " " + y + " " + (x + w) + " " + (y + r) + "V" + (y + h) + "Z";
+}
+
+/** A logical day as its short weekday in the display language ("수", "Wed", "水"). */
+function weekdayLabel(day: string, language: DisplayLanguage): string {
+  return new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: "short" }).format(new Date(day + "T12:00:00"));
+}
+
+/** A label cut to fit max units at the given size, with an ellipsis when it was cut. */
+function clipText(text: string, size: number, max: number, weight = 650): string {
+  if (textWidth(text, size, weight) <= max) return text;
+  let cut = text;
+  while (cut.length > 1 && textWidth(cut + "…", size, weight) > max) cut = cut.slice(0, -1);
+  return cut + "…";
 }
 
 export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} language={language} />;
+  // The story's three cards on the user's own day: the day by kind, its focus (the stretch named by the
+  // page title Drifty read, when it says more than the site's name), then the drift.
+  if ((step === "recap" || step === "focus" || step === "drift") && recap) {
+    return <RecapDayScene recap={recap} lit={step === "recap" ? "day" : step} ko={ko} labels={labels} language={language} />;
+  }
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

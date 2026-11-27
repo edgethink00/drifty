@@ -1,4 +1,5 @@
 import type {
+  AI_ROUTES,
   COUNT_BUCKETS,
   ERROR_KINDS,
   FIRST_DAY_PREPARATION_DURATION_BUCKETS,
@@ -12,6 +13,24 @@ export type AnalyticsErrorKind = (typeof ERROR_KINDS)[number];
 export type FirstDayPreparationDurationBucket = (typeof FIRST_DAY_PREPARATION_DURATION_BUCKETS)[number];
 export type FirstDayPreparationStageDurationBucket = (typeof FIRST_DAY_PREPARATION_STAGE_DURATION_BUCKETS)[number];
 export type FirstDayPreparationSegmentCountBucket = (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
+export type AiRoute = (typeof AI_ROUTES)[number];
+
+/** The analytics route for a non-Cloud classification provider; none for Cloud or no provider. */
+export function toAiRoute(provider: string | null | undefined): AiRoute | undefined {
+  switch (provider) {
+    case "managed_local":
+    case "openai":
+    case "anthropic":
+    case "self_hosted":
+    case "codex_cli":
+    case "claude_cli":
+      return provider;
+    case "openrouter_byok":
+      return "openrouter";
+    default:
+      return undefined;
+  }
+}
 
 export function toCountBucket(value: number): CountBucket {
   if (!Number.isFinite(value) || value <= 0) return "none";

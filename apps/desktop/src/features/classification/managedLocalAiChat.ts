@@ -65,7 +65,14 @@ async function sendOpenAiChatWithManagedLocalRetry(
   const sentAt = Date.now();
   try {
     checkCanSend();
-    return await chat(readyRequest);
+    const response = await chat(readyRequest);
+    if (managedLocalProvider || !refusedChatTemplateKwargs(readyRequest, response)) return response;
+    // Some OpenAI-compatible servers refuse fields they do not know with a 400
+    // or 422 that names the field. Thinking-off is a speed hint, so send the
+    // request once without it.
+    checkCanSend();
+    const { chatTemplateKwargs: _refused, ...withoutTemplateKwargs } = readyRequest;
+    return await chat(withoutTemplateKwargs);
   } catch (error) {
     if (!managedLocalProvider || !isLikelyManagedLocalConnectionError(error)) throw error;
     checkCanSend();
@@ -87,6 +94,12 @@ async function sendOpenAiChatWithManagedLocalRetry(
 export function isLikelyManagedLocalConnectionError(error: unknown): boolean {
   const message = messageFromUnknownError(error).toLowerCase();
   return CONNECTION_ERROR_MARKERS.some((marker) => message.includes(marker));
+}
+
+function refusedChatTemplateKwargs(request: Record<string, unknown>, response: NativeOpenAiChatResponse): boolean {
+  if (request.chatTemplateKwargs === undefined || (response.status !== 400 && response.status !== 422)) return false;
+  const body = typeof response.body === "string" ? response.body.toLowerCase() : "";
+  return body.includes("chat_template_kwargs") || body.includes("enable_thinking");
 }
 
 async function requestForReadyManagedLocalRuntime(

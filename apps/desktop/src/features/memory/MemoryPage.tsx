@@ -22,7 +22,7 @@ import { requestMarkdownExport } from "./memoryExport";
 import { appName } from "./memoryCopy";
 import { MemoryListView, type ListFilter } from "./MemoryListView";
 import { MemoryGraphView } from "./MemoryGraphView";
-import { MemoryStart } from "./MemoryStart";
+import { MemoryEngineUpdate, MemoryStart } from "./MemoryStart";
 import type { MemoryInstaller } from "./memoryInstaller";
 import "./work-memory-page.css";
 
@@ -306,7 +306,14 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
 
   const load = useCallback(async () => {
     try {
-      await client.consume("memory_get_status", { includeCredentials: true }, decodeMemoryStatus, (value, generation) => { if (alive.current) setStatus({ value, generation }); });
+      const read: { status: MemoryStatus | null } = { status: null };
+      await client.consume("memory_get_status", { includeCredentials: true }, decodeMemoryStatus, (value, generation) => { read.status = value; if (alive.current) setStatus({ value, generation }); });
+      // Memory on reads its pages through the engine. Without the engine this build pins
+      // (an update moved past the installed one) the engine update shows instead of a failure.
+      if (read.status?.preferences.enabled && !read.status.supported) {
+        if (alive.current) { setFailed(false); setRecordingStopped(false); }
+        return;
+      }
       await client.consume("memory_wiki_pages", {}, decodeWiki, (value, generation) => { if (alive.current) setWiki({ value, generation }); });
       if (alive.current) { setFailed(false); setRecordingStopped(false); setNow(nowRef.current()); }
     } catch (reason) {
@@ -464,8 +471,11 @@ export function MemoryPage({ client, installer, onOpenSettings, onOpenAiSettings
   const startShown = useRef<{ status: MemoryStatus | null } | null>(null);
   if (visiblePages) startShown.current = hasPages ? null : { status: currentStatus ?? startShown.current?.status ?? null };
   const keepStart = !visiblePages && !failed && startShown.current !== null;
+  const engineUpdate = !visiblePages && currentStatus !== null && currentStatus.preferences.enabled && !currentStatus.supported;
   let body;
-  if (keepStart || (visiblePages && !hasPages)) {
+  if (engineUpdate) {
+    body = <MemoryEngineUpdate copy={copy} installer={installer} onReady={load} />;
+  } else if (keepStart || (visiblePages && !hasPages)) {
     body = <MemoryStart client={client} installer={installer} status={currentStatus ?? startShown.current?.status ?? null} copy={copy} onOpenAiSettings={onOpenAiSettings} onChanged={load} />;
   } else if (!visiblePages) {
     body = failed && recordingStopped
