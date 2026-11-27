@@ -53,9 +53,13 @@ type PostHogDefaultProperties = {
   readonly analytics_schema_version: "v3";
   readonly app_version: string;
   readonly build_commit: string;
+  /** "release" only for the official release-candidate build; QA and branch builds are "local". */
+  readonly build_origin: PostHogBuildOrigin;
   readonly identity_scope: PostHogIdentityScope;
   readonly reporting_time_zone: "Asia/Seoul";
 };
+
+type PostHogBuildOrigin = "release" | "local";
 
 type PostHogPayloadProperties = PostHogDefaultProperties &
   SanitizedPostHogProperties & {
@@ -116,6 +120,10 @@ const POSTHOG_DAILY_ACTIVE_INTERVAL_MS = 15 * 60 * 1000;
 const posthogKey = import.meta.env.VITE_POSTHOG_KEY?.trim();
 const posthogHost = (import.meta.env.VITE_POSTHOG_HOST?.trim() || "https://us.i.posthog.com").replace(/\/$/, "");
 const posthogChannel = String(import.meta.env.VITE_DRIFTY_CHANNEL ?? "development");
+
+export function resolvePostHogBuildOrigin(value: unknown): PostHogBuildOrigin {
+  return value === "release" ? "release" : "local";
+}
 
 let isPostHogReady = false;
 let installIdentity: PostHogIdentity | null = null;
@@ -263,6 +271,7 @@ function getDefaultProperties(identityScope: PostHogIdentityScope): PostHogDefau
     analytics_schema_version: "v3",
     app_version: BUILD_INFO.version,
     build_commit: BUILD_INFO.commit,
+    build_origin: resolvePostHogBuildOrigin(import.meta.env.VITE_DRIFTY_BUILD_ORIGIN),
     identity_scope: identityScope,
     reporting_time_zone: POSTHOG_REPORTING_TIME_ZONE,
   };

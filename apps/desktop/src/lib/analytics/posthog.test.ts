@@ -40,6 +40,23 @@ describe("PostHog desktop analytics privacy boundary", () => {
     expect(payload.properties.event_source).toBe("mac_app");
   });
 
+  it("marks only the release-candidate build as release so QA builds can be filtered out", () => {
+    const send = () => createPostHogEventPayload({
+      apiKey: "phc_test",
+      distinctId: "launch-session",
+      identityScope: "install",
+      event: "app_active",
+      // An event property cannot claim the build's origin.
+      properties: { build_origin: "release" } as never,
+    }).properties.build_origin;
+
+    expect(send()).toBe("local");
+    vi.stubEnv("VITE_DRIFTY_BUILD_ORIGIN", "release");
+    expect(send()).toBe("release");
+    vi.stubEnv("VITE_DRIFTY_BUILD_ORIGIN", "Release");
+    expect(send()).toBe("local");
+  });
+
   it("passes the dashboard layout a surface was read in and drops any other value", () => {
     expect(sanitizePostHogEventProperties("app_surface_opened", {
       surface: "dashboard",
@@ -266,6 +283,7 @@ describe("PostHog desktop analytics privacy boundary", () => {
         analytics_schema_version: "v3",
         app_version: BUILD_INFO.version,
         build_commit: BUILD_INFO.commit,
+        build_origin: "local",
         identity_scope: "install",
         reporting_time_zone: "Asia/Seoul",
         trigger: "manual",
