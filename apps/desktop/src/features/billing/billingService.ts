@@ -42,6 +42,24 @@ export type BillingEntitlement = {
   lockedReason?: "trial_expired" | "payment_required" | "billing_missing" | "device_limit_reached";
   deviceAccess?: CloudDeviceAccess;
   cloudDevices?: readonly CloudDeviceRecord[];
+  /** A first-year price the server issued to this account; see `requestFirstYearOffer`. */
+  firstYearOffer?: FirstYearOffer;
+};
+
+/**
+ * A one-time first-year price on the yearly plan, issued by the server to some
+ * accounts after their trial. The app shows it and sends its id at checkout;
+ * the server decides who gets it and applies the discount.
+ */
+export type FirstYearOffer = {
+  readonly id: string;
+  readonly kind: "first_year_yearly";
+  readonly billingInterval: "yearly";
+  readonly currency: "USD";
+  readonly regularAmountMinor: number;
+  readonly amountMinor: number;
+  readonly monthlyAmountMinor: number;
+  readonly expiresAt: string;
 };
 
 export type BillingResult<T> =
@@ -110,6 +128,7 @@ type BillingEntitlementResponse = {
   entitlement?: BillingEntitlement;
   deviceAccess?: unknown;
   cloudDevices?: unknown;
+  offer?: unknown;
   error?: string;
 };
 
@@ -219,12 +238,27 @@ async function invokeEntitlement(
   }
 }
 
-export async function fetchBillingEntitlement(client: BillingClient = supabase): Promise<BillingResult<BillingEntitlement>> {
+export async function fetchBillingEntitlement(
+  client: BillingClient = supabase,
+  options: {
+    /**
+     * Ask for the first-year offer. Only a client that would show it asks, so
+     * the server never spends an account's one offer on a hidden surface. The
+     * device's region lets the server leave regional-pilot devices out.
+     */
+    readonly requestFirstYearOffer?: boolean;
+  } = {},
+): Promise<BillingResult<BillingEntitlement>> {
   if (!client) return { success: false, error: "Billing is unavailable because Supabase is not configured." };
 
   try {
     // The server writes the one-time welcome email in this language.
-    const body = await withCloudDevicePayload({ emailLocale: resolveInitialDisplayLanguage() === "ko" ? "ko" : "en" });
+    const body = await withCloudDevicePayload({
+      emailLocale: resolveInitialDisplayLanguage() === "ko" ? "ko" : "en",
+      ...(options.requestFirstYearOffer
+        ? { offers: ["first_year_yearly"], ...resolveIndividualPricingDeviceContext() }
+        : {}),
+    });
     let { data, error } = await invokeEntitlement(client, "get-cloud-trial-entitlement", body);
     // Only an absent endpoint is permission to use the legacy getter, which can
     // grant a trial. A timeout or service failure must never silently start one.
@@ -273,6 +307,7 @@ export async function createIndividualCheckout(
   billingInterval: BillingInterval,
   pricingQuoteOrClient: IndividualPricingQuote | BillingClient = null,
   client: BillingClient = supabase,
+  options: { readonly offerId?: string | null } = {},
 ): Promise<CheckoutResult<{ url: string }>> {
   // Preserve the existing `(interval, client)` test/integration seam while the
   // app uses `(interval, quote)` for the regional assignment.
@@ -289,6 +324,7 @@ export async function createIndividualCheckout(
         pricingRevision: INDIVIDUAL_PRICING.revision,
         trialActivation: "explicit-v1",
         ...(pricingQuote?.assignmentId ? { pricingAssignmentId: pricingQuote.assignmentId } : {}),
+        ...(options.offerId ? { offerId: options.offerId } : {}),
       },
     });
 
@@ -606,10 +642,31 @@ function enrichBillingEntitlement(data: BillingEntitlementResponse | null | unde
   const deviceAccess = data?.deviceAccess ?? entitlement.deviceAccess;
   if (deviceAccess !== undefined && (!isCloudDeviceAccess(deviceAccess)
     || (!deviceAccess.allowed && entitlement.canUseApp))) return undefined;
+  const firstYearOffer = readFirstYearOffer(data?.offer);
   return {
     ...entitlement,
     ...(isCloudDeviceAccess(data?.deviceAccess) ? { deviceAccess: data.deviceAccess } : {}),
     ...(Array.isArray(data?.cloudDevices) ? { cloudDevices: data.cloudDevices.flatMap(toCloudDeviceRecord) } : {}),
+    ...(firstYearOffer ? { firstYearOffer } : {}),
+  };
+}
+
+function readFirstYearOffer(value: unknown): FirstYearOffer | null {
+  if (!isRecord(value)) return null;
+  const isAmount = (amount: unknown): amount is number => typeof amount === "number" && Number.isInteger(amount) && amount > 0;
+  if (typeof value.id !== "string" || !value.id || value.kind !== "first_year_yearly" || value.billingInterval !== "yearly"
+    || value.currency !== "USD" || !isAmount(value.regularAmountMinor) || !isAmount(value.amountMinor)
+    || !isAmount(value.monthlyAmountMinor) || value.amountMinor >= value.regularAmountMinor
+    || typeof value.expiresAt !== "string" || !Number.isFinite(Date.parse(value.expiresAt))) return null;
+  return {
+    id: value.id,
+    kind: "first_year_yearly",
+    billingInterval: "yearly",
+    currency: "USD",
+    regularAmountMinor: value.regularAmountMinor,
+    amountMinor: value.amountMinor,
+    monthlyAmountMinor: value.monthlyAmountMinor,
+    expiresAt: value.expiresAt,
   };
 }
 

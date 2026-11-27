@@ -16,7 +16,8 @@ import { useLocalization } from "../localization/LocalizationContext";
 import { ProLookThumbnail, proLookTitle } from "../pro-looks/ProLookViews";
 import type { ProLook } from "../pro-looks/proLooks";
 import { trialDaysRemaining } from "../sidebar/SidebarCtaSlot";
-import type { BillingInterval, CheckoutFailureCode } from "./billingService";
+import type { BillingInterval, CheckoutFailureCode, FirstYearOffer } from "./billingService";
+import { firstYearOfferAmounts, firstYearOfferLastDay } from "./firstYearOffer";
 import {
   STANDARD_INDIVIDUAL_PRICING_QUOTE,
   formatIndividualPrice,
@@ -62,6 +63,11 @@ type ProDecisionSheetProps = {
   readonly look?: ProLook | null;
   /** macOS: the benefit line includes the Dock icons as well as the coats. */
   readonly looksIncludeAppIcons?: boolean;
+  /**
+   * The server's first-year offer, when it applies to this account now. The
+   * yearly card then shows its price and starts selected; checkout sends it.
+   */
+  readonly firstYearOffer?: FirstYearOffer | null;
 };
 
 /** The sheet offers the two individual cadences. */
@@ -97,12 +103,14 @@ function DecisionSheet({
   billingCheckoutAwaitingConfirmation = false,
   billingPlansDisabled = false, individualPricingQuote = null, billingActionError = null, billingActionErrorCode = null,
   onCheckForUpdates, onSelectBillingPlan, onDismiss, look = null, looksIncludeAppIcons = false,
+  firstYearOffer = null,
 }: Omit<ProDecisionSheetProps, "open">) {
-  const { t } = useLocalization();
+  const { t, effectiveLanguage } = useLocalization();
   const id = useId();
   const dialogRef = useRef<HTMLElement>(null);
   const cadenceRefs = useRef<Partial<Record<Cadence, HTMLButtonElement | null>>>({});
-  const [cadence, setCadence] = useState<Cadence>(DEFAULT_CADENCE);
+  // The offer is a first-year price on the yearly plan, so that card starts selected.
+  const [cadence, setCadence] = useState<Cadence>(firstYearOffer ? "yearly" : DEFAULT_CADENCE);
   const [checkoutRequested, setCheckoutRequested] = useState(false);
   const checkoutOpening = billingCheckoutLoadingInterval !== null;
   useModalDismiss(onDismiss, { disabled: checkoutOpening });
@@ -110,13 +118,15 @@ function DecisionSheet({
   useAnchoredDialog(dialogRef);
   const offerRef = useProFunnelExposure<HTMLDivElement>(funnelEnabled, {
     step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: OFFER_CONTEXT[context],
+    ...(firstYearOffer ? { price_offer: firstYearOffer.kind } : {}),
   });
 
   const quote = individualPricingQuote ?? STANDARD_INDIVIDUAL_PRICING_QUOTE;
   const yearlyTotalAmount = individualYearlyDisplayAmount(quote);
   // The yearly saving is stated as an amount, computed from the same quote the checkout charges.
   const yearlySavingAmount = Math.max(0, individualMonthlyDisplayAmount("monthly", quote) * 12 - yearlyTotalAmount);
-  const plans: Readonly<Record<Cadence, { label: string; price: string; note: string; badge: string | null }>> = {
+  const offerAmounts = firstYearOffer ? firstYearOfferAmounts(firstYearOffer) : null;
+  const regularPlans: Readonly<Record<Cadence, { label: string; price: string; note: string; badge: string | null; offer?: boolean }>> = {
     monthly: {
       label: t("billing.proSheet.monthly"),
       price: formatIndividualPrice(individualMonthlyDisplayAmount("monthly", quote), quote.currency),
@@ -133,6 +143,20 @@ function DecisionSheet({
       badge: t("billing.plan.intervalSavings", { percent: individualYearlySavingsPercent(quote) }),
     },
   };
+  // The offer's badge compares with a year of monthly, like the regular yearly
+  // badge, so the card states one saving and strikes no other price.
+  const plans = offerAmounts
+    ? {
+      ...regularPlans,
+      yearly: {
+        ...regularPlans.yearly,
+        price: offerAmounts.perMonth,
+        note: t("billing.firstYearOffer.yearNote", { total: offerAmounts.total, regular: offerAmounts.regular }),
+        badge: t("billing.firstYearOffer.badge", { percent: offerAmounts.percent }),
+        offer: true,
+      },
+    }
+    : regularPlans;
 
   const stateHeader = useSheetHeader(context, trialEndsAt, trialEndedToday, unclassifiedSeconds);
   const { title, fact } = look
@@ -140,7 +164,18 @@ function DecisionSheet({
       title: proLookTitle(look, t),
       fact: t(look.kind === "icon" ? "billing.proSheet.lookIconFact" : look.kind === "accent" ? "billing.proSheet.lookAccentFact" : "billing.proSheet.lookCoatFact"),
     }
-    : stateHeader;
+    : firstYearOffer && offerAmounts
+      ? {
+        title: t("billing.firstYearOffer.title", { percent: offerAmounts.percent }),
+        fact: t("billing.firstYearOffer.sheetFact", {
+          monthlyYear: offerAmounts.monthlyYear,
+          total: offerAmounts.total,
+          regular: offerAmounts.regular,
+          date: new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { month: "long", day: "numeric" })
+            .format(firstYearOfferLastDay(firstYearOffer)),
+        }),
+      }
+      : stateHeader;
   // Both cadence labels and the opening label share the button's width, so
   // neither choosing a cadence nor starting checkout moves Not now beside it.
   const cadenceLabels: Readonly<Record<Cadence, string>> = {
@@ -228,7 +263,7 @@ function DecisionSheet({
               >
                 <span className="pro-sheet__cadence-top">
                   <span className="pro-sheet__label">{plan.label}</span>
-                  {plan.badge ? <span className="pro-sheet__badge">{plan.badge}</span> : null}
+                  {plan.badge ? <span className={plan.offer ? "pro-sheet__badge is-offer" : "pro-sheet__badge"}>{plan.badge}</span> : null}
                 </span>
                 <span className="pro-sheet__price">
                   <strong>{plan.price}</strong>
