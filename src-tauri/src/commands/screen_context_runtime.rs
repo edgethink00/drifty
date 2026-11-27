@@ -578,6 +578,7 @@ impl ScreenContextRuntime {
         Ok(())
     }
     fn tick(&self, app: &AppHandle) {
+        memory_runtime::update_earlier(app);
         self.memory.tick(app);
         self.tick_visibility(app);
         self.tick_retention(app);

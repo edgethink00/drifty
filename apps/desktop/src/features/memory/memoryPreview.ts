@@ -18,8 +18,10 @@ import type { InstallProgress, MemoryInstaller } from "./memoryInstaller";
  * "tracking-paused" shows saved memory during global tracking pause.
  * "paused" is memory on while screen recording is paused, so the Memory page
  * says why it cannot load; resuming recording in Settings loads it again.
+ * "engine-update" is memory on after an app update that pins a newer engine
+ * than the one installed: the engine downloads again before memory can load.
  */
-export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start" | "paused" | "tracking-paused";
+export type MemoryPreviewState = "on" | "off" | "empty" | "many" | "setup" | "start" | "paused" | "tracking-paused" | "engine-update";
 
 const LEASE = "0f0e0d0c-0b0a-4908-8706-050403020100";
 const MINUTE = 60_000;
@@ -350,7 +352,7 @@ function frame(source: PreviewSource): string | null {
 
 export function memoryPreviewState(search = typeof window === "undefined" ? "" : window.location.search): MemoryPreviewState {
   const value = new URLSearchParams(search).get("memoryPreview");
-  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" || value === "paused" || value === "tracking-paused" ? value : "on";
+  return value === "off" || value === "empty" || value === "many" || value === "setup" || value === "start" || value === "paused" || value === "tracking-paused" || value === "engine-update" ? value : "on";
 }
 
 /** What "start" has done so far, kept for the tab so the reload after allowing recording keeps it. */
@@ -364,13 +366,15 @@ function markStartDone(step: "engine" | "models" | "granted" | "requested"): voi
 
 /**
  * The "start" state's downloads at measured sizes and a typical 8 MB/s
- * (memoryPreviewSpeed multiplies it); every other state has both installed.
+ * (memoryPreviewSpeed multiplies it); "engine-update" lacks only the engine,
+ * and every other state has both installed.
  */
 export function createMemoryPreviewInstaller(state: MemoryPreviewState = memoryPreviewState(), search = typeof window === "undefined" ? "" : window.location.search): MemoryInstaller {
   const ENGINE = 69_008_782, MODELS = 266_984_674, VERIFY_MS = 5000;
   const rate = 8 * 1024 * 1024 * Math.max(0.1, Number(new URLSearchParams(search).get("memoryPreviewSpeed")) || 1);
+  const engineMissing = state === "start" || state === "engine-update";
   const progress: Record<"engine" | "models", InstallProgress> = {
-    engine: { phase: state !== "start" || startDone("engine") ? "ready" : "missing", received: 0, total: ENGINE },
+    engine: { phase: !engineMissing || startDone("engine") ? "ready" : "missing", received: 0, total: ENGINE },
     models: { phase: state !== "start" || startDone("models") ? "ready" : "missing", received: 0, total: MODELS },
   };
   const run = async (step: "engine" | "models") => {
@@ -399,6 +403,9 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
     const reopened = startDone("requested");
     try { for (const step of ["engine", "models", "granted", "requested"]) window.sessionStorage.removeItem(START_KEY + step); } catch { /* nothing kept */ }
     if (reopened) for (const step of ["engine", "models", "granted"] as const) markStartDone(step);
+  }
+  if (state === "engine-update") {
+    try { window.sessionStorage.removeItem(START_KEY + "engine"); } catch { /* nothing kept */ }
   }
   const started = clock();
   const data = state === "empty" || state === "start" ? { pages: [] as PreviewPage[], sources: [] as PreviewSource[], notes: [] as PreviewNote[], now: null as PreviewNow | null, me: null as PreviewMe | null } : scenario(started);
@@ -457,9 +464,11 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
   const latest = () => Math.max(started - 9 * MINUTE, ...data.sources.map((source) => source.observed));
   // Settings can switch the preview's memory on and off and edit its choices.
   const memoryPrefs: { enabled: boolean; retentionHours: number; workSites: string[]; apps: string[]; ownKey?: true } = {
-    enabled: state === "on" || state === "many" || state === "paused" || state === "tracking-paused", retentionHours: 720, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
+    enabled: state === "on" || state === "many" || state === "paused" || state === "tracking-paused" || state === "engine-update", retentionHours: 720, workSites: ["localhost"], apps: ["cursor", "slack", "cmux", "chrome"] };
+  // As in the app, the engine counts as installed only at the version this build pins.
+  const engineInstalled = () => (state !== "start" && state !== "engine-update") || startDone("engine");
   const status = (withCredentials: boolean) => ({
-    supported: state !== "start" || startDone("engine"),
+    supported: engineInstalled(),
     preferences: { ...memoryPrefs },
     tracking_paused: state === "tracking-paused",
     // Setup shows what is missing; the other states hold both a Drifty Cloud session and a key, so
@@ -557,6 +566,8 @@ export function createMemoryPreviewClient(korean: boolean, state: MemoryPreviewS
       case "memory_wiki_pages":
         // As in the app, memory reads nothing while the recording it reads from is paused.
         if (memoryPrefs.enabled && screenStatus.paused) throw "memory_recording_required";
+        // Memory on reads its pages through the engine, so it cannot read them without one.
+        if (memoryPrefs.enabled && !engineInstalled()) throw "memory_unavailable";
         value = { pages: data.pages.map(pageView), notes: notesView(), now: nowView(), me: meView() };
         break;
       case "memory_wiki_note": {
