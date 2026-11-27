@@ -22,6 +22,7 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from app.tracker.windows_browser_history import windows_browser_roots  # noqa: E402
+from app.tracker.windows_browser_uia import _SUPPORTED_BROWSERS  # noqa: E402
 
 
 class WindowsBrowserRootTests(unittest.TestCase):
@@ -65,6 +66,17 @@ class WindowsBrowserRootTests(unittest.TestCase):
         # Opera is the one Chromium browser that does not use a User Data root.
         roots = self._roots()
         self.assertEqual(self._parts(roots["Opera"])[-2:], ["Opera Software", "Opera Stable"])
+
+    def test_every_browser_read_live_on_windows_has_a_history_root(self) -> None:
+        # The first-day import reads only these roots; Comet, LibreWolf and Waterfox were
+        # read live without one until 2026-11-27.
+        self.assertEqual(sorted(set(_SUPPORTED_BROWSERS) - set(self._roots())), [])
+
+    def test_comet_and_gecko_forks_use_their_own_folders(self) -> None:
+        roots = self._roots()
+        self.assertEqual(self._parts(roots["Comet"])[-4:], ["Local", "Perplexity", "Comet", "User Data"])
+        self.assertEqual(self._parts(roots["LibreWolf"])[-3:], ["Roaming", "librewolf", "Profiles"])
+        self.assertEqual(self._parts(roots["Waterfox"])[-3:], ["Roaming", "Waterfox", "Profiles"])
 
     def test_no_macos_only_browsers_are_offered(self) -> None:
         # Safari and Arc have no Windows builds; offering them would produce a

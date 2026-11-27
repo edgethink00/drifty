@@ -13,12 +13,15 @@ SERVICE_ROOT = Path(__file__).resolve().parents[1]
 if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
+from app.tracker.accessibility_address_bar import AX_ADDRESS_BAR_BROWSER_APPS
 from app.tracker.browser_history import (
+    _MACOS_BROWSER_ROOTS,
     browser_history_metadata,
     chromium_history_paths_for_root,
     firefox_history_paths_for_root,
     is_browser_history_supported_app,
     is_firefox_family_browser,
+    is_safari_family_browser,
 )
 from tests.support_cleanup import cleanup_temp_dir
 
@@ -211,8 +214,25 @@ class BrowserHistoryTests(unittest.TestCase):
         self.assertFalse(is_firefox_family_browser("Whale"))
 
     def test_new_browsers_are_supported_apps(self) -> None:
-        for app_name in ("Whale", "Vivaldi", "Opera", "Zen", "Floorp"):
+        for app_name in ("Whale", "Vivaldi", "Opera", "Zen", "Floorp", "Dia", "Comet", "LibreWolf", "Waterfox"):
             self.assertTrue(is_browser_history_supported_app(app_name), app_name)
+        # The Safari family keeps its own live path; its history is read only by the import.
+        self.assertFalse(is_browser_history_supported_app("Safari"))
+        self.assertFalse(is_browser_history_supported_app("Safari Technology Preview"))
+
+    def test_every_browser_read_live_on_macos_has_a_history_root(self) -> None:
+        # The first-day import reads only the browsers listed in the root table. A browser
+        # the tracker reads live but cannot import starts its users on an empty first day,
+        # as Dia, Comet, LibreWolf, Waterfox and Safari Technology Preview did until
+        # 2026-11-27. Dia is read live through its own window script, outside the AX set.
+        read_live = set(AX_ADDRESS_BAR_BROWSER_APPS) | {"Dia"}
+        self.assertEqual(sorted(read_live - set(_MACOS_BROWSER_ROOTS)), [])
+
+    def test_gecko_and_webkit_forks_use_their_familys_reader(self) -> None:
+        self.assertTrue(is_firefox_family_browser("LibreWolf"))
+        self.assertTrue(is_firefox_family_browser("Waterfox"))
+        self.assertTrue(is_safari_family_browser("Safari Technology Preview"))
+        self.assertFalse(is_safari_family_browser("Dia"))
 
     def test_browser_history_metadata_reads_whale_chromium_profile(self) -> None:
         self._write_chromium_history(
