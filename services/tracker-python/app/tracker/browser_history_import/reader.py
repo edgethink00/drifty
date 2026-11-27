@@ -65,7 +65,7 @@ def read_import_visits(request: BrowserHistoryImportRequest) -> HistoryVisitRead
 
 def _history_paths(browser_name: str, root: Path) -> list[Path]:
     if is_safari_family_browser(browser_name):
-        return safari_history_paths_for_root(root)
+        return safari_history_paths_for_root(root, browser_name)
     if is_firefox_family_browser(browser_name):
         return firefox_history_paths_for_root(root)
     return chromium_history_paths_for_root(root)

@@ -92,6 +92,12 @@ _FIREFOX_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset(
 # with Cocoa-epoch second timestamps, gated behind Full Disk Access.
 _SAFARI_FAMILY_BROWSERS: Final[frozenset[str]] = frozenset({"Safari", "Safari Technology Preview"})
 
+# Safari 17+ keeps each named profile a person adds (Work, School...) in its own
+# History.db inside Safari's sandbox container, one folder per profile UUID; the
+# default profile stays in ~/Library/Safari/History.db. Safari Technology Preview
+# is left out: sources disagree on where its container keeps profiles.
+_SAFARI_NAMED_PROFILE_BROWSERS: Final[frozenset[str]] = frozenset({"Safari"})
+
 _SAFARI_HISTORY_ROOT: Final[Path] = Path.home() / "Library/Safari"
 # Records the default URL scheme handler chosen in System Settings > Desktop & Dock.
 # Not TCC-protected; parsed with stdlib plistlib.
@@ -108,14 +114,45 @@ def is_safari_family_browser(app_name: str) -> bool:
     return app_name in _SAFARI_FAMILY_BROWSERS
 
 
-def safari_history_paths_for_root(root: Path) -> list[Path]:
+def safari_history_paths_for_root(root: Path, browser_name: str = "Safari") -> list[Path]:
     history_path = root / "History.db"
     # is_file() may itself be denied by TCC when Full Disk Access is off; treat
     # that (and a missing database) the same way — nothing readable here.
     try:
-        return [history_path] if history_path.is_file() else []
+        if not history_path.is_file():
+            return []
     except OSError:
         return []
+    paths = [history_path]
+    # Safari's container is guarded as another app's data: touching it without
+    # Full Disk Access can raise a macOS prompt in the middle of the import. Look
+    # there only once the default database opens, which takes that same access.
+    if browser_name in _SAFARI_NAMED_PROFILE_BROWSERS and _opens(history_path):
+        paths.extend(_safari_named_profile_paths(root))
+    return paths
+
+
+def _safari_named_profile_paths(root: Path) -> list[Path]:
+    # Derived from the root (~/Library/Safari -> ~/Library/Containers/...), so a
+    # test root never reaches the real container.
+    profiles_dir = root.parent / "Containers" / "com.apple.Safari" / "Data" / "Library" / "Safari" / "Profiles"
+    try:
+        return [
+            profile_dir / "History.db"
+            for profile_dir in sorted(profiles_dir.iterdir(), key=lambda path: path.name)
+            if profile_dir.is_dir() and (profile_dir / "History.db").is_file()
+        ]
+    except OSError:
+        # No profiles yet, or the container is unreadable: keep the default profile.
+        return []
+
+
+def _opens(path: Path) -> bool:
+    try:
+        with path.open("rb"):
+            return True
+    except OSError:
+        return False
 
 
 @dataclass(frozen=True)

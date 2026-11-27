@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import sys
 import unittest
@@ -374,6 +375,56 @@ class BrowserHistoryImportTests(unittest.TestCase):
         self.assertGreaterEqual(preview["errorCount"], 1)
         self.assertEqual(preview["segmentCount"], 0)
         self.assertFalse(safari_history_readable(self.root))
+
+    def _write_safari_with_named_profile(self) -> tuple[Path, Path]:
+        # Safari 17+ keeps the default profile in ~/Library/Safari and each named
+        # profile in its own History.db inside Safari's container.
+        library = self.root / "Library"
+        visited = self.now - timedelta(days=1, hours=3)
+        default_db = write_safari_history(library / "Safari", [("https://docs.example.test/default", "Default page", visited)])
+        profiles = library / "Containers" / "com.apple.Safari" / "Data" / "Library" / "Safari" / "Profiles"
+        write_safari_history(
+            profiles / "6F1D7C2A-0B3E-4F55-9A1C-WORK",
+            [("https://docs.example.test/work", "Work page", visited + timedelta(minutes=30))],
+        )
+        # A profile Safari has not browsed in yet has a folder but no History.db.
+        (profiles / "0A9B3C4D-5E6F-4A7B-8C9D-EMPTY").mkdir()
+        return library / "Safari", default_db
+
+    def test_import_reads_safari_named_profiles_from_safaris_container(self) -> None:
+        safari_root, _ = self._write_safari_with_named_profile()
+        request = BrowserHistoryImportRequest(lookback_days=7, observed_at=self.now, profile_roots={"Safari": safari_root})
+        from app.tracker.browser_history_import.reader import read_import_visits
+
+        outcome = read_import_visits(request)
+        preview = preview_browser_history_import(request).to_payload()
+
+        self.assertEqual(
+            [(visit.browser_name, visit.title) for visit in outcome.visits],
+            [("Safari", "Default page"), ("Safari", "Work page")],
+        )
+        self.assertEqual(preview["databaseCount"], 2)
+        self.assertEqual(preview["profileCount"], 2)
+
+    @unittest.skipIf(
+        sys.platform == "win32" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+        "needs POSIX permissions that bind the current user",
+    )
+    def test_safari_named_profiles_wait_until_safaris_own_history_opens(self) -> None:
+        # Without Full Disk Access the default database does not open, and Safari's
+        # container (which macOS guards as another app's data) is left alone.
+        safari_root, default_db = self._write_safari_with_named_profile()
+        request = BrowserHistoryImportRequest(lookback_days=7, observed_at=self.now, profile_roots={"Safari": safari_root})
+        from app.tracker.browser_history_import.reader import read_import_visits
+
+        default_db.chmod(0)
+        try:
+            outcome = read_import_visits(request)
+        finally:
+            default_db.chmod(0o600)
+
+        self.assertEqual(outcome.visits, ())
+        self.assertEqual(outcome.database_count, 1)
 
     def test_preview_summarizes_last_week_without_raw_history(self) -> None:
         self._write_chromium_history(
