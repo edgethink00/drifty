@@ -245,9 +245,8 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { refineIntroDecisionReason, resolveFirstDayRecap, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
+import { refineIntroDecisionReason, resolveFirstDayRecap, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataFile, introReviewDataMode } from "./features/onboarding/introStoryReview";
-import { breakdownContent } from "./features/onboarding/noFocusCardVariants";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
 import { isFirstDayReviewEnabled } from "./features/onboarding/firstDayPreparationReviewData";
@@ -257,7 +256,7 @@ import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "./lib/browserHistoryImp
 import { readFirstDayCloudBacklog, resumeFirstDayCloudBacklog, updateFirstDayCloudBacklog } from "./features/onboarding/firstDayCloudBacklog";
 import { useIntroReviewOverrides } from "./features/onboarding/introReviewOverrides";
 import { PostOnboardingSidebarGuide, type GuideDecision } from "./features/onboarding/PostOnboardingSidebarGuideOverlay";
-import { introLayout, isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, isRebalancedIntroLayout, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS, POST_ONBOARDING_STORY_REBALANCED_STEPS } from "./features/onboarding/postOnboardingSidebarGuide";
+import { isPostOnboardingGuideLastStep, isPostOnboardingSidebarGuideReviewEnabled, POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, postOnboardingStorySteps } from "./features/onboarding/postOnboardingSidebarGuide";
 import { usePostOnboardingSidebarGuide } from "./features/onboarding/usePostOnboardingSidebarGuide";
 import type { WatcherPeekEvent, WatcherPeekResponse } from "./features/companion/watcherPeekTypes";
 import {
@@ -2017,13 +2016,8 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
   // Dev review only: one request for a local file of real records (see introReviewDataFile).
   const introReviewFileRequestedRef = useRef(false);
-  // Review prototype: a six-card story drops its middle card when the day has nothing for it.
-  const introSequence = useMemo(() => {
-    if (!introStory.recap) return POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
-    if (!isRebalancedIntroLayout()) return POST_ONBOARDING_STORY_GUIDE_STEPS;
-    const recap = introStory.recap;
-    return breakdownContent(recap, introLayout()) ? POST_ONBOARDING_STORY_REBALANCED_STEPS : POST_ONBOARDING_STORY_REBALANCED_STEPS.filter((step) => step !== "breakdown");
-  }, [introStory.recap]);
+  // A story of a day with almost no focus has no focus card, so it is one card shorter.
+  const introSequence = introStory.recap ? postOnboardingStorySteps(storyHasFocusCard(introStory.recap)) : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
   const introHostPlatform = useIntroReviewOverrides(postOnboardingSidebarGuideReviewEnabled, hostPlatform);
   const {

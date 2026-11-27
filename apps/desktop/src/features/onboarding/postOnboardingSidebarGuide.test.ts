@@ -3,6 +3,7 @@ import {
   POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS,
   POST_ONBOARDING_SIDEBAR_GUIDE_STEPS,
   POST_ONBOARDING_STORY_GUIDE_STEPS,
+  POST_ONBOARDING_STORY_NO_FOCUS_STEPS,
   advancePostOnboardingSidebarGuide,
   beginPostOnboardingSidebarGuide,
   dismissPostOnboardingSidebarGuide,
@@ -13,6 +14,7 @@ import {
   restartPostOnboardingSidebarGuide,
   retreatPostOnboardingSidebarGuide,
   postOnboardingSkipPath,
+  postOnboardingStorySteps,
   skipPostOnboardingSidebarGuide,
 } from "./postOnboardingSidebarGuide";
 
@@ -44,7 +46,8 @@ describe("postOnboardingSidebarGuide", () => {
     expect(skipPostOnboardingSidebarGuide({ ...welcome, step: "tracking" }, NOW)).toMatchObject({ status: "dismissed" });
     expect(skipPostOnboardingSidebarGuide({ ...welcome, step: "handoff" }, NOW)).toMatchObject({ status: "dismissed" });
     expect(postOnboardingSkipPath(POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, "welcome")).toEqual(["welcome", "account", "tracking"]);
-    expect(postOnboardingSkipPath(POST_ONBOARDING_STORY_GUIDE_STEPS, "drift")).toEqual(["recap", "drift", "account", "tracking"]);
+    expect(postOnboardingSkipPath(POST_ONBOARDING_STORY_GUIDE_STEPS, "drift")).toEqual(["recap", "focus", "drift", "account", "tracking"]);
+    expect(postOnboardingSkipPath(POST_ONBOARDING_STORY_NO_FOCUS_STEPS, "recap")).toEqual(["recap", "account", "tracking"]);
     expect(parsePostOnboardingSidebarGuideRecord(JSON.stringify(decision))).toEqual(decision);
     expect(parsePostOnboardingSidebarGuideRecord(JSON.stringify({ ...decision, skippedFrom: "nowhere" }))).toBeNull();
   });
@@ -73,19 +76,36 @@ describe("postOnboardingSidebarGuide", () => {
     expect(retreatPostOnboardingSidebarGuide(welcome, NOW).step).toBe("welcome");
   });
 
-  it("opens the story sequence on the user's day and keeps a saved position across sequences", () => {
+  it("tells the day by kind, its focus and its drift, then the decision, the menu bar ring and the handoff", () => {
     const story = POST_ONBOARDING_STORY_GUIDE_STEPS;
+    expect(story).toEqual(["recap", "focus", "drift", "account", "tracking", "handoff"]);
+    // A day with almost no focus has no focus card; the story has no separate correcting card.
+    expect(postOnboardingStorySteps(true)).toBe(story);
+    expect(postOnboardingStorySteps(false)).toEqual(["recap", "drift", "account", "tracking", "handoff"]);
     const started = beginPostOnboardingSidebarGuide(null, NOW);
     expect(postOnboardingGuideStepInSequence(started.step, story)).toBe("recap");
-    const drift = advancePostOnboardingSidebarGuide(started, NOW, story);
-    expect(drift.step).toBe("drift");
+    const focus = advancePostOnboardingSidebarGuide(started, NOW, story);
+    expect(focus.step).toBe("focus");
+    const drift = advancePostOnboardingSidebarGuide(focus, NOW, story);
     expect(advancePostOnboardingSidebarGuide(drift, NOW, story).step).toBe("account");
-    expect(retreatPostOnboardingSidebarGuide(drift, NOW, story).step).toBe("recap");
-    // The day's data went away (or arrived) while a record was saved: same position, other card.
-    expect(postOnboardingGuideStepInSequence("drift", ["welcome", "day", "account", "activity", "tracking", "handoff"])).toBe("day");
-    expect(postOnboardingGuideStepInSequence("day", story)).toBe("drift");
+    expect(retreatPostOnboardingSidebarGuide(drift, NOW, story).step).toBe("focus");
+    expect(advancePostOnboardingSidebarGuide(started, NOW, POST_ONBOARDING_STORY_NO_FOCUS_STEPS).step).toBe("drift");
+  });
+
+  it("keeps a saved position across sequences, and moves a saved correcting card on to the menu bar ring", () => {
+    const story = POST_ONBOARDING_STORY_GUIDE_STEPS;
+    // The day's data went away (or arrived) while a record was saved: same position among the day's cards.
+    expect(postOnboardingGuideStepInSequence("drift", POST_ONBOARDING_SIDEBAR_GUIDE_STEPS)).toBe("day");
+    expect(postOnboardingGuideStepInSequence("focus", POST_ONBOARDING_SIDEBAR_GUIDE_STEPS)).toBe("day");
+    expect(postOnboardingGuideStepInSequence("day", story)).toBe("focus");
+    expect(postOnboardingGuideStepInSequence("day", POST_ONBOARDING_STORY_NO_FOCUS_STEPS)).toBe("drift");
+    expect(postOnboardingGuideStepInSequence("focus", POST_ONBOARDING_STORY_NO_FOCUS_STEPS)).toBe("drift");
     expect(postOnboardingGuideStepInSequence("tracking", story)).toBe("tracking");
     expect(postOnboardingGuideStepInSequence("handoff", story)).toBe("handoff");
+    // A record saved on the correcting card by an earlier story resumes on the next card the story has.
+    expect(postOnboardingGuideStepInSequence("activity", story)).toBe("tracking");
+    const saved = { ...beginPostOnboardingSidebarGuide(null, NOW), step: "activity" as const };
+    expect(advancePostOnboardingSidebarGuide(saved, NOW, story).step).toBe("handoff");
   });
 
   it("resumes a guide saved on the retired dashboard step at the day introduction", () => {

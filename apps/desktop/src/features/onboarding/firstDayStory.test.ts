@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
-import { buildFirstDayRecap, refineIntroDecisionReason, resolveFirstDayRecap, storyTitle } from "./firstDayStory";
+import { buildFirstDayRecap, refineIntroDecisionReason, resolveFirstDayRecap, storyHasFocusCard, storyTitle } from "./firstDayStory";
 import { firstDaySourceOf } from "./firstDayPreparationStory";
 import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
 import { sanitizePostHogEventProperties } from "../../lib/analytics/events";
@@ -93,41 +93,36 @@ describe("tutorial story", () => {
     expect(resolveFirstDayRecap({ segments: buildFirstDayReviewSegments(TODAY, 2), day: TODAY, today: TODAY }).decisionReason).toBe("below_classified_minimum");
   });
 
-  it("opens on focus from 30 minutes, on the time it read from 5, and on its time by kind below that", () => {
+  it("has a focus card from 5 minutes of focus, labelled by 30 minutes, and none below 5", () => {
     const segments = buildFirstDayReviewSegments(DAY).map((segment) => segment.classification?.productivity === "focus" && segment.siteDomain !== "docs.google.com"
       ? { ...segment, classification: { ...segment.classification, productivity: "neutral" as const } } : segment);
     // Only docs.google.com stays focus: 22 + 28 = 50 minutes, enough.
-    expect(buildFirstDayRecap({ segments, day: DAY, today: TODAY })).toMatchObject({ focusSeconds: 50 * 60, lead: "focus" });
+    const full = buildFirstDayRecap({ segments, day: DAY, today: TODAY })!;
+    expect(full).toMatchObject({ focusSeconds: 50 * 60, lead: "focus" });
+    expect(storyHasFocusCard(full)).toBe(true);
     const thin = segments.map((segment) => segment.siteTitle === "Launch checklist"
       ? { ...segment, classification: { ...segment.classification!, productivity: "neutral" as const } } : segment);
-    // 22 minutes of focus is not enough to lead with, so the story opens on the classified time instead.
+    // 22 minutes of focus still gets its card, under its own label.
     const thinStory = resolveFirstDayRecap({ segments: thin, day: DAY, today: TODAY });
     expect(thinStory.decisionReason).toBe("story_low_focus");
     expect(thinStory.recap).toMatchObject({ lead: "overview", focusSeconds: 22 * 60, longestFocus: { seconds: 22 * 60, source: { label: "docs.google.com" } } });
+    expect(storyHasFocusCard(thinStory.recap!)).toBe(true);
     const trace = thin.map((segment) => segment.siteTitle === "Q4 planning"
       ? { ...segment, durationSeconds: 4 * 60, endedAt: new Date(Date.parse(segment.startedAt) + 4 * 60_000).toISOString() } : segment);
-    // 4 minutes of focus has no stretch worth naming: the story opens on the day's time by kind.
+    // 4 minutes of focus has no stretch worth naming: the story goes from the day by kind to the drift.
     const traceStory = resolveFirstDayRecap({ segments: trace, day: DAY, today: TODAY });
     expect(traceStory.decisionReason).toBe("story_no_focus");
     expect(traceStory.recap).toMatchObject({ lead: "kinds", focusSeconds: 4 * 60 });
+    expect(storyHasFocusCard(traceStory.recap!)).toBe(false);
     expect(traceStory.recap?.categories.slice(0, 3).map((entry) => [entry.category, entry.seconds / 60])).toEqual([
       ["workspace", 259], ["entertainment", 86], ["communication", 39],
     ]);
   });
 
-  it("sorts a day off by kind, and reads one site two ways by its page titles", () => {
+  it("sorts a day off by kind", () => {
     const recap = buildFirstDayRecap({ ...buildIntroReviewCase("noFocus", () => DAY), today: TODAY });
     expect(recap?.categories.slice(0, 3).map((entry) => [entry.category, entry.seconds / 60])).toEqual([
       ["entertainment", 101], ["utility", 48], ["communication", 40],
-    ]);
-    // Netflix (40 min) is longer than Street food tour (35 min) but its title is only the site's name, and
-    // the mail inbox is never shown by its title.
-    expect(recap?.examples.map((example) => [example.title, example.category])).toEqual([
-      ["Jeju trip plan", "utility"], ["Street food tour", "entertainment"], ["Morning jazz playlist", "music"],
-    ]);
-    expect(recap?.readingSite?.source.label).toBe("youtube.com");
-    expect(recap?.readingSite?.kinds.map((kind) => [kind.category, kind.seconds / 60, kind.pageCount, kind.page?.title])).toEqual([
-      ["entertainment", 61, 2, "Street food tour"], ["music", 24, 1, "Morning jazz playlist"],
     ]);
   });
 
@@ -139,28 +134,30 @@ describe("tutorial story", () => {
     expect(storyTitle("Pull requests · edgethink00/drifty", site("github.com"))).toBe("Pull requests · edgethink00/drifty");
   });
 
-  it("reads a site by its pages only when each kind has a steady page held longer than a glance", () => {
+  it("names the longest focus stretch by the page title that held most of it", () => {
     const recap = buildFirstDayRecap({
       segments: visits([
-        // Two focus kinds on one site: read two ways, but the verdict never changes.
-        [9, 0, 60 * 60, "docs.google.com", "Budget sheet", "workspace", "focus"],
-        [10, 0, 50 * 60, "docs.google.com", "Course notes", "learning", "focus"],
-        [11, 0, 30 * 60, "youtube.com", "Funny cats compilation - YouTube", "entertainment", "drift"],
-        [11, 30, 25 * 60, "youtube.com", "(2) Lo-fi beats to study - YouTube", "music", "neutral"],
-        // A title Drifty sorted two ways is an unsteady label, and ten seconds is a passing tab.
-        [12, 0, 10 * 60, "youtube.com", "Mixed video - YouTube", "entertainment", "drift"],
-        [12, 10, 10 * 60, "youtube.com", "Mixed video - YouTube", "music", "neutral"],
-        [12, 20, 10, "youtube.com", "Rust ownership explained - YouTube", "workspace", "focus"],
+        [9, 0, 30 * 60, "chatgpt.com", "Draft a reply to the review - ChatGPT", "workspace", "focus"],
+        [9, 30, 10 * 60, "chatgpt.com", "(2) Rename the release notes - ChatGPT", "workspace", "focus"],
+        [9, 40, 20 * 60, "youtube.com", "Street food tour - YouTube", "entertainment", "drift"],
+        // A title that only names its site says no more than the site: no title for that stretch.
+        [13, 0, 50 * 60, "notion.so", "Notion", "workspace", "focus"],
       ]),
       day: DAY,
       today: TODAY,
     });
-    // YouTube's pages differ in verdict (drift and neutral), so it is told before the larger Google Docs.
-    expect(recap?.readingSite?.source.label).toBe("youtube.com");
-    expect(recap?.readingSite?.pageCount).toBe(4);
-    expect(recap?.readingSite?.kinds.map((kind) => [kind.category, kind.pageCount, kind.page?.title ?? null])).toEqual([
-      ["entertainment", 2, "Funny cats compilation"], ["music", 2, "Lo-fi beats to study"], ["workspace", 1, null],
-    ]);
+    expect(recap?.longestFocus).toMatchObject({ seconds: 50 * 60, source: { label: "notion.so" } });
+    expect(recap?.longestFocus?.title).toBeUndefined();
+    const morning = buildFirstDayRecap({
+      segments: visits([
+        [9, 0, 30 * 60, "chatgpt.com", "Draft a reply to the review - ChatGPT", "workspace", "focus"],
+        [9, 30, 10 * 60, "chatgpt.com", "(2) Rename the release notes - ChatGPT", "workspace", "focus"],
+        [9, 40, 20 * 60, "youtube.com", "Street food tour - YouTube", "entertainment", "drift"],
+      ]),
+      day: DAY,
+      today: TODAY,
+    });
+    expect(morning?.longestFocus).toMatchObject({ seconds: 40 * 60, title: "Draft a reply to the review" });
   });
 
   it("still keeps the sample cards when too little of the day is classified, whatever its focus", () => {

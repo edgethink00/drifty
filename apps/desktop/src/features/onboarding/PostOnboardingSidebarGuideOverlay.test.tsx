@@ -14,32 +14,42 @@ const callbacks = () => ({ onAdvance: vi.fn(), onBack: vi.fn(), onDismiss: vi.fn
 describe("centered app introduction", () => {
   const recap = buildFirstDayRecap({ segments: buildFirstDayReviewSegments("2026-09-30"), day: "2026-09-30", today: "2026-10-01" });
 
-  it("tells the user's own first day on the story cards", () => {
+  it("tells the user's own first day by kind, then its focus, then its drift with where to correct it", () => {
     const props = callbacks();
     const { rerender } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} {...props} />);
-    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m in your browser yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your browsing yesterday by kind" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("Your longest stretch was 1h 4m on github.com, from 2:02 PM.");
+      .toBe("From the most: workspace 4h 37m, entertainment 1h 26m, and communication 39m.");
     // The first story card pages on with Next; only the sample welcome offers "Show me around".
     expect(screen.getByRole("button", { name: "Next" })).toBeTruthy();
+    rerender(<PostOnboardingSidebarGuide step="focus" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} {...props} />);
+    expect(screen.getByRole("dialog", { name: "4h 41m of it was focus" })).toBeTruthy();
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Your longest stretch was 1h 4m on github.com, from 2:02 PM.");
+    // The chart names the stretch by the page title Drifty read there.
+    expect(document.querySelector(".story-day__fact")?.textContent).toContain("drifty / onboarding");
     rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={recap} {...props} />);
     expect(screen.getByRole("dialog", { name: "Drift in your browser took 2h 1m" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("Most of it went to youtube.com: 1h 12m. If some of it wasn't drift, you can correct it.");
+      .toBe("Most of it went to youtube.com: 1h 12m. If some of it wasn't drift, fix it in Classification. The fix applies to earlier activity too.");
     expect(document.querySelector("[data-art-scene='drift']")).toBeTruthy();
   });
 
-  it("opens on the time it read when focus was short, and names the focus in the body", () => {
+  it("keeps the focus card when focus was short", () => {
     const props = callbacks();
     const day = "2026-09-30", today = "2026-10-01";
     const lowFocus = buildFirstDayRecap({ ...buildIntroReviewCase("lowFocus", () => day), today });
     const { rerender } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={lowFocus} {...props} />);
-    expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your browsing yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your browsing yesterday by kind" })).toBeTruthy();
+    rerender(<PostOnboardingSidebarGuide step="focus" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={lowFocus} {...props} />);
+    expect(screen.getByRole("dialog", { name: "22m of it was focus" })).toBeTruthy();
     expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
-      .toBe("22m of it was focus. Your longest stretch was 22m on docs.google.com, from 9:26 AM.");
+      .toBe("Your longest stretch was 22m on docs.google.com, from 9:26 AM.");
     const lowFocusToday = buildFirstDayRecap({ segments: buildIntroReviewCase("lowFocus", () => today).segments.map((segment) => ({ ...segment, source: "nsworkspace", siteSource: "applescript" })), day: today, today });
     rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={lowFocusToday} {...props} />);
-    expect(screen.getByRole("dialog", { name: "Drifty looked at 7h 21m of your day so far" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your day so far by kind" })).toBeTruthy();
+    rerender(<LocalizationTestProvider language="ko"><PostOnboardingSidebarGuide step="focus" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={lowFocus} {...props} /></LocalizationTestProvider>);
+    expect(screen.getByRole("dialog", { name: "그중 집중은 22분이었어요" })).toBeTruthy();
   });
 
   it("opens a day with no focus on its time by kind, colouring the chart by the three largest kinds", () => {
@@ -70,17 +80,17 @@ describe("centered app introduction", () => {
     const today = "2026-10-01";
     const todayRecap = buildFirstDayRecap({ ...buildIntroReviewCase("today", () => today), today });
     const { rerender } = render(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={todayRecap} {...props} />);
-    expect(screen.getByRole("dialog", { name: "You’ve focused for 4h 41m in your browser so far today" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your browsing so far today by kind" })).toBeTruthy();
     const watchedToday = buildFirstDayRecap({ ...buildIntroReviewCase("watched", () => today), today });
     rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={watchedToday} {...props} />);
-    expect(screen.getByRole("dialog", { name: "You’ve focused for 4h 41m so far today" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your day so far by kind" })).toBeTruthy();
     const quietToday = buildFirstDayRecap({ segments: buildIntroReviewCase("watched", () => today).segments.filter((segment) => segment.classification?.productivity !== "drift"), day: today, today });
     rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={quietToday} {...props} />);
     // Today is still going, so it is not yet called a day.
     expect(screen.getByRole("dialog", { name: "Almost no drift so far today" })).toBeTruthy();
     const earlier = buildFirstDayRecap({ ...buildIntroReviewCase("earlier", (offset) => ["2026-09-29", "2026-09-30", today][offset + 2]), today });
     rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={earlier} {...props} />);
-    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m in your browser the day before yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your browsing from the day before yesterday by kind" })).toBeTruthy();
   });
 
   it("says plainly when there was almost no drift, scoped to the browser when the day was rebuilt, and looks ahead on the decision card", () => {
@@ -89,7 +99,8 @@ describe("centered app introduction", () => {
     const rebuilt = buildFirstDayRecap({ ...buildIntroReviewCase("noDrift", () => day), today });
     const { rerender } = render(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={rebuilt} {...props} />);
     expect(screen.getByRole("dialog", { name: "Almost no drift in your browser" })).toBeTruthy();
-    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("From now on, time in your apps is recorded too.");
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("From now on, time in your apps is recorded too. If a label doesn't fit your work, fix it in Classification.");
     rerender(<PostOnboardingSidebarGuide step="account" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={rebuilt}
       decision={{ autoCloseMode: "off" as const, petEnabled: false, onAutoCloseModeChange: vi.fn(), onPetChange: vi.fn() }} {...props} />);
     expect(screen.getByRole("dialog", { name: "When drift shows up" })).toBeTruthy();
@@ -97,10 +108,11 @@ describe("centered app introduction", () => {
     const watched = buildFirstDayRecap({ ...buildIntroReviewCase("watched", () => day), today });
     const watchedLow = buildFirstDayRecap({ segments: buildIntroReviewCase("watched", () => day).segments.filter((segment) => segment.classification?.productivity !== "drift"), day, today });
     rerender(<PostOnboardingSidebarGuide step="recap" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={watched} {...props} />);
-    expect(screen.getByRole("dialog", { name: "You focused for 4h 41m yesterday" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Drifty sorted 7h 21m of your day yesterday by kind" })).toBeTruthy();
     rerender(<PostOnboardingSidebarGuide step="drift" sequence={POST_ONBOARDING_STORY_GUIDE_STEPS} recap={watchedLow} {...props} />);
     expect(screen.getByRole("dialog", { name: "A day with almost no drift" })).toBeTruthy();
-    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent).toBe("Nothing was classified as drift.");
+    expect(document.getElementById("post-onboarding-sidebar-guide-body")?.textContent)
+      .toBe("Nothing was classified as drift. If a label doesn't fit your work, fix it in Classification.");
   });
 
   it("offers Automatic close as During sessions, Always or Off with sessions held by default, never Drift alerts, and asks on Next", async () => {

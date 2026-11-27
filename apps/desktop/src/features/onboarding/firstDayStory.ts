@@ -91,14 +91,6 @@ function titleTellsMore(title: string, source: FirstDaySource): boolean {
   return normalized.split(/\s+/u).length >= 2 && letters.length >= 8;
 }
 
-/**
- * Whether a visit may be shown by its title as an example of how Drifty read the day. Mail and chat titles
- * name people and messages, and a browser extension's page has an ID instead of a site name, so neither is.
- */
-function showableSource(source: FirstDaySource): boolean {
-  return source.kind !== "site" || (source.label.includes(".") && !/^[a-p]{32}$/u.test(source.label));
-}
-
 function verdictOf(segment: ActivitySegment, options?: ClassificationOptions): { readonly verdict: FirstDayVerdict; readonly category: ActivityCategory } {
   const classification = classifyActivityDetailed(segment, options);
   return {
@@ -114,15 +106,6 @@ const emptyVerdictSeconds = (): VerdictSeconds => ({ focus: 0, neutral: 0, drift
 export type FirstDayRecapBlock = readonly [hourIndex: number, fromMinute: number, toMinute: number, verdict: FirstDayVerdict, sourceKey?: string, category?: ActivityCategory];
 export type FirstDayRecapMoment = { readonly hourIndex: number; readonly minute: number };
 
-/** One stay on a place: consecutive visits to the same source joined across gaps of up to five minutes. */
-export type FirstDayStay = {
-  readonly seconds: number;
-  readonly startedAt: string;
-  readonly source: FirstDaySource;
-  readonly from: FirstDayRecapMoment;
-  readonly to: FirstDayRecapMoment;
-};
-
 /**
  * The day the story tells, relative to today. First-run preparation picks yesterday, then today, then
  * the day before (useFirstDayPreparation), and the 72-hour browser-history import covers each of them
@@ -132,39 +115,12 @@ export type FirstDayStay = {
 export type FirstDayStoryDay = "yesterday" | "today" | "dayBefore";
 
 /**
- * How the first story card opens: on focus; or, when focus fell short of the focus lead's minimum, on
- * the classified time it read, with the focus it found in the body ("overview"); or, with almost no
- * focus, on the classified time it read sorted by kind ("kinds").
+ * How much focus the day held. Every story opens on the day sorted by kind; "focus" (30 minutes or more)
+ * and "overview" (5 to 30) follow it with a card on the focus, and "kinds" (under 5) has no stretch worth
+ * pointing at, so it goes from the day by kind straight to the drift. The first two differ only in their
+ * onboarding_intro label (story_ready, story_low_focus).
  */
 export type FirstDayStoryLead = "focus" | "overview" | "kinds";
-
-/** One page title of the day, as Drifty read it. */
-export type FirstDayReadPage = {
-  readonly title: string;
-  readonly source: FirstDaySource;
-  readonly category: ActivityCategory;
-  readonly verdict: ProductivityLabel;
-  readonly seconds: number;
-};
-
-/**
- * One site whose pages Drifty sorted into more than one kind (YouTube as entertainment, music and work):
- * the plainest sign it reads each page and not only the site's name.
- */
-export type FirstDayReadSite = {
-  readonly source: FirstDaySource;
-  readonly seconds: number;
-  /** Different page titles Drifty read on the site. */
-  readonly pageCount: number;
-  /** The site's time by kind, longest first, each with its page count and its longest page that can be shown by title. */
-  readonly kinds: readonly {
-    readonly category: ActivityCategory;
-    readonly verdict: ProductivityLabel;
-    readonly seconds: number;
-    readonly pageCount: number;
-    readonly page: FirstDayReadPage | null;
-  }[];
-};
 
 export type FirstDayRecap = {
   readonly day: string;
@@ -186,22 +142,8 @@ export type FirstDayRecap = {
     readonly title?: string;
   } | null;
   readonly topDrift: { readonly seconds: number; readonly source: FirstDaySource } | null;
-  /** Up to three sources with the most classified time, whatever their verdict: where a day with almost no focus went. */
-  readonly topSources: readonly { readonly seconds: number; readonly source: FirstDaySource }[];
   /** Classified time by category, longest first. */
   readonly categories: readonly { readonly category: ActivityCategory; readonly seconds: number }[];
-  /** The first and last classified moment of the day. */
-  readonly span: { readonly startedAt: string; readonly endedAt: string } | null;
-  /** The two neighbouring chart hours that held the most classified time (hour indexes, end exclusive). */
-  readonly busiestHours: { readonly fromHour: number; readonly toHour: number; readonly seconds: number } | null;
-  /** How the day moved between places: separate stays, their average length and the longest one. */
-  readonly stays: { readonly count: number; readonly averageSeconds: number; readonly longest: FirstDayStay | null };
-  /** Up to three pages in different kinds, longest first, each shown by a title that says what it was: how Drifty sorted the day. */
-  readonly examples: readonly FirstDayReadPage[];
-  /** The site whose pages Drifty sorted most visibly into different kinds, or null when no site was read more than one way. */
-  readonly readingSite: FirstDayReadSite | null;
-  /** How many classified records the day held. */
-  readonly visitCount: number;
   /** The site with the most drift (any amount), so the Automatic close preview can close a real tab even when the top drift was an app. */
   readonly topDriftSite: FirstDaySource | null;
   /** Clock hour (0-23) of the chart's first column. */
@@ -212,23 +154,12 @@ export type FirstDayRecap = {
 
 /** Below this much classified time the day has nothing honest to say; the intro keeps its sample cards. */
 export const FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS = 30 * 60;
-/**
- * The story opens on focus, so the day needs focus worth leading with: 30 minutes keeps a first card
- * like "22m of focus" (often followed by hours of drift) off the first impression.
- */
+/** From this much focus the day is a full focus day (story_ready); below it, story_low_focus. Both show the focus card. */
 export const FIRST_DAY_RECAP_MIN_FOCUS_SECONDS = 30 * 60;
-/**
- * Below the focus lead's minimum the story opens on the classified time instead and names the longest
- * focus stretch in the body; under this much focus there is no stretch worth pointing at, so the story
- * names where the time went instead.
- */
+/** Under this much focus there is no stretch worth pointing at: the story has no focus card (story_no_focus). */
 export const FIRST_DAY_RECAP_MIN_OVERVIEW_FOCUS_SECONDS = 5 * 60;
 /** Drift shorter than this is reported as "almost none" instead of naming a source. */
 export const FIRST_DAY_RECAP_MIN_DRIFT_SECONDS = 3 * 60;
-/** How many places a story with almost no focus names. */
-const FIRST_DAY_RECAP_TOP_SOURCE_COUNT = 3;
-/** A page held for less than this was a passing tab; it is not shown by its title. */
-const FIRST_DAY_READ_PAGE_MIN_SECONDS = 20;
 const FOCUS_RUN_MAX_GAP_MS = 5 * 60 * 1000;
 const MIN_CHART_HOURS = 8;
 const HOUR_MS = 60 * 60 * 1000;
@@ -250,10 +181,6 @@ export type FirstDayChart = {
     readonly to: FirstDayRecapMoment;
     readonly title?: string;
   } | null;
-  /** Every stay on one place, in time order (classified time only). */
-  readonly stays: readonly FirstDayStay[];
-  /** The two neighbouring hour columns with the most classified time. */
-  readonly busiestHours: { readonly fromHour: number; readonly toHour: number; readonly seconds: number } | null;
 };
 
 function toTimed(segments: readonly ActivitySegment[], options: ClassificationOptions | undefined, bounds?: { readonly startMs: number; readonly endMs: number }): TimedSegment[] {
@@ -299,39 +226,6 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
     }
   }
 
-  // Stays: classified visits to one place, joined while the next visit to it follows within five minutes.
-  type Stay = { seconds: number; startMs: number; endMs: number; source: FirstDaySource };
-  const stayRuns: Stay[] = [];
-  for (const entry of timed) {
-    if (entry.verdict === "pending") continue;
-    const source = firstDaySourceOf(entry.segment);
-    const last = stayRuns[stayRuns.length - 1];
-    const seconds = (entry.endMs - entry.startMs) / 1000;
-    if (last && last.source.key === source.key && entry.startMs <= last.endMs + FOCUS_RUN_MAX_GAP_MS) {
-      last.seconds += seconds;
-      last.endMs = Math.max(last.endMs, entry.endMs);
-    } else {
-      stayRuns.push({ seconds, startMs: entry.startMs, endMs: entry.endMs, source });
-    }
-  }
-  const stays: FirstDayStay[] = stayRuns.map((stay) => ({
-    seconds: Math.round(stay.seconds),
-    startedAt: new Date(stay.startMs).toISOString(),
-    source: stay.source,
-    from: momentAt(stay.startMs),
-    to: momentAt(stay.endMs),
-  }));
-
-  const classifiedMinutesByHour = Array.from({ length: hourCount }, () => 0);
-  for (const block of blocks) if (block[3] !== "pending") classifiedMinutesByHour[block[0]] += block[2] - block[1];
-  let busiestHours: FirstDayChart["busiestHours"] = null;
-  for (let hour = 0; hour + 1 < hourCount; hour += 1) {
-    const minutes = classifiedMinutesByHour[hour] + classifiedMinutesByHour[hour + 1];
-    if (minutes > 0 && (!busiestHours || minutes * 60 > busiestHours.seconds)) {
-      busiestHours = { fromHour: hour, toHour: hour + 2, seconds: Math.round(minutes * 60) };
-    }
-  }
-
   type Run = {
     seconds: number; startMs: number; endMs: number;
     sources: Map<string, { source: FirstDaySource; seconds: number; titles: Map<string, number> }>;
@@ -374,95 +268,7 @@ function chartOf(timed: readonly TimedSegment[]): FirstDayChart | null {
       to: momentAt(longest.endMs),
       ...(longestTitle ? { title: longestTitle } : {}),
     } : null,
-    stays,
-    busiestHours,
   };
-}
-
-/**
- * The day's pages as Drifty read them, joined by title (through storyTitle) on each source. A page is
- * shown by its title only when Drifty gave it one kind all day (a title read two ways is an unsteady
- * label, not a reading), the title says what it was, it held more than a passing glance, and it is
- * neither mail or chat (their titles name people) nor a browser extension's page.
- */
-function readPagesOf(entries: readonly TimedSegment[]): { readonly examples: readonly FirstDayReadPage[]; readonly readingSite: FirstDayReadSite | null } {
-  type Tally = { seconds: number; readonly verdictSeconds: Map<ProductivityLabel, number> };
-  type Page = { readonly title: string; readonly source: FirstDaySource; readonly byCategory: Map<ActivityCategory, Tally> };
-  const addTo = (tally: Tally, verdict: ProductivityLabel, seconds: number) => {
-    tally.seconds += seconds;
-    tally.verdictSeconds.set(verdict, (tally.verdictSeconds.get(verdict) ?? 0) + seconds);
-  };
-  const mainVerdict = (tally: Tally): ProductivityLabel => Array.from(tally.verdictSeconds).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "neutral";
-  const pages = new Map<string, Page>();
-  for (const entry of entries) {
-    if (entry.verdict === "pending") continue;
-    const source = firstDaySourceOf(entry.segment);
-    const title = storyTitle(entry.segment.siteTitle ?? entry.segment.windowTitle ?? "", source) || source.label;
-    const key = source.key + "\u0000" + title.toLowerCase();
-    const page = pages.get(key) ?? { title, source, byCategory: new Map<ActivityCategory, Tally>() };
-    const tally = page.byCategory.get(entry.category) ?? { seconds: 0, verdictSeconds: new Map<ProductivityLabel, number>() };
-    addTo(tally, entry.verdict, entry.segment.durationSeconds);
-    page.byCategory.set(entry.category, tally);
-    pages.set(key, page);
-  }
-
-  const shown: FirstDayReadPage[] = [];
-  for (const page of pages.values()) {
-    const [only, ...rest] = Array.from(page.byCategory);
-    if (!only || rest.length > 0) continue;
-    const [category, tally] = only;
-    if (category === "communication" || tally.seconds < FIRST_DAY_READ_PAGE_MIN_SECONDS) continue;
-    if (!showableSource(page.source) || !titleTellsMore(page.title, page.source)) continue;
-    shown.push({ title: page.title, source: page.source, category, verdict: mainVerdict(tally), seconds: tally.seconds });
-  }
-  shown.sort((left, right) => right.seconds - left.seconds);
-
-  const examples: FirstDayReadPage[] = [];
-  for (const page of shown) {
-    if (examples.length >= FIRST_DAY_RECAP_TOP_SOURCE_COUNT) break;
-    if (!examples.some((example) => example.category === page.category)) examples.push(page);
-  }
-
-  // The site read most plainly in more than one way: two or more of its kinds have a page to show. A site
-  // where those kinds also differ in verdict (a work video among entertainment) comes first, then the
-  // site with more time.
-  const sites = new Map<string, Page[]>();
-  for (const page of pages.values()) {
-    if (page.source.kind === "site" && showableSource(page.source)) sites.set(page.source.key, [...(sites.get(page.source.key) ?? []), page]);
-  }
-  let readingSite: FirstDayReadSite | null = null;
-  let best = { crosses: false, seconds: 0 };
-  for (const sitePages of sites.values()) {
-    const kinds = new Map<ActivityCategory, Tally & { pageCount: number; page: FirstDayReadPage | null }>();
-    for (const page of sitePages) {
-      for (const [category, tally] of page.byCategory) {
-        const kind = kinds.get(category) ?? { seconds: 0, verdictSeconds: new Map<ProductivityLabel, number>(), pageCount: 0, page: null };
-        for (const [verdict, seconds] of tally.verdictSeconds) addTo(kind, verdict, seconds);
-        kind.pageCount += 1;
-        kinds.set(category, kind);
-      }
-    }
-    const source = sitePages[0].source;
-    for (const page of shown) {
-      const kind = page.source.key === source.key ? kinds.get(page.category) : undefined;
-      if (kind && !kind.page) kind.page = page;
-    }
-    const shownVerdicts = new Set(Array.from(kinds.values()).flatMap((kind) => (kind.page ? [kind.page.verdict] : [])));
-    const titledKinds = Array.from(kinds.values()).filter((kind) => kind.page).length;
-    if (titledKinds < 2) continue;
-    const crosses = shownVerdicts.size > 1;
-    const seconds = Array.from(kinds.values()).reduce((total, kind) => total + kind.seconds, 0);
-    if (readingSite && (Number(crosses) - Number(best.crosses) || seconds - best.seconds) <= 0) continue;
-    best = { crosses, seconds };
-    readingSite = {
-      source,
-      seconds,
-      pageCount: sitePages.length,
-      kinds: Array.from(kinds, ([category, kind]) => ({ category, verdict: mainVerdict(kind), seconds: kind.seconds, pageCount: kind.pageCount, page: kind.page }))
-        .sort((left, right) => right.seconds - left.seconds),
-    };
-  }
-  return { examples, readingSite };
 }
 
 /**
@@ -527,14 +333,10 @@ export function resolveFirstDayRecap({
   if (!chart) return { recap: null, decisionReason: "no_chart" };
 
   const driftBySource = new Map<string, { source: FirstDaySource; seconds: number }>();
-  const classifiedBySource = new Map<string, { source: FirstDaySource; seconds: number }>();
   for (const entry of timed) {
     if (entry.verdict === "pending") continue;
-    const source = firstDaySourceOf(entry.segment);
-    const classified = classifiedBySource.get(source.key) ?? { source, seconds: 0 };
-    classified.seconds += entry.segment.durationSeconds;
-    classifiedBySource.set(source.key, classified);
     if (entry.verdict !== "drift") continue;
+    const source = firstDaySourceOf(entry.segment);
     const tally = driftBySource.get(source.key) ?? { source, seconds: 0 };
     tally.seconds += entry.segment.durationSeconds;
     driftBySource.set(source.key, tally);
@@ -542,18 +344,11 @@ export function resolveFirstDayRecap({
   const driftRanked = Array.from(driftBySource.values()).sort((left, right) => right.seconds - left.seconds);
   const topDrift = driftRanked[0] ?? null;
   const topDriftSite = driftRanked.find((entry) => entry.source.kind === "site")?.source ?? null;
-  const topSources = Array.from(classifiedBySource.values()).sort((left, right) => right.seconds - left.seconds).slice(0, FIRST_DAY_RECAP_TOP_SOURCE_COUNT);
 
   const classifiedEntries = timed.filter((entry) => entry.verdict !== "pending");
   const byCategory = new Map<ActivityCategory, number>();
   for (const entry of classifiedEntries) byCategory.set(entry.category, (byCategory.get(entry.category) ?? 0) + entry.segment.durationSeconds);
   const categories = Array.from(byCategory, ([category, seconds]) => ({ category, seconds })).sort((left, right) => right.seconds - left.seconds);
-  const span = classifiedEntries.length > 0 ? {
-    startedAt: new Date(classifiedEntries[0].startMs).toISOString(),
-    endedAt: new Date(Math.max(...classifiedEntries.map((entry) => entry.endMs))).toISOString(),
-  } : null;
-  const longestStay = chart.stays.reduce<FirstDayStay | null>((best, stay) => (best === null || stay.seconds > best.seconds ? stay : best), null);
-  const { examples, readingSite } = readPagesOf(classifiedEntries);
 
   return { decisionReason: lead === "focus" ? "story_ready" : lead === "overview" ? "story_low_focus" : "story_no_focus", recap: {
     day,
@@ -566,18 +361,7 @@ export function resolveFirstDayRecap({
     classifiedSeconds,
     longestFocus: chart.longestFocus,
     topDrift: topDrift && totals.drift >= FIRST_DAY_RECAP_MIN_DRIFT_SECONDS ? topDrift : null,
-    topSources,
     categories,
-    span,
-    busiestHours: chart.busiestHours,
-    stays: {
-      count: chart.stays.length,
-      averageSeconds: chart.stays.length > 0 ? Math.round(chart.stays.reduce((total, stay) => total + stay.seconds, 0) / chart.stays.length) : 0,
-      longest: longestStay,
-    },
-    examples,
-    readingSite,
-    visitCount: classifiedEntries.length,
     topDriftSite,
     firstHour: chart.firstHour,
     hourCount: chart.hourCount,
@@ -588,6 +372,11 @@ export function resolveFirstDayRecap({
 /** Existing callers only need the local recap, never the observation reason. */
 export function buildFirstDayRecap(input: Parameters<typeof resolveFirstDayRecap>[0]): FirstDayRecap | null {
   return resolveFirstDayRecap(input).recap;
+}
+
+/** Whether the story has a card on the day's focus: not on a day with almost no focus (see FirstDayStoryLead). */
+export function storyHasFocusCard(recap: FirstDayRecap): boolean {
+  return recap.lead !== "kinds" && recap.longestFocus !== null;
 }
 
 /**

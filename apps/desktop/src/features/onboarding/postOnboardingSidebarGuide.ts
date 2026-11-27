@@ -3,22 +3,19 @@ export const POST_ONBOARDING_SIDEBAR_GUIDE_REVIEW_QUERY_PARAM = "driftySidebarGu
 export const POST_ONBOARDING_SIDEBAR_GUIDE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /**
- * A centered introduction with two six-card sequences of the same shape. The story sequence opens on
- * the user's own first day (its focus, then its largest drift) when the first-day preparation produced
- * enough classified time; otherwise the sample sequence opens on the drawn welcome and Today cards.
- * Both continue with the drift decision ("account", the former Automatic close card, so saved records
- * stay valid), correcting the day, the menu bar ring, and last the handoff to the dashboard.
+ * A centered introduction. The story sequence opens on the user's own first day when the first-day
+ * preparation produced enough classified time: the day sorted by kind ("recap"), its focus ("focus"),
+ * then its largest drift with where to correct a label ("drift"). A day with almost no focus has no
+ * focus card, so its story has five cards. Otherwise the sample sequence opens on the drawn welcome and
+ * Today cards and keeps its own correcting card ("activity"). Both continue with the drift decision
+ * ("account", the former Automatic close card, so saved records stay valid), the menu bar ring, and last
+ * the handoff to the dashboard.
  */
 export const POST_ONBOARDING_SIDEBAR_GUIDE_STEPS = ["welcome", "day", "account", "activity", "tracking", "handoff"] as const;
-export const POST_ONBOARDING_STORY_GUIDE_STEPS = ["recap", "drift", "account", "activity", "tracking", "handoff"] as const;
-/**
- * Review prototype of a rebalanced story (?driftyIntroLayout=rebalanced on the dev server): three cards
- * on the user's own day (the opening card, the day by kind or the titles Drifty read, then the drift,
- * which now also says where to correct a label) and the correcting card left out, so it stays six cards.
- */
-export const POST_ONBOARDING_STORY_REBALANCED_STEPS = ["recap", "breakdown", "drift", "account", "tracking", "handoff"] as const;
-export const INTRO_LAYOUT_QUERY_PARAM = "driftyIntroLayout";
-const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "breakdown", "drift", "account", "activity", "tracking", "handoff"] as const;
+export const POST_ONBOARDING_STORY_GUIDE_STEPS = ["recap", "focus", "drift", "account", "tracking", "handoff"] as const;
+/** The story of a day with almost no focus: the same cards without the focus card. */
+export const POST_ONBOARDING_STORY_NO_FOCUS_STEPS = ["recap", "drift", "account", "tracking", "handoff"] as const;
+const ALL_GUIDE_STEPS = ["welcome", "day", "recap", "focus", "drift", "account", "activity", "tracking", "handoff"] as const;
 export type PostOnboardingGuideSequence = readonly PostOnboardingSidebarGuideStep[];
 /**
  * Cards everyone sees once, even after Skip: the drift decision ("account": the desktop cat and
@@ -33,54 +30,32 @@ const RETIRED_GUIDE_STEPS: Readonly<Record<string, PostOnboardingSidebarGuideSte
 
 export type PostOnboardingSidebarGuideStep = typeof ALL_GUIDE_STEPS[number];
 
-/** Dev server only: whether the review asked for the rebalanced story. */
-export function isRebalancedIntroLayout(
-  search: string = typeof window === "undefined" ? "" : window.location.search,
-  isDevelopment: boolean = import.meta.env.DEV,
-): boolean {
-  return introLayout(search, isDevelopment) !== "current";
+/** The story sequence for a day: with its focus card, or without it on a day with almost no focus. */
+export function postOnboardingStorySteps(hasFocusCard: boolean): PostOnboardingGuideSequence {
+  return hasFocusCard ? POST_ONBOARDING_STORY_GUIDE_STEPS : POST_ONBOARDING_STORY_NO_FOCUS_STEPS;
 }
+
+/** The cards after the day itself, in order. The sample has all of them; the story has no "activity". */
+const SHARED_GUIDE_STEPS: readonly PostOnboardingSidebarGuideStep[] = ["account", "activity", "tracking", "handoff"];
 
 /**
- * Review prototype story orders on the dev server, six cards each (five when the day has nothing for the
- * middle one): "rebalanced" opens on the usual first card, then the day by kind, then the drift;
- * "overview" always opens on the day by kind, then its focus (how Drifty read the pages on a day without
- * focus), then the drift; "reading" always opens by kind, then how Drifty read the pages, then the drift.
- * "five" and "rhythm" follow "overview" on a day with focus; on a day without it, "five" goes straight
- * from the day by kind to the drift, and "rhythm" puts the hours the day leaned on between them.
- */
-export type IntroLayout = "current" | "rebalanced" | "overview" | "reading" | "five" | "rhythm";
-const INTRO_LAYOUTS: readonly IntroLayout[] = ["rebalanced", "overview", "reading", "five", "rhythm"];
-export function introLayout(
-  search: string = typeof window === "undefined" ? "" : window.location.search,
-  isDevelopment: boolean = import.meta.env.DEV,
-): IntroLayout {
-  if (!isDevelopment) return "current";
-  const raw = new URLSearchParams(search).get(INTRO_LAYOUT_QUERY_PARAM);
-  return INTRO_LAYOUTS.find((layout) => layout === raw) ?? "current";
-}
-
-/** Whether a review layout opens every story on the day by kind, whatever its focus. */
-export function layoutOpensByKind(layout: IntroLayout): boolean {
-  return layout === "overview" || layout === "reading" || layout === "five" || layout === "rhythm";
-}
-
-/**
- * The step to show for a saved step in the given sequence. The two sequences have the same length,
- * so a step saved under the other one (the day's data arrived or went away) keeps its position.
+ * The step to show for a saved step in the given sequence, when it is not in it (the day's data arrived
+ * or went away, or the record is older than the story without a correcting card). A card after the day
+ * moves on to the next one the sequence has ("activity" to "tracking" in the story); a card on the day
+ * itself keeps its position among the other sequence's day cards, the last of them at most.
  */
 export function postOnboardingGuideStepInSequence(
   step: PostOnboardingSidebarGuideStep,
   sequence: PostOnboardingGuideSequence,
 ): PostOnboardingSidebarGuideStep {
   if (sequence.includes(step)) return step;
-  const sampleIndex = (POST_ONBOARDING_SIDEBAR_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
-  const storyIndex = (POST_ONBOARDING_STORY_GUIDE_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
-  const rebalancedIndex = (POST_ONBOARDING_STORY_REBALANCED_STEPS as readonly PostOnboardingSidebarGuideStep[]).indexOf(step);
-  // The rebalanced story only places its own middle card; the others keep their position in the
-  // sequences that have them.
-  const index = Math.max(sampleIndex, storyIndex, sampleIndex < 0 && storyIndex < 0 ? rebalancedIndex : -1, 0);
-  return sequence[Math.min(index, sequence.length - 1)] ?? sequence[0];
+  const shared = SHARED_GUIDE_STEPS.indexOf(step);
+  if (shared >= 0) return SHARED_GUIDE_STEPS.slice(shared).find((candidate) => sequence.includes(candidate)) ?? sequence[sequence.length - 1];
+  const position = [POST_ONBOARDING_SIDEBAR_GUIDE_STEPS, POST_ONBOARDING_STORY_GUIDE_STEPS, POST_ONBOARDING_STORY_NO_FOCUS_STEPS]
+    .map((candidate) => (candidate as readonly PostOnboardingSidebarGuideStep[]).indexOf(step))
+    .find((index) => index >= 0) ?? 0;
+  const dayCards = sequence.filter((candidate) => !SHARED_GUIDE_STEPS.includes(candidate));
+  return dayCards[Math.min(position, dayCards.length - 1)] ?? sequence[0];
 }
 export type PostOnboardingSidebarGuideStatus = "active" | "completed" | "dismissed" | "expired";
 
