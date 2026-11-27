@@ -94,7 +94,9 @@ function playedStage(pace: Pace, elapsedMs: number): Stage {
  * Development review of the first-day preparation screen with a synthetic browser-history day.
  * Plays every stage in turn, or holds one with ?driftyFirstDayStage=0..5. ?driftyFirstDayState=slow
  * adds the time-limit question (at once on a held stage); =paused shows the retry screen a real
- * failure still gets.
+ * failure still gets. With =slow, ?driftyFirstDayLimitIn=5 starts mid-classification that many seconds
+ * before the limit. ?driftyFirstDayStartAt=<epoch ms> starts the clock at that moment, so frames
+ * shown side by side play in step.
  */
 export function FirstDayPreparationReview({ appIcons = {} }: { readonly appIcons?: AppIconMap }) {
   useIntroReviewOverrides(true, "macos");
@@ -108,19 +110,30 @@ export function FirstDayPreparationReview({ appIcons = {} }: { readonly appIcons
     return Number.isInteger(stage) && stage >= 0 && stage < STAGES.length ? stage : null;
   }, [params]);
   const endAt = readyAt(pace) + (pace.dashboardAfterMs ?? 0);
-  const [elapsed, setElapsed] = useState(0);
-  const [askAfterMs, setAskAfterMs] = useState(SLOW_LIMIT_MS);
+  const limitInMs = useMemo(() => {
+    const value = params.get("driftyFirstDayLimitIn");
+    const seconds = value === null ? NaN : Number(value);
+    return slowReview && Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+  }, [params, slowReview]);
+  const startAt = useMemo(() => {
+    const epoch = Number(params.get("driftyFirstDayStartAt"));
+    return Number.isFinite(epoch) && epoch > 0 ? epoch : null;
+  }, [params]);
+  // One batch already classified, so the run is visibly underway when the limit nears.
+  const startOffsetMs = limitInMs === null ? 0 : pace.readMs + pace.loadedMs + pace.batchMs;
+  const [elapsed, setElapsed] = useState(startOffsetMs);
+  const [askAfterMs, setAskAfterMs] = useState(limitInMs === null ? SLOW_LIMIT_MS : startOffsetMs + limitInMs);
   const [continuedNow, setContinuedNow] = useState(false);
   useEffect(() => {
     if (held !== null || continuedNow) return undefined;
-    const startedAt = Date.now();
+    const startedAt = startAt ?? Date.now();
     const timer = window.setInterval(() => {
-      const next = Date.now() - startedAt;
+      const next = startOffsetMs + Math.max(0, Date.now() - startedAt);
       setElapsed(next);
       if (next >= endAt + 400) window.clearInterval(timer);
     }, 100);
     return () => window.clearInterval(timer);
-  }, [continuedNow, endAt, held]);
+  }, [continuedNow, endAt, held, startAt, startOffsetMs]);
   // Capture scripts wait on this to take every capture at the same moment of the playback.
   useEffect(() => {
     document.documentElement.dataset.firstDayReviewElapsed = String(held !== null ? -1 : elapsed);
