@@ -20,6 +20,7 @@ import { GuidePetNamePopover } from "./components/GuidePetNamePopover";
 import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
+import { storyKindsList } from "./storyCategories";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
 import type { AutoCloseMode } from "../focus-session/focusSession";
@@ -67,6 +68,7 @@ type CardCopy = { readonly title: TranslationKey; readonly body: TranslationKey 
 function cardCopy(step: PostOnboardingSidebarGuideStep, windows: boolean): CardCopy {
   switch (step) {
     case "recap":
+    case "focus":
     case "drift":
     case "welcome": return { title: "postOnboarding.story.welcomeTitle", body: windows ? "postOnboarding.story.welcomeWindowsBody" : "postOnboarding.story.welcomeBody" };
     case "day": return { title: "postOnboarding.story.dayTitle", body: "postOnboarding.story.dayBody" };
@@ -119,66 +121,67 @@ function usePageTransition(step: PostOnboardingSidebarGuideStep, stepOrder: read
 type GuideText = { readonly title: string; readonly body: string };
 type Translate = ReturnType<typeof useLocalization>["t"];
 
-/** The focus title for the day the story tells: [watched or mixed, rebuilt from browser history]. */
-const RECAP_TITLE_KEYS = {
-  yesterday: ["postOnboarding.story.recapTitleYesterday", "postOnboarding.story.recapTitleYesterdayBrowser"],
-  today: ["postOnboarding.story.recapTitleToday", "postOnboarding.story.recapTitleTodayBrowser"],
-  dayBefore: ["postOnboarding.story.recapTitleDayBefore", "postOnboarding.story.recapTitleDayBeforeBrowser"],
+/** The first story card's title, the day sorted by kind: [watched or mixed, rebuilt from browser history]. */
+const RECAP_KINDS_TITLE_KEYS = {
+  yesterday: ["postOnboarding.story.recapKindsTitleYesterday", "postOnboarding.story.recapKindsTitleYesterdayBrowser"],
+  today: ["postOnboarding.story.recapKindsTitleToday", "postOnboarding.story.recapKindsTitleTodayBrowser"],
+  dayBefore: ["postOnboarding.story.recapKindsTitleDayBefore", "postOnboarding.story.recapKindsTitleDayBeforeBrowser"],
 } as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
-/** The title when the story opens on the time it read because focus was short; same layout as above. */
-const RECAP_OVERVIEW_TITLE_KEYS = {
-  yesterday: ["postOnboarding.story.recapOverviewTitleYesterday", "postOnboarding.story.recapOverviewTitleYesterdayBrowser"],
-  today: ["postOnboarding.story.recapOverviewTitleToday", "postOnboarding.story.recapOverviewTitleTodayBrowser"],
-  dayBefore: ["postOnboarding.story.recapOverviewTitleDayBefore", "postOnboarding.story.recapOverviewTitleDayBeforeBrowser"],
-} as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
+/** How many categories the first card names; the rest of its chart reads as Other. */
+const RECAP_KINDS_NAMED = 3;
 
 /**
  * The story cards tell the user's own first day; their copy is built from the recap's facts. A day
- * rebuilt only from browser history says "in your browser" in its titles: the browser knows nothing
- * of app time, so the totals are the browser's, not the whole day's. The first title names the day the
- * story tells (yesterday, so far today, or the day before yesterday; see resolveFirstDayRecap). With
- * under 30 minutes of focus the first card opens on the classified time it read and names the focus in
- * its body. With almost no drift the second card says so plainly instead of naming a source.
+ * rebuilt only from browser history says "in your browser": the import has no record of app time, so the
+ * totals are the browser's, not the whole day's. The first card names the day the story tells
+ * (yesterday, so far today, or the day before yesterday; see resolveFirstDayRecap) and sorts it by kind;
+ * the focus card, on a day with focus, names it and its longest stretch; the drift card names the
+ * largest drift source, or says plainly there was almost none. The story has no separate correcting
+ * card, so the drift card ends on where to correct a label.
  */
 function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | null | undefined, t: Translate, language: DisplayLanguage): GuideText | null {
-  if (!recap || (step !== "recap" && step !== "drift")) return null;
+  if (!recap || (step !== "recap" && step !== "focus" && step !== "drift")) return null;
   const duration = (seconds: number) => formatLocalizedCompactDurationFromSeconds(seconds, language);
+  // Japanese and Chinese run sentences together after their full stop; the others leave a space.
+  const sentences = (first: string, second: string) => first + (language === "ja" || language === "zh-Hans" ? "" : " ") + second;
   const browser = recap.importedOnly;
   if (step === "recap") {
-    const focus = duration(recap.focusSeconds);
-    const stretch = recap.longestFocus ? {
-      time: formatLocalizedTimeLabel(recap.longestFocus.startedAt, language),
-      duration: duration(recap.longestFocus.seconds),
-      source: recap.longestFocus.source.label,
-    } : null;
-    if (recap.lead === "overview") {
-      return {
-        title: t(RECAP_OVERVIEW_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
-        body: stretch ? t("postOnboarding.story.recapOverviewBody", { focus, ...stretch }) : "",
-      };
-    }
-    const title = t(RECAP_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { focus });
-    const longest = stretch ? t("postOnboarding.story.recapBody", stretch) : "";
-    return { title, body: longest };
+    const kinds = recap.categories.slice(0, RECAP_KINDS_NAMED);
+    return {
+      title: t(RECAP_KINDS_TITLE_KEYS[recap.dayRelation][browser ? 1 : 0], { total: duration(recap.classifiedSeconds) }),
+      body: kinds.length > 0 ? t("postOnboarding.story.recapKindsBody", { kinds: storyKindsList(kinds, language, t) }) : "",
+    };
+  }
+  if (step === "focus") {
+    const longest = recap.longestFocus;
+    return {
+      title: t("postOnboarding.story.focusTitle", { focus: duration(recap.focusSeconds) }),
+      body: longest ? t("postOnboarding.story.recapBody", {
+        time: formatLocalizedTimeLabel(longest.startedAt, language),
+        duration: duration(longest.seconds),
+        source: longest.source.label,
+      }) : "",
+    };
   }
   if (recap.topDrift) {
     return {
       title: t(browser ? "postOnboarding.story.driftTitleBrowser" : "postOnboarding.story.driftTitle", { duration: duration(recap.driftSeconds) }),
-      // A wrong verdict is the first thing a user wants to fix here; the card after the decision shows how.
-      body: t("postOnboarding.story.driftBody", { source: recap.topDrift.source.label, duration: duration(recap.topDrift.seconds) })
-        + " " + t("postOnboarding.story.driftFixHint"),
+      // A wrong verdict is the first thing a user wants to fix here, so the card says where.
+      body: sentences(t("postOnboarding.story.driftBody", { source: recap.topDrift.source.label, duration: duration(recap.topDrift.seconds) }),
+        t("postOnboarding.story.driftFixHint")),
     };
   }
+  // In the browser alone, "no drift" may only mean the drift happened in apps; say what comes next.
+  const quietBody = browser
+    ? t("postOnboarding.story.driftNoneBodyBrowser")
+    : recap.driftSeconds > 0
+      ? t("postOnboarding.story.driftNoneBody", { duration: duration(recap.driftSeconds) })
+      : t("postOnboarding.story.driftZeroBody");
   return {
     // Today is still going, so it is not yet "a day" with almost no drift.
     title: t(browser ? "postOnboarding.story.driftNoneTitleBrowser"
       : recap.dayRelation === "today" ? "postOnboarding.story.driftNoneTitleToday" : "postOnboarding.story.driftNoneTitle"),
-    // In the browser alone, "no drift" may only mean the drift happened in apps; say what comes next.
-    body: browser
-      ? t("postOnboarding.story.driftNoneBodyBrowser")
-      : recap.driftSeconds > 0
-        ? t("postOnboarding.story.driftNoneBody", { duration: duration(recap.driftSeconds) })
-        : t("postOnboarding.story.driftZeroBody"),
+    body: sentences(quietBody, t("postOnboarding.story.driftQuietFixHint")),
   };
 }
 

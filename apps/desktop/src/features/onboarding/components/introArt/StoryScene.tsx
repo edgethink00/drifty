@@ -9,6 +9,9 @@ import type { DisplayLanguage } from "../../../localization/languagePreference";
 import type { FirstDaySource } from "../../firstDayPreparationStory";
 import { useSiteIcon } from "../../../../components/SiteIconContext";
 import { formatLocalizedCompactDurationFromSeconds, formatLocalizedCompactHourLabel } from "../../../../lib/formatting";
+import { CATEGORY_COLORS } from "../../../../lib/activityLabels";
+import { useLocalization } from "../../../localization/LocalizationContext";
+import { storyCategoryName } from "../../storyCategories";
 
 /*
  * The post-onboarding introduction's illustrations, drawn from real Drifty surfaces. The menu bar and Dock
@@ -199,11 +202,13 @@ function SourceGlyph({ x, y, size, source }: { x: number; y: number; size: numbe
  * selected (a light tint with dashed edges) and a dark tooltip above them names the source and its time.
  * The tooltip is centred over the hours and, near an edge, aligned with the chart's own edge.
  */
-function FactMark({ source, duration, color, span, chart }: {
+function FactMark({ source, duration, color, span, chart, name: nameOverride }: {
   source: FirstDaySource | null; duration: string; color: string;
   span: { x0: number; x1: number }; chart: { x: number; y: number; w: number; h: number };
+  /** Names the fact by the page title Drifty read instead of its source's name. */
+  name?: string;
 }) {
-  const name = source?.label ?? "";
+  const name = nameOverride ?? source?.label ?? "";
   const icon = 14, gap = 6, pad = 6, padEnd = 10, h = 26, sep = 6;
   const nameW = textWidth(name, 10, 600), durW = textWidth(duration, 10, 700);
   const width = pad + (source ? icon + gap : 0) + nameW + (name ? sep : 0) + durW + padEnd;
@@ -231,10 +236,15 @@ function FactMark({ source, duration, color, span, chart }: {
 
 
 /**
- * The first day as the Today canvas draws it: one column per hour, blocks by minute, coloured by
- * productivity. "focus" lights the longest focus stretch, "drift" lights the drift; the rest steps back.
+ * The first day as the Today canvas draws it: one column per hour, blocks by minute. "day" colours every
+ * classified block by its kind (the first card); "focus" and "drift" colour by productivity and light the
+ * longest focus stretch or the drift, so the rest steps back.
  */
-function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: { recap: FirstDayRecap; lit: "focus" | "drift"; ko: boolean; labels: RealLabels; language?: DisplayLanguage }) {
+function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: {
+  recap: FirstDayRecap; lit: "focus" | "drift" | "day"; ko: boolean; labels: RealLabels; language?: DisplayLanguage;
+}) {
+  const { t } = useLocalization();
+  const byCategory = lit === "day";
   const panel = { x: 14, y: 34, w: 372, h: 282 };
   const chart = { x: panel.x + 16, y: panel.y + 66, w: panel.w - 32, h: 168 };
   const cw = chart.w / recap.hourCount;
@@ -242,7 +252,10 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
   // With almost no drift there is no source to point at: the drift card lights the day's focus and
   // neutral time instead, a day that stayed mostly on track, and shows no label.
   const clean = lit === "drift" && !recap.topDrift;
-  const isLit = (block: FirstDayRecapBlock) => lit === "focus" ? inLongestRun(block, recap)
+  const wholeDay = lit === "day";
+  const isLit = (block: FirstDayRecapBlock) => wholeDay
+    ? block[3] !== "pending"
+    : lit === "focus" ? inLongestRun(block, recap)
     : clean ? block[3] === "focus" || block[3] === "neutral" : block[3] === "drift";
   const litColumns = recap.blocks.filter(isLit).map((block) => block[0]);
   // Drift: point at the hour holding the most drift; focus: at the stretch's first hour.
@@ -259,31 +272,63 @@ function RecapDayScene({ recap, lit, ko, labels, language = ko ? "ko" : "en" }: 
   const spanTo = lit === "focus" && recap.longestFocus ? recap.longestFocus.to.hourIndex : pillColumn;
   const color = lit === "focus" ? VERDICT_FILL.focus : VERDICT_FILL.drift;
   const step = recap.hourCount > 12 ? 3 : 2;
-  const legend = [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]] as const;
+  // By kind, the three largest categories keep their colours and the rest share one quiet "Other". Time
+  // Drifty could not sort (a browser with no page) is no kind at all, so it is left out of this chart.
+  const namedCategories = new Set(recap.categories.slice(0, 3).map((entry) => entry.category));
+  const otherFill = "var(--line-strong)";
+  const legend: readonly (readonly [string, string])[] = byCategory
+    ? [
+      ...recap.categories.slice(0, 3).map((entry) => [CATEGORY_COLORS[entry.category], storyCategoryName(entry.category, t)] as const),
+      ...(recap.categories.length > 3 ? [[otherFill, t("activity.category.custom")] as const] : []),
+    ]
+    : [[VERDICT_FILL.focus, labels.focus], [VERDICT_FILL.neutral, labels.neutral], [VERDICT_FILL.drift, labels.drift]];
+  // Category names run long in some languages (エンターテインメント): tighten the gaps to fit the panel,
+  // and leave Other out of the legend when even that is not enough.
+  const legendRoom = panel.w - 32;
+  const legendWidth = (items: readonly (readonly [string, string])[]) => items.reduce((total, [, text]) => total + 12 + textWidth(text, 10, 600), 0);
+  // Productivity labels run long too (Concentration, Neutre), so both legends are placed by their width.
+  const fittedLegend = byCategory && legend.length > 3 && legendWidth(legend) + 8 * (legend.length - 1) > legendRoom ? legend.slice(0, 3) : legend;
+  const legendGap = fittedLegend.length > 1 ? Math.max(8, Math.min(24, (legendRoom - legendWidth(fittedLegend)) / (fittedLegend.length - 1))) : 0;
+  const legendX = fittedLegend.reduce<number[]>((xs, _entry, i) => [...xs, i === 0 ? panel.x + 16 : xs[i - 1] + 12 + textWidth(fittedLegend[i - 1][1], 10, 600) + legendGap], []);
+  const blockFill = (block: FirstDayRecapBlock) => !byCategory ? VERDICT_FILL[block[3]]
+    : block[5] && namedCategories.has(block[5]) ? CATEGORY_COLORS[block[5]] : otherFill;
   return <g>
     <rect x={panel.x} y={panel.y} width={panel.w} height={panel.h} rx={12} className="real-art__window" />
-    {legend.map(([fill, text], i) => {
-      const x = panel.x + 16 + i * (ko ? 52 : 64);
-      const on = clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2);
+    {fittedLegend.map(([fill, text], i) => {
+      const x = legendX[i];
+      const on = wholeDay || (clean ? i < 2 : (lit === "focus" && i === 0) || (lit === "drift" && i === 2));
       return <g key={text} opacity={on ? 1 : 0.55}><circle cx={x + 4} cy={panel.y + 22} r={4} fill={fill} /><text x={x + 12} y={panel.y + 25.5} fontSize="10" fontWeight={on ? 700 : 500} fill="var(--text)">{text}</text></g>;
     })}
     <g transform={"translate(" + chart.x + " " + chart.y + ")"}>
       {Array.from({ length: recap.hourCount }, (_, i) => <rect key={i} x={i * cw} width={cw} height={chart.h} fill="var(--line)" opacity={i % 2 ? 0.16 : 0.34} />)}
-      {recap.blocks.map((block, i) => <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
+      {recap.blocks.map((block, i) => byCategory && block[3] === "pending" ? null : <rect key={i} className="story-day__block" data-lit={isLit(block) || undefined} style={{ "--hour": block[0] } as CSSProperties}
         x={block[0] * cw} y={(block[1] / 60) * chart.h} width={cw + 0.4} height={Math.max(1, ((block[2] - block[1]) / 60) * chart.h)}
-        fill={VERDICT_FILL[block[3]]} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
+        fill={blockFill(block)} stroke="var(--surface)" strokeWidth=".7" opacity={isLit(block) ? 0.95 : 0.2} />)}
       {Array.from({ length: Math.floor((recap.hourCount - 1) / step) + 1 }, (_, i) => i * step).map((i) =>
         <text key={i} x={i * cw + cw / 2} y={chart.h + 16} fontSize="9.5" fill="var(--text-soft)" textAnchor="middle">{formatLocalizedCompactHourLabel((recap.firstHour + i) % 24, language)}</text>)}
     </g>
-    {clean ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+    {clean || wholeDay ? null : <FactMark source={factSource} duration={factDuration} color={color} chart={chart}
+      name={lit === "focus" && recap.longestFocus?.title ? clipText(recap.longestFocus.title, 10, chart.w - 110, 600) : undefined}
       span={{ x0: chart.x + Math.floor(spanFrom) * cw, x1: chart.x + (Math.floor(spanTo) + 1) * cw }} />}
   </g>;
+}
+
+/** A label cut to fit max units at the given size, with an ellipsis when it was cut. */
+function clipText(text: string, size: number, max: number, weight = 650): string {
+  if (textWidth(text, size, weight) <= max) return text;
+  let cut = text;
+  while (cut.length > 1 && textWidth(cut + "…", size, weight) > max) cut = cut.slice(0, -1);
+  return cut + "…";
 }
 
 export function StoryScene({ step, theme, ko, platform, labels, language, driftClosed = false, recap = null, driftChoice = "close" }: SceneProps & {
   step: PostOnboardingSidebarGuideStep; driftClosed?: boolean; recap?: FirstDayRecap | null; driftChoice?: StoryDriftChoice;
 }) {
-  if ((step === "recap" || step === "drift") && recap) return <RecapDayScene recap={recap} lit={step === "recap" ? "focus" : "drift"} ko={ko} labels={labels} language={language} />;
+  // The story's three cards on the user's own day: the day by kind, its focus (the stretch named by the
+  // page title Drifty read, when it says more than the site's name), then the drift.
+  if ((step === "recap" || step === "focus" || step === "drift") && recap) {
+    return <RecapDayScene recap={recap} lit={step === "recap" ? "day" : step} ko={ko} labels={labels} language={language} />;
+  }
   if (step === "account") return <SwatScene windows={platform === "windows"} closed={driftChoice === "close" && driftClosed} labels={labels}
     driftTitle={recap?.topDrift?.source.label} />;
   const windows = platform === "windows";

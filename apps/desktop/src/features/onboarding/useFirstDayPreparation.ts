@@ -5,7 +5,7 @@ import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucke
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "../../lib/browserHistoryImportWindow";
-import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecordedSeconds } from "./firstDayStory";
+import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecordedSeconds, type FirstDayPreparedFacts } from "./firstDayStory";
 import { getClassificationActivitySnapshot } from "../classification/classificationActivity";
 import {
   describeAiClassificationFailure,
@@ -68,6 +68,8 @@ const FIRST_DAY_PREPARATION_BACKGROUND_MODEL_WAIT_MS = 60 * 60 * 1000;
 export const FIRST_DAY_PREPARATION_CLOUD_READY_WAIT_MS = 30 * 1000;
 const FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS = 500;
 const FIRST_DAY_PREPARATION_BACKGROUND_RETRY_MAX_MS = 60 * 1000;
+// The Safari readability check only labels why a sample intro was shown, so it never holds the run.
+const FIRST_DAY_PREPARATION_ENVIRONMENT_WAIT_MS = 1_500;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -149,6 +151,11 @@ export type UseFirstDayPreparationOptions = {
   readonly setReadingSegmentIds?: (segmentIds: readonly string[]) => void;
   /** The logical day this run prepares, once chosen; null while it is still being chosen. */
   readonly setPreparedDay?: (day: string | null) => void;
+  /**
+   * What this run learned about the history it could read (see FirstDayPreparedFacts); null when a new
+   * run starts. Only a fixed analytics label is derived from it.
+   */
+  readonly onPreparedFacts?: (facts: FirstDayPreparedFacts | null) => void;
   readonly runAiClassification: RunAiClassificationBatch;
   readonly runAiClassificationUntilEmpty: RunAiClassificationBatch;
   readonly selectedAiProviderKeyRef: MutableRefObject<string>;
@@ -163,6 +170,17 @@ export type UseFirstDayPreparationOptions = {
 // The recorded-time floor is the recap's classified minimum: a day under it cannot open the story.
 // Exported for unit tests.
 export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayMinutes = 0): Promise<string> {
+  return (await resolveFirstDayTarget(logicalToday, startOfDayMinutes)).day;
+}
+
+/**
+ * The chosen day, plus the recorded time of all three candidate days together (null when none could be
+ * read), which tells whether the whole import window held a story's worth of time.
+ */
+export async function resolveFirstDayTarget(logicalToday: string, startOfDayMinutes = 0): Promise<{
+  readonly day: string;
+  readonly windowRecordedSeconds: number | null;
+}> {
   const candidates = [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)];
   const facts = await Promise.all(candidates.map(async (day) => {
     const [segmentCount, recordedSeconds] = await Promise.all([
@@ -181,7 +199,12 @@ export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayM
   const chosen = facts.find((candidate) => enoughSegments(candidate) && enoughTime(candidate))
     ?? facts.find(enoughTime)
     ?? facts.find(enoughSegments);
-  return chosen?.day ?? logicalToday;
+  const readDays = facts.filter((candidate) => candidate.recordedSeconds !== null);
+  return {
+    day: chosen?.day ?? logicalToday,
+    windowRecordedSeconds: readDays.length === 0 ? null
+      : readDays.reduce((total, candidate) => total + (candidate.recordedSeconds ?? 0), 0),
+  };
 }
 
 // First-day preparation gate: import the opted-in last 72h browser history and
@@ -208,6 +231,7 @@ export function useFirstDayPreparation({
   setProgress,
   setReadingSegmentIds,
   setPreparedDay,
+  onPreparedFacts,
   shouldBlockLocalTrackerAccess,
   startOfDayMinutes,
 }: UseFirstDayPreparationOptions): {
@@ -264,6 +288,18 @@ export function useFirstDayPreparation({
     let partialCloudReveal = false;
     const attemptStartedAt = Date.now();
     setPreparedDay?.(null);
+    onPreparedFacts?.(null);
+    // Read in parallel with the import; a slow or failed read leaves the Safari label unknown.
+    const environmentRead: Promise<boolean | null> = browserHistoryImportEnabled
+      ? firstDayPreparationRaceTimeout(
+        Promise.resolve()
+          .then(() => trackerClient.getBrowserHistoryEnvironment())
+          .then((environment) => environment.defaultBrowserIsSafari && !environment.safariHistoryReadable)
+          .catch(() => null),
+        FIRST_DAY_PREPARATION_ENVIRONMENT_WAIT_MS,
+        null,
+      )
+      : Promise.resolve(null);
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
     let quotaWaitCount = 0;
     let lastForegroundFailure: "quota" | "transient" | "content" | null = null;
@@ -730,7 +766,16 @@ export function useFirstDayPreparation({
         }
         // Complete + reveal yesterday when it has data (otherwise today, then the day before), and
         // open the dashboard there.
-        today = await resolveFirstDayTargetDay(today, startOfDayMinutes);
+        const target = await resolveFirstDayTarget(today, startOfDayMinutes);
+        today = target.day;
+        const safariLocked = await environmentRead;
+        if (!cancelled) {
+          onPreparedFacts?.({
+            importEnabled: browserHistoryImportEnabled,
+            safariLocked,
+            windowRecordedSeconds: target.windowRecordedSeconds,
+          });
+        }
         updateCloudBacklog({ day: today });
         // Once the cap has revealed the dashboard, preserve any day the user
         // selected while the import was still finishing.
