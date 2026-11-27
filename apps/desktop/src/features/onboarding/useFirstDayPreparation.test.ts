@@ -444,6 +444,33 @@ describe("useFirstDayPreparation", () => {
     expect(order.slice(0, order.indexOf("reveal"))).not.toContain("classify 2026-07-02");
   });
 
+  it("opens the prepared day before the limit when the other recent days take too long to classify", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(4, 0));
+    trackerMocks.getTimeline.mockImplementation(async (query: { day?: string }) => [{
+      id: "visit-" + query.day, startedAt: query.day + "T09:00:00", endedAt: query.day + "T09:12:00", durationSeconds: 12 * 60,
+      appName: "Google Chrome", bundleId: "com.google.Chrome", source: "browser-history-import",
+    }]);
+    // The day before yesterday never finishes, as on a slow local model.
+    const classified: string[] = [];
+    const runAiClassificationUntilEmpty = vi.fn((query: { day?: string }) => {
+      classified.push(query.day ?? "");
+      return query.day === "2026-07-02" ? new Promise<never>(() => undefined) : Promise.resolve(emptySummary);
+    });
+    const onReveal = vi.fn();
+    renderHook(() => useFirstDayPreparation(makeOptions({
+      runAiClassificationUntilEmpty: runAiClassificationUntilEmpty as unknown as UseFirstDayPreparationOptions["runAiClassificationUntilEmpty"],
+      onReveal,
+    })));
+    await flushAsync(40);
+    expect(onReveal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(FIRST_DAY_PREPARATION_MAX_MS - 4_000);
+    // The prepared day opens as complete before the limit, not on the retry screen; today waits for the background pass.
+    expect(onReveal).toHaveBeenCalledWith("complete");
+    expect(classified).not.toContain("2026-07-04");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(analyticsMocks.capturePostHogEvent).not.toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ outcome: "preparation_timed_out" }));
+  });
+
   it("spaces background reloads at least a second apart when batches finish faster than that", async () => {
     trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(40, 3));
     let calls = 0;

@@ -70,6 +70,11 @@ const FIRST_DAY_PREPARATION_CLOUD_READY_POLL_MS = 500;
 const FIRST_DAY_PREPARATION_BACKGROUND_RETRY_MAX_MS = 60 * 1000;
 // The Safari readability check only labels why a sample intro was shown, so it never holds the run.
 const FIRST_DAY_PREPARATION_ENVIRONMENT_WAIT_MS = 1_500;
+/**
+ * The other recent days are classified before the reveal only in what is left of the preparation's
+ * limit, less this margin, so a fully prepared day never ends on the retry screen because of them.
+ */
+const FIRST_DAY_PREPARATION_RECENT_DAYS_MARGIN_MS = 5_000;
 
 // Resolve with `fallback` if `promise` has not settled within `ms`. Used so a
 // hung AI classification request can never trap the user on the loading screen.
@@ -486,11 +491,13 @@ export function useFirstDayPreparation({
       setFailure(reason);
       captureOutcome(reason === "local_model_unavailable" ? "classification_incomplete" : reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
     };
+    const preparationLimitMs = cloudAiSelected ? FIRST_DAY_PREPARATION_CLOUD_MAX_MS : FIRST_DAY_PREPARATION_MAX_MS;
+    const preparationEndsAt = Date.now() + preparationLimitMs;
     const safetyTimeout = setTimeout(
       () => cloudAiSelected
         ? revealPartialCloudDay("preparation_timed_out")
         : fail("preparation_timed_out"),
-      cloudAiSelected ? FIRST_DAY_PREPARATION_CLOUD_MAX_MS : FIRST_DAY_PREPARATION_MAX_MS,
+      preparationLimitMs,
     );
 
     const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
@@ -850,8 +857,15 @@ export function useFirstDayPreparation({
             if (complete) await completeCloudBacklogIfEmpty(today, "foreground");
             for (const day of complete ? recentDaysToClassify : []) {
               if (settled || cancelled || !selectedProviderUnchanged()) break;
-              // Best effort: a day left unsorted only keeps the intro on its sample cards.
-              await runClassificationForDay(day, classifyOptions).catch(() => undefined);
+              // Best effort, in what is left of the limit: a day left unsorted only keeps the intro on its
+              // sample cards. A run cut short goes on after the reveal; the background pass waits for it.
+              const left = preparationEndsAt - FIRST_DAY_PREPARATION_RECENT_DAYS_MARGIN_MS - Date.now();
+              if (left <= 0) break;
+              const finished = await Promise.race([
+                runClassificationForDay(day, classifyOptions).then(() => true, () => true),
+                firstDayPreparationDelay(left).then(() => false),
+              ]);
+              if (!finished) break;
             }
             if (!complete && !settled) {
               // Only quota pacing may bypass the retry choice. A confirmed
