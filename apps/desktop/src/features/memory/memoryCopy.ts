@@ -61,6 +61,9 @@ export const MEMORY_COPY = {
     onFirst: "첫 기억 정리", onFirstActive: "정리하는 중",
     startModelLoading: "검색 모델을 처음 한 번 내려받는 중이에요 · 약 255MB",
     startUnsupportedTitle: "이 Mac에서는 아직 쓸 수 없어요", startUnsupportedBody: ["Apple Silicon Mac,", "macOS 14 이상에서 쓸 수 있어요."] as readonly string[],
+    engineUpdateTitle: "기억 엔진을 업데이트하고 있어요",
+    engineUpdateBody: ["이번 Drifty 업데이트는 새 기억 엔진을 써요.", "저장된 기억은 그대로이고, 다 받으면 바로 열려요."] as readonly string[],
+    setupEngineUpdate: "새 기억 엔진 받기",
     clock: (ms: number) => new Date(ms).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }),
     day: (ms: number, now: Date) => {
       const date = new Date(ms).toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" }).replace(/\((.)\)/, "$1");
@@ -145,6 +148,9 @@ export const MEMORY_COPY = {
     onFirst: "First memory", onFirstActive: "Organizing",
     startModelLoading: "Downloading the search model once · about 255 MB",
     startUnsupportedTitle: "Not available on this Mac yet", startUnsupportedBody: ["Works on Apple Silicon Macs", "with macOS 14 or later."] as readonly string[],
+    engineUpdateTitle: "Updating the memory engine",
+    engineUpdateBody: ["This Drifty update uses a new memory engine.", "Your saved memory stays as it is and opens once it downloads."] as readonly string[],
+    setupEngineUpdate: "Download the new memory engine",
     clock: (ms: number) => new Date(ms).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     day: (ms: number, now: Date) => {
       const date = new Date(ms).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
