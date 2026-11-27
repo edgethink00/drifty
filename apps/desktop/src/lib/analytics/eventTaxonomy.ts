@@ -146,6 +146,21 @@ export const BILLING_ACTIONS = [
   "friend_invite_menu_opened",
 ] as const;
 export const BILLING_INTERVALS = ["monthly", "quarterly", "yearly", "unknown"] as const;
+/** Why checkout creation refused, as the server coded it; "uncoded" covers transport and older server errors. */
+export const CHECKOUT_FAILURE_CODES = [
+  "checkout_maintenance",
+  "pricing_revision_mismatch",
+  "pricing_quote_mismatch",
+  "checkout_in_progress",
+  "checkout_payment_pending",
+  "checkout_session_closed",
+  "checkout_interval_conflict",
+  "already_subscribed",
+  "offer_unavailable",
+  "uncoded",
+] as const;
+/** The server-issued price shown with an offer, when one was. */
+export const PRICE_OFFERS = ["first_year_yearly"] as const;
 export const ENTITLEMENT_STATUSES = ["active", "trialing", "locked", "unknown"] as const;
 export const LOCKED_REASONS = ["trial_expired", "payment_required", "billing_missing", "device_limit_reached", "unavailable", "unknown"] as const;
 export const LEADERBOARD_ACTIONS = ["load", "publish", "opt_out"] as const;
@@ -356,6 +371,8 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     entitlement_status: ENTITLEMENT_STATUSES,
     locked_reason: LOCKED_REASONS,
     error_kind: ERROR_KINDS,
+    failure_code: CHECKOUT_FAILURE_CODES,
+    price_offer: PRICE_OFFERS,
   },
   pro_funnel_step: {
     step: ["classified_result_viewed", "pro_offer_viewed", "pro_offer_acted", "checkout_opened"],
@@ -365,6 +382,7 @@ export const POSTHOG_EVENT_PROPERTY_ALLOWLIST: {
     offer_context: ["trial_active", "trial_ended", "plan_inactive", "upgrade", "upgrade_local"],
     offer_action: ["view_plans", "dismiss"],
     billing_interval: BILLING_INTERVALS,
+    price_offer: PRICE_OFFERS,
   },
   leaderboard_action: {
     action: LEADERBOARD_ACTIONS,

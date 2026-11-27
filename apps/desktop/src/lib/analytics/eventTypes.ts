@@ -19,6 +19,8 @@ import type {
   APP_SURFACES,
   AUTH_STATES,
   BILLING_ACTIONS,
+  CHECKOUT_FAILURE_CODES,
+  PRICE_OFFERS,
   BILLING_INTERVALS,
   CLASSIFICATION_RANGES,
   CLASSIFICATION_FAILURE_KINDS,
@@ -82,9 +84,9 @@ type ProOfferContextValue = "trial_active" | "trial_ended" | "plan_inactive" | "
 export type PostHogEventPropertiesByName = {
   readonly pro_funnel_step:
     | { readonly step: "classified_result_viewed"; readonly dashboard_period: "day" | "week"; readonly observation_cadence?: "local_day_v1" }
-    | { readonly step: "pro_offer_viewed"; readonly offer_surface: Exclude<ProOfferSurface, "status_pill">; readonly offer_context: ProOfferContextValue }
-    | { readonly step: "pro_offer_acted"; readonly offer_surface: "trial_end_sheet" | "trial_end_notice" | "plan_end_sheet" | "plan_end_notice" | "status_pill"; readonly offer_context: "trial_ended" | "plan_inactive"; readonly offer_action: "view_plans" | "dismiss" }
-    | { readonly step: "checkout_opened"; readonly billing_interval: (typeof BILLING_INTERVALS)[number] };
+    | { readonly step: "pro_offer_viewed"; readonly offer_surface: Exclude<ProOfferSurface, "status_pill">; readonly offer_context: ProOfferContextValue; readonly price_offer?: (typeof PRICE_OFFERS)[number] }
+    | { readonly step: "pro_offer_acted"; readonly offer_surface: "trial_end_sheet" | "trial_end_notice" | "plan_end_sheet" | "plan_end_notice" | "status_pill"; readonly offer_context: "trial_ended" | "plan_inactive"; readonly offer_action: "view_plans" | "dismiss"; readonly price_offer?: (typeof PRICE_OFFERS)[number] }
+    | { readonly step: "checkout_opened"; readonly billing_interval: (typeof BILLING_INTERVALS)[number]; readonly price_offer?: (typeof PRICE_OFFERS)[number] };
   readonly app_opened: EmptyPostHogProperties;
   readonly app_active: {
     readonly active_trigger: (typeof APP_ACTIVE_TRIGGERS)[number];
@@ -217,6 +219,8 @@ export type PostHogEventPropertiesByName = {
     readonly entitlement_status?: (typeof ENTITLEMENT_STATUSES)[number];
     readonly locked_reason?: (typeof LOCKED_REASONS)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+    readonly failure_code?: (typeof CHECKOUT_FAILURE_CODES)[number];
+    readonly price_offer?: (typeof PRICE_OFFERS)[number];
   };
   readonly leaderboard_action: {
     readonly action: (typeof LEADERBOARD_ACTIONS)[number];

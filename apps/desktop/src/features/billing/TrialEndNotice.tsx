@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type AnimationEvent } from "react";
 import { FloatingNoticePortal } from "../../components/FloatingNoticePortal";
-import { formatLocalizedDuration } from "../../lib/formatting";
+import { formatLocalizedDuration, localeForDisplayLanguage } from "../../lib/formatting";
 import { recordProFunnelStep } from "../../lib/analytics/proFunnel";
 import { useProFunnelExposure } from "../../lib/analytics/useProFunnelExposure";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { FirstYearOffer } from "./billingService";
+import { firstYearOfferAmounts, firstYearOfferLastDay } from "./firstYearOffer";
 import "./TrialEndNotice.css";
 
 type TrialEndNoticeProps = {
@@ -13,6 +15,8 @@ type TrialEndNoticeProps = {
   readonly unclassifiedSeconds: number;
   readonly onViewPlans: () => void;
   readonly onDismiss: () => void;
+  /** The server's first-year offer: the notice names its price once, in place of today's time. */
+  readonly firstYearOffer?: FirstYearOffer | null;
 };
 
 const LEAVE_FALLBACK_MS = 260;
@@ -27,15 +31,16 @@ function CloseGlyph() {
  * trial-start notice's lane and form, never auto-dismisses, and has no entry
  * animation (a paused entry in a background window would hold it invisible).
  */
-export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifiedSeconds, onViewPlans, onDismiss }: TrialEndNoticeProps) {
+export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifiedSeconds, onViewPlans, onDismiss, firstYearOffer = null }: TrialEndNoticeProps) {
   const { t, effectiveLanguage } = useLocalization();
   const offerSurface = planInactive ? "plan_end_notice" as const : "trial_end_notice" as const;
   const offerContext = planInactive ? "plan_inactive" as const : "trial_ended" as const;
+  const priceOffer = firstYearOffer ? { price_offer: firstYearOffer.kind } : {};
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
   const actedRef = useRef(false);
   const finishedRef = useRef(false);
   const offerRef = useProFunnelExposure<HTMLElement>(funnelEnabled, {
-    step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: offerContext,
+    step: "pro_offer_viewed", offer_surface: offerSurface, offer_context: offerContext, ...priceOffer,
   });
 
   const finish = (then: () => void) => {
@@ -47,7 +52,7 @@ export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifi
     if (actedRef.current) return;
     actedRef.current = true;
     if (funnelEnabled) {
-      void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: offerSurface, offer_context: offerContext, offer_action: action });
+      void recordProFunnelStep({ step: "pro_offer_acted", offer_surface: offerSurface, offer_context: offerContext, offer_action: action, ...priceOffer });
     }
     const reduced = typeof window !== "undefined" && Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
     if (reduced) { finish(then); return; }
@@ -62,19 +67,31 @@ export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifi
     if (event.target === event.currentTarget && event.animationName === "floating-notice-leave" && leaving) finish(leaving);
   };
 
-  const title = t("billing.trialEndNotice.title", { duration: formatLocalizedDuration(unclassifiedSeconds, effectiveLanguage) });
+  const amounts = firstYearOffer ? firstYearOfferAmounts(firstYearOffer) : null;
+  const title = firstYearOffer && amounts
+    ? t("billing.firstYearOffer.title", { percent: amounts.percent })
+    : t("billing.trialEndNotice.title", { duration: formatLocalizedDuration(unclassifiedSeconds, effectiveLanguage) });
+  const detail = firstYearOffer && amounts
+    ? t("billing.firstYearOffer.noticeDetail", {
+      monthlyYear: amounts.monthlyYear,
+      total: amounts.total,
+      regular: amounts.regular,
+      date: new Intl.DateTimeFormat(localeForDisplayLanguage(effectiveLanguage), { month: "long", day: "numeric" })
+        .format(firstYearOfferLastDay(firstYearOffer)),
+    })
+    : t(planInactive ? "billing.planEndNotice.detail" : "billing.trialEndNotice.detail");
   return (
     <FloatingNoticePortal>
       <section
         ref={offerRef}
-        className={`trial-end-notice${leaving ? " is-leaving" : ""}`}
+        className={`trial-end-notice${firstYearOffer ? " is-offer" : ""}${leaving ? " is-leaving" : ""}`}
         role="status"
         aria-label={title}
         onAnimationEnd={onAnimationEnd}
       >
         <span className="trial-end-notice__copy">
           <strong>{title}</strong>
-          <span>{t(planInactive ? "billing.planEndNotice.detail" : "billing.trialEndNotice.detail")}</span>
+          <span>{detail}</span>
         </span>
         <button
           type="button"
@@ -86,7 +103,7 @@ export function TrialEndNotice({ planInactive = false, funnelEnabled, unclassifi
         </button>
         <span className="trial-end-notice__actions">
           <button type="button" className="app-btn app-btn--primary" onClick={() => leave("view_plans", onViewPlans)}>
-            {t("billing.trialEndNotice.viewPlans")}
+            {t(firstYearOffer ? "billing.firstYearOffer.action" : "billing.trialEndNotice.viewPlans")}
           </button>
         </span>
       </section>
