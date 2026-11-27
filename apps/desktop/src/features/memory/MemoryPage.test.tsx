@@ -7,7 +7,7 @@ import { decodeWiki, decodeWikiMe, decodeWikiNotes, decodeWikiNow, decodeWikiPag
 import { MEMORY_COPY } from "./memoryCopy";
 import { fileName, wikiMarkdownFiles } from "./memoryExport";
 import { MemoryPage } from "./MemoryPage";
-import { createMemoryPreviewClient } from "./memoryPreview";
+import { createMemoryPreviewClient, createMemoryPreviewInstaller } from "./memoryPreview";
 
 const lease = "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa";
 const SOURCE = "6f1c2a3b-4d5e-4f60-8a7b-1c2d3e4f5a63";
@@ -614,4 +614,19 @@ describe("memory page when it cannot load", () => {
     expect(screen.queryByText(MEMORY_COPY.en.recordingStopped)).toBeNull();
     expect(screen.queryByRole("button", { name: MEMORY_COPY.en.openRecording })).toBeNull();
   });
+
+  it("updates an engine an app update moved past, then shows the saved memory", async () => {
+    const client = createMemoryPreviewClient(false, "engine-update");
+    const installer = createMemoryPreviewInstaller("engine-update", "?memoryPreviewSpeed=100");
+    const installEngine = vi.spyOn(installer, "installEngine");
+    render(<LocalizationTestProvider language="en"><MemoryPage client={client} installer={installer} onOpenSettings={() => undefined} /></LocalizationTestProvider>);
+    expect(await screen.findByRole("heading", { name: MEMORY_COPY.en.engineUpdateTitle })).toBeTruthy();
+    expect(screen.queryByText(MEMORY_COPY.en.failed)).toBeNull();
+    expect(installEngine).toHaveBeenCalledTimes(1);
+    // Downloading, then verifying (5 s in the preview), then the saved pages.
+    await waitFor(() => expect(screen.queryByRole("heading", { name: MEMORY_COPY.en.engineUpdateTitle })).toBeNull(), { timeout: 9000 });
+    fireEvent.click(screen.getByRole("tab", { name: "Pages" }));
+    expect(await within(screen.getByRole("navigation", { name: "Pages" })).findByRole("button", { name: /^Juniper release/ })).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  }, 15000);
 });
