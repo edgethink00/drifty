@@ -32,6 +32,7 @@ import {
   type ContentContextEgressSummary,
 } from "./contentContextEgressPolicy";
 import { MANAGED_LOCAL_AI_CLASSIFICATION_MAX_BATCH_SIZE, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES, MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES, payloadCategoryGuidance, toLocalProviderEnhancedRetryRequest, toLocalProviderRequest, type LocalAiProviderConfig, type LocalAiProviderEnhancedRetryRequestInput, type LocalAiProviderRequest, type MinimizedActivityPayload } from "./localAiProviderRequest";
+import { parseModelJson } from "./modelJson";
 import { normalizeOnboardingWorkProfile } from "./classificationWorkProfile";
 import { readAiPrivacyRequestSettings, type AiPrivacyRequestSettings } from "../settings/aiPrivacyRequestSettings";
 import { readCategoryCustomizations, readProductivityCustomizations, resolveInitialDevModeEnabled, resolveInitialEnhancedContextSettings } from "../settings/settingsStorage";
@@ -2400,7 +2401,7 @@ function toLocalClassificationResponse(response: NativeOpenAiChatResponse, model
     ? content.map((part) => isRecord(part) && typeof part.text === "string" ? part.text : "").join("\n")
     : "";
   if (!text.trim()) return { model, latencyMs: responseLatencyMs(response), results: [] };
-  const parsed = JSON.parse(stripJsonCodeFence(text)) as EdgeClassificationResponse | EdgeClassification[] | EdgeClassification;
+  const parsed = parseModelJson(text) as EdgeClassificationResponse | EdgeClassification[] | EdgeClassification;
   // Local models often answer with the bare results array instead of {"results": [...]}.
   // Spreading an array into the response object would silently drop every result.
   // For a single item they can also answer with the bare classification object itself,
@@ -2525,17 +2526,6 @@ async function readSignedInUserId(): Promise<string | null> {
   } catch {
     return null;
   }
-}
-
-
-function stripJsonCodeFence(text: string): string {
-  const trimmed = stripLeadingReasoningBlock(text.trim());
-  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-  return match?.[1]?.trim() ?? trimmed;
-}
-
-function stripLeadingReasoningBlock(text: string): string {
-  return text.replace(/^<think>[\s\S]*?<\/think>\s*/i, "").trim();
 }
 
 async function requireCloudAiClassification(): Promise<CloudAiClassificationAccess> {
