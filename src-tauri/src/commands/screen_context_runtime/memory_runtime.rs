@@ -1,5 +1,7 @@
-//! Optional engine installed only by an explicit Settings action. No account,
-//! credentials, observation or provider call participates in artifact delivery.
+//! Optional engine, first installed only by an explicit action. A Mac that already
+//! installed an earlier engine gets the one its app version pins without being asked
+//! again. No account, credentials, observation or provider call participates in
+//! artifact delivery.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -7,7 +9,7 @@ use std::{
     io::{Read, Write},
     path::{Component, Path, PathBuf},
     sync::{Mutex, OnceLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tauri::{AppHandle, Manager, WebviewWindow};
 
@@ -16,8 +18,11 @@ const APP: &str = "Drifty Memory Engine.app";
 const PROGRAM: &str = "Contents/Resources/memory-runtime/drifty-memory";
 const MAX_EXPANDED: u64 = 400 * 1024 * 1024;
 const SPEC: &str = include_str!("memory_runtime.json");
+/// How long a failed background update waits before it tries again.
+const UPDATE_RETRY: Duration = Duration::from_secs(10 * 60);
 static INSTALL: Mutex<()> = Mutex::new(());
 static PROGRESS: Mutex<Option<Progress>> = Mutex::new(None);
+static NEXT_UPDATE: Mutex<Option<Instant>> = Mutex::new(None);
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -225,10 +230,62 @@ fn extract(archive: &Path, output: &Path) -> Result<(), String> {
     Ok(())
 }
 fn install(app: &AppHandle) -> Result<(), String> {
-    let _guard = INSTALL.try_lock().map_err(|_| ERROR)?;
+    // A second caller (Settings, the Memory page, the background update) waits for the
+    // running install and then finds the engine already in place.
+    let _guard = INSTALL.lock().map_err(|_| ERROR)?;
     let spec = artifact()?;
     let store = root(app)?;
     install_into(&store, &spec)
+}
+/// Engines installed for an earlier pin: version folders holding the program, apart
+/// from the pinned one and the install stages.
+fn earlier_engines(store: &Path, pinned: &str) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(store) else {
+        return Vec::new();
+    };
+    entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            if name == pinned
+                || name.starts_with('.')
+                || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')
+            {
+                return None;
+            }
+            let path = entry.path();
+            let meta = fs::symlink_metadata(&path).ok()?;
+            (meta.is_dir() && !meta.file_type().is_symlink() && path.join(APP).join(PROGRAM).is_file())
+                .then_some(path)
+        })
+        .collect()
+}
+/// Whether this store needs the pinned engine because it holds only earlier ones.
+fn needs_update(store: &Path, spec: &Artifact) -> bool {
+    !store.join(&spec.version).join(APP).join(PROGRAM).is_file()
+        && !earlier_engines(store, &spec.version).is_empty()
+}
+/// After an app update pins a new engine, a Mac that installed an earlier one downloads
+/// it in the background: the person already chose to have memory's engine, and memory
+/// cannot run or show its saved pages without it. Checked on the runtime's tick; a
+/// failure (offline, say) tries again after `UPDATE_RETRY`.
+pub(super) fn update_earlier(app: &AppHandle) {
+    let Ok(mut next) = NEXT_UPDATE.try_lock() else {
+        return;
+    };
+    if next.is_some_and(|at| Instant::now() < at) {
+        return;
+    }
+    *next = Some(Instant::now() + UPDATE_RETRY);
+    drop(next);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let Ok(spec) = artifact() else { return };
+        let Ok(store) = root(&app) else { return };
+        if needs_update(&store, &spec) {
+            let _ = install(&app);
+        }
+    });
 }
 fn install_into(store: &Path, spec: &Artifact) -> Result<(), String> {
     if store.join(&spec.version).join(APP).join(PROGRAM).is_file()
@@ -306,6 +363,12 @@ fn install_into(store: &Path, spec: &Artifact) -> Result<(), String> {
             fs::remove_dir_all(&target).map_err(|_| ERROR)?;
         }
         fs::rename(&unpacked, &target).map_err(|_| ERROR)?;
+        // Only the pinned engine ever runs; earlier ones are replaced code, not memory.
+        for earlier in earlier_engines(store, &spec.version) {
+            if earlier.canonicalize().ok().as_deref() == Some(earlier.as_path()) {
+                let _ = fs::remove_dir_all(&earlier);
+            }
+        }
         Ok(())
     })();
     progress(

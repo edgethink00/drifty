@@ -21,6 +21,7 @@ const MB = 1024 * 1024;
 const TRACKER_ATTEMPTS = 10;
 const TRACKER_RETRY_MS = 1500;
 const mb = (bytes: number) => Math.round(bytes / MB);
+const lines = (parts: readonly string[]) => parts.flatMap((part, index) => index === 0 ? [part] : [<br key={index} />, part]);
 
 function readRecording(client: ScreenContextClient): Promise<ScreenContextStatus | null> {
   return new Promise((resolve, reject) => {
@@ -244,7 +245,6 @@ export function MemoryStart({ client, status, copy, installer = nativeMemoryInst
     } catch { if (alive.current) setPhase("error"); }
   };
 
-  const lines = (parts: readonly string[]) => parts.flatMap((part, index) => index === 0 ? [part] : [<br key={index} />, part]);
   const engineNeeded = status?.supported === false && engine?.phase !== "ready";
   const modelsNeeded = models !== null && models.phase !== "ready";
   const stepRow = (step: Step, label: string, progress: InstallProgress | null): Row => {
@@ -319,6 +319,68 @@ export function MemoryStart({ client, status, copy, installer = nativeMemoryInst
             <p className={"memory-start__caption" + (phase === "error" ? " is-alert" : "")} role="status">{caption}</p>
           </div>
         ) : null}
+      </section>
+    </div>
+  );
+}
+
+/**
+ * Memory is on, but the engine this build pins is not installed: an app update moved the
+ * pin past the engine the person downloaded before. The app already fetches the new one
+ * in the background; this shows that download (joining it, or starting it) in place of a
+ * load failure, and reads memory again once it lands. Saved memory is untouched meanwhile.
+ */
+export function MemoryEngineUpdate({ copy, installer = nativeMemoryInstaller, onReady }: {
+  readonly copy: MemoryCopy;
+  readonly installer?: MemoryInstaller;
+  readonly onReady: () => Promise<void> | void;
+}) {
+  const [progress, setProgress] = useState<InstallProgress | null>(null);
+  const [failed, setFailed] = useState(false);
+  const alive = useRef(true);
+  const running = useRef(false);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const run = useCallback(async () => {
+    if (running.current) return;
+    running.current = true;
+    setFailed(false);
+    try {
+      await installer.installEngine();
+      if (alive.current) await onReady();
+    } catch {
+      if (alive.current) setFailed(true);
+    } finally {
+      running.current = false;
+    }
+  }, [installer, onReady]);
+  useEffect(() => {
+    let live = true;
+    const read = () => installer.engine().then((next) => { if (live) setProgress(next); return next; });
+    void read().then((first) => { if (live && first?.phase !== "unsupported") void run(); });
+    const timer = setInterval(() => void read(), 500);
+    return () => { live = false; clearInterval(timer); };
+  }, [installer, run]);
+
+  const unsupported = progress?.phase === "unsupported";
+  const total = progress?.total ?? 0;
+  const received = Math.min(total, progress?.received ?? 0);
+  const row: Row = failed || progress?.phase === "failed"
+    ? { key: "engine", label: copy.setupEngineUpdate, state: "stopped", hint: copy.startFailed,
+      action: <button type="button" className="app-btn app-btn--secondary app-btn--compact" onClick={() => void run()}>{copy.retry}</button> }
+    : progress?.phase === "verifying" ? { key: "engine", label: copy.setupEngineUpdate, state: "active", detail: copy.startVerifying, progress: 1 }
+    : progress?.phase === "ready" ? { key: "engine", label: copy.setupEngineUpdate, state: "done" }
+    : { key: "engine", label: copy.setupEngineUpdate, state: "active",
+      detail: total ? copy.setupProgress(mb(received), mb(total)) : "", progress: total ? received / total : 0 };
+  return (
+    <div className="memory-start-frame">
+      <section className="memory-start" aria-labelledby="memory-engine-update-title">
+        <h2 id="memory-engine-update-title" className="memory-start__title">{unsupported ? copy.startUnsupportedTitle : copy.engineUpdateTitle}</h2>
+        <p className="memory-start__body">{lines(unsupported ? copy.startUnsupportedBody : copy.engineUpdateBody)}</p>
+        {unsupported ? null : (
+          <div className="memory-start__slot">
+            <SetupList label={copy.engineUpdateTitle} rows={[row]} />
+          </div>
+        )}
       </section>
     </div>
   );

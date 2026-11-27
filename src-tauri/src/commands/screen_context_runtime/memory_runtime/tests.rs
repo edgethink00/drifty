@@ -67,6 +67,33 @@ fn unsigned_or_wrongly_signed_executables_are_never_accepted() {
 }
 
 #[test]
+fn only_an_earlier_installed_engine_starts_the_background_update() {
+    let store = tempfile::tempdir().unwrap();
+    let spec: Artifact = serde_json::from_str(SPEC).unwrap();
+    let engine = |version: &str| {
+        let program = store.path().join(version).join(APP).join(PROGRAM);
+        fs::create_dir_all(program.parent().unwrap()).unwrap();
+        fs::write(program, b"engine").unwrap();
+    };
+    // A Mac that never downloaded the engine is not sent one.
+    assert!(!needs_update(store.path(), &spec));
+    // Install stages, empty folders and stray files are not earlier engines.
+    engine(".install-abc");
+    fs::create_dir(store.path().join("20261101.1")).unwrap();
+    fs::write(store.path().join("notes"), b"x").unwrap();
+    assert!(!needs_update(store.path(), &spec));
+    engine("20261115.1");
+    assert!(needs_update(store.path(), &spec));
+    assert_eq!(
+        earlier_engines(store.path(), &spec.version),
+        vec![store.path().join("20261115.1")]
+    );
+    // Once the pinned engine is in place there is nothing to update.
+    engine(&spec.version);
+    assert!(!needs_update(store.path(), &spec));
+}
+
+#[test]
 #[ignore = "downloads the published, signed engine into a disposable directory"]
 fn published_engine_cold_install_gatekeeper_launch_and_reuse() {
     let root = tempfile::tempdir().unwrap();
@@ -89,4 +116,25 @@ fn published_engine_cold_install_gatekeeper_launch_and_reuse() {
     assert_eq!(worker.metadata().unwrap().modified().unwrap(), modified);
     spec.team = "AAAAAAAAAA".into();
     assert!(verify(&bundle, &spec).is_err());
+}
+
+#[test]
+#[ignore = "downloads the published, signed engine into a disposable directory"]
+fn published_engine_replaces_an_earlier_one() {
+    let folder = tempfile::tempdir().unwrap();
+    // The app's store is canonical (root() refuses a redirected one); /var is not.
+    let store = folder.path().canonicalize().unwrap();
+    let spec = artifact().unwrap();
+    let earlier = store.join("20261115.1");
+    let program = earlier.join(APP).join(PROGRAM);
+    fs::create_dir_all(program.parent().unwrap()).unwrap();
+    fs::write(&program, b"earlier engine").unwrap();
+    assert!(needs_update(&store, &spec));
+    install_into(&store, &spec).unwrap();
+    let worker = store.join(&spec.version).join(APP).join(PROGRAM);
+    verify(&store.join(&spec.version).join(APP), &spec).unwrap();
+    let output = std::process::Command::new(&worker).arg("--self-test").output().unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    assert!(!earlier.exists());
+    assert!(!needs_update(&store, &spec));
 }
