@@ -108,6 +108,16 @@ export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_PROMPT_BYTES = 9_000;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_MAX_MEMORY_BYTES = 3_000;
 export const MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS = 180_000;
 export const MANAGED_LOCAL_AI_CONNECTION_TEST_MAX_TOKENS = 64;
+// A self-hosted server picks its own model, so thinking is asked off through
+// the chat template. llama.cpp, vLLM and SGLang read it, most others ignore it,
+// and one that refuses the field gets the request again without it. With thinking
+// on, a 4B model spent about 80 s and its whole context thinking and answered
+// nothing; with it off the same batch finished in 23.5 s. The output limit only
+// stops a runaway answer: a 20-item batch needs about 1,500 tokens even from a
+// model that indents its JSON. The deadline matches the bundled runtime's, so a
+// server on a CPU is not cut off at the 60 s default.
+export const SELF_HOSTED_AI_CLASSIFICATION_MAX_TOKENS = 4096;
+export const SELF_HOSTED_AI_CLASSIFICATION_TIMEOUT_MS = MANAGED_LOCAL_AI_CLASSIFICATION_TIMEOUT_MS;
 
 export type MinimizedActivityPayload = {
   readonly segmentId: string;
@@ -228,15 +238,22 @@ function buildLocalProviderRequest(input: {
         ),
       );
     case "self_hosted":
-      return openAiCompatibleProviderRequest({
-        baseUrl: provider.baseUrl,
-        apiKey: provider.apiKey,
-        model: provider.model,
-        payload: input.payload,
-        workProfile: input.workProfile,
-        memoryContext: input.memoryContext ?? null,
-        enhancedRetryContext: input.enhancedRetryContext,
-      });
+      return openAiCompatibleProviderRequest(
+        {
+          baseUrl: provider.baseUrl,
+          apiKey: provider.apiKey,
+          model: provider.model,
+          payload: input.payload,
+          workProfile: input.workProfile,
+          memoryContext: input.memoryContext ?? null,
+          enhancedRetryContext: input.enhancedRetryContext,
+        },
+        {
+          maxTokens: SELF_HOSTED_AI_CLASSIFICATION_MAX_TOKENS,
+          timeoutMs: SELF_HOSTED_AI_CLASSIFICATION_TIMEOUT_MS,
+          chatTemplateKwargs: { enable_thinking: false },
+        },
+      );
     case "openrouter_byok": {
       const apiKey = provider.apiKey.trim();
       const models = normalizeOpenRouterModels(provider.model, provider.fallbackModels);

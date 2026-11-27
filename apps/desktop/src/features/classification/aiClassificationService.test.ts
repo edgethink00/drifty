@@ -4196,6 +4196,33 @@ describe("runAiClassification cloud contract", () => {
       cleanupServiceMocks();
     }
   });
+
+  it("saves a self-hosted batch whose answer carries Gemma 4's channel block and lacks its final brace", async () => {
+    const segments = Array.from({ length: 4 }, (_, index) => createUnknownSegment(index + 1));
+    try {
+      const { runAiClassification, nativeInvoke, saveClassifications } = await importServiceWithSegments(segments, { session: null });
+      const requests: Record<string, unknown>[] = [];
+      nativeInvoke.mockReset().mockImplementation(async (command: string, args?: { request?: Record<string, unknown> }) => {
+        if (command !== "ai_classification_openai_chat") throw new Error(`Unexpected command: ${command}`);
+        requests.push(args?.request ?? {});
+        const results = segments.map(segment => ({ id: segment.id, category: "workspace", intent: "work_execution", confidence: 0.9, reason: "Editing the launch plan" }));
+        const content = "<|channel>thought\n<channel|>\u0060\u0060\u0060json\n" + JSON.stringify({ results }).slice(0, -1) + "\n\u0060\u0060\u0060";
+        return { status: 200, body: JSON.stringify({ choices: [{ finish_reason: "stop", message: { content } }] }) };
+      });
+
+      const summary = await runAiClassification({ day: "2026-05-22" }, 20, {
+        localProvider: { provider: "self_hosted", baseUrl: "http://localhost:8080/v1", model: "gemma-4-12b" },
+      });
+
+      expect(summary.status).toBe("saved");
+      expect(summary.savedRecords).toBe(4);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ chatTemplateKwargs: { enable_thinking: false }, maxTokens: 4096, timeoutMs: 180_000 });
+      expect(saveClassifications.mock.calls[0]?.[0]).toHaveLength(4);
+    } finally {
+      cleanupServiceMocks();
+    }
+  });
 });
 
 import { clusterPayloadsByLevel, expandClusterRecords } from "./aiClassificationService";

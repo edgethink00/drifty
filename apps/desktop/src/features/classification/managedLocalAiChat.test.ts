@@ -131,3 +131,24 @@ describe("managed local send guard", () => {
     expect(invokeMock.mock.calls.filter(([command]) => command === "ai_classification_openai_chat")).toHaveLength(1);
   });
 });
+describe("self-hosted thinking-off fallback", () => {
+  const request = { baseUrl: "http://localhost:8080/v1", model: "test", messages: [], chatTemplateKwargs: { enable_thinking: false } };
+
+  it("resends once without the chat template field when the server names it in a refusal", async () => {
+    const invokeChat = vi.fn()
+      .mockResolvedValueOnce({ status: 400, body: JSON.stringify({ error: { message: "Unrecognized request argument supplied: chat_template_kwargs" } }) })
+      .mockResolvedValueOnce({ status: 200, body: "{}" });
+
+    await expect(invokeOpenAiChatWithManagedLocalRetry(request, null, () => true, { invokeChat })).resolves.toMatchObject({ status: 200 });
+    expect(invokeChat).toHaveBeenCalledTimes(2);
+    expect(invokeChat.mock.calls[1]?.[0]).not.toHaveProperty("chatTemplateKwargs");
+    expect(invokeChat.mock.calls[1]?.[0]).toMatchObject({ baseUrl: request.baseUrl, model: request.model });
+  });
+
+  it("keeps any other refusal as the answer", async () => {
+    const invokeChat = vi.fn().mockResolvedValue({ status: 400, body: JSON.stringify({ error: { message: "This model's maximum context length is 4096 tokens." } }) });
+
+    await expect(invokeOpenAiChatWithManagedLocalRetry(request, null, () => true, { invokeChat })).resolves.toMatchObject({ status: 400 });
+    expect(invokeChat).toHaveBeenCalledTimes(1);
+  });
+});
