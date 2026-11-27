@@ -622,6 +622,11 @@ export interface UnclassifiedSegmentsQuery extends ClassificationQuery {
    * segments; an empty list returns no segments. Omitting it keeps whole-range selection behavior.
    */
   segmentIds?: readonly string[];
+  /**
+   * longest_first selects the longest unclassified segments first (first-run preparation, so each
+   * batch sorts as much of the day as it can); omitted keeps time order.
+   */
+  order?: "longest_first";
 }
 
 export interface ProductivityShareMix {

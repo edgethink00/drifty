@@ -2357,6 +2357,7 @@ class TrackerDatabase:
         end: str | None = None,
         limit: int = 50,
         segment_ids: set[str] | None = None,
+        longest_first: bool = False,
     ) -> list[dict[str, Any]]:
         query = """
             SELECT
@@ -2387,7 +2388,10 @@ class TrackerDatabase:
             placeholders = ", ".join("?" for _ in segment_ids)
             query += f" AND CAST(activity_segments.id AS TEXT) IN ({placeholders})"
             params.extend(sorted(segment_ids))
-        query += " ORDER BY started_at ASC LIMIT ?"
+        if longest_first:
+            query += " ORDER BY activity_segments.duration_seconds DESC, activity_segments.started_at ASC, activity_segments.id ASC LIMIT ?"
+        else:
+            query += " ORDER BY started_at ASC LIMIT ?"
         params.append(limit)
         with self.connect() as conn:
             rows = conn.execute(query, tuple(params)).fetchall()

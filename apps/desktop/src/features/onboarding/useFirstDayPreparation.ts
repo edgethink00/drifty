@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { shiftIsoDate } from "@drifty/domain";
+import { shiftIsoDate, type UnclassifiedSegmentsQuery } from "@drifty/domain";
 import { trackerClient } from "../../lib/api/trackerClient";
 import { toAiRoute, toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucket, toFirstDayPreparationSegmentCountBucket, toFirstDayPreparationStageDurationBucket, type AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
@@ -52,6 +52,14 @@ const FIRST_DAY_PREPARATION_MINUTE_QUOTA_RETRY_MS = 60_000;
 // Onboarding classifies at "normal" granularity (one AI call per domain+title signature,
 // fanned out to matching segments) — ~fine accuracy at meaningfully fewer AI calls.
 const FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL: ClassificationLevel = "normal";
+/**
+ * The prepared day is classified longest activity first, so each batch of ten sorts as many minutes
+ * as it can and the intro reaches its story's classified minimum in fewer batches. Completion and
+ * progress are still read for the whole day.
+ */
+function firstDayClassificationQuery(day: string): UnclassifiedSegmentsQuery {
+  return { ...toClassificationQueryForDay(day), order: "longest_first" };
+}
 // Just after the logical day rolls over (start-of-day, e.g. 4am) "today" is nearly
 // empty, so the gate completes the most recent logical day that actually has data.
 const FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS = 15;
@@ -589,7 +597,7 @@ export function useFirstDayPreparation({
     };
 
     const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
-      const query = toClassificationQueryForDay(day);
+      const query = firstDayClassificationQuery(day);
       return classifyOptions
         ? runAiClassificationUntilEmpty(query, undefined, { ...classifyOptions, level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL })
         : runAiClassificationUntilEmpty(query, undefined, { level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL });
@@ -659,6 +667,7 @@ export function useFirstDayPreparation({
       classifyOptions: LocalAiClassificationOptions | null,
     ): Promise<boolean> => {
       const dayQuery = toClassificationQueryForDay(day);
+      const batchQuery = firstDayClassificationQuery(day);
 
       const applyProgress = (metrics: Awaited<ReturnType<typeof trackerClient.getClassificationMetrics>>) => {
         if (initialSegmentCount === null) initialSegmentCount = metrics.totalSegments;
@@ -705,12 +714,12 @@ export function useFirstDayPreparation({
         if (!pendingBatch) {
           classificationBatchCount += 1;
           const nextBatch = classifyOptions
-            ? runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
+            ? runAiClassification(batchQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
               ...classifyOptions,
               level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL,
               onProviderBatchStart: showReading,
             })
-            : runAiClassification(dayQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
+            : runAiClassification(batchQuery, FIRST_DAY_PREPARATION_CLASSIFY_BATCH_SIZE, {
               level: FIRST_DAY_PREPARATION_CLASSIFICATION_LEVEL,
               onCloudRequestTiming,
               onProviderBatchStart: showReading,

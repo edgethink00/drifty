@@ -1780,6 +1780,9 @@ def get_unclassified_segments(payload: dict):
         return response(True, [])
 
     start, end = day_bounds(payload)
+    # First-run preparation asks for the longest unclassified activity first, so each batch sorts as
+    # much of the day as it can; every other caller keeps time order.
+    order_kwargs = {"longest_first": True} if payload.get("order") == "longest_first" else {}
     return response(
         True,
         database().fetch_unclassified_segments(
@@ -1787,6 +1790,7 @@ def get_unclassified_segments(payload: dict):
             end,
             payload.get("limit", 50),
             segment_ids,
+            **order_kwargs,
         ),
     )
 

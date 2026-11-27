@@ -511,6 +511,25 @@ describe("useFirstDayPreparation", () => {
     expect(trackerMocks.importBrowserHistory).toHaveBeenCalledTimes(2);
   });
 
+  it("classifies the prepared day longest activity first, on screen and in the background", async () => {
+    const runAiClassification = vi.fn().mockResolvedValueOnce(savedSummary).mockResolvedValue(emptySummary);
+    const background = vi.fn().mockResolvedValue(emptySummary);
+    const options = makeLocalOptions({ runAiClassification, runAiClassificationUntilEmpty: background });
+
+    renderHook(() => useFirstDayPreparation(options));
+    await act(async () => flushAsync(60));
+
+    expect(options.onReveal).toHaveBeenCalledWith("complete");
+    expect(runAiClassification.mock.calls.map(([query]) => query)).toEqual([
+      { day: "2026-07-03", order: "longest_first" },
+      { day: "2026-07-03", order: "longest_first" },
+    ]);
+    // The older imported day finishes in the background the same way.
+    expect(background).toHaveBeenCalledWith({ day: "2026-07-02", order: "longest_first" }, undefined, expect.anything());
+    // Progress and completion are still read for the whole day.
+    expect(trackerMocks.getClassificationMetrics).toHaveBeenCalledWith({ day: "2026-07-03" });
+  });
+
   it("classifies the whole target day instead of limiting batches to visible flow blocks", async () => {
     trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(20, 3));
     const runAiClassification = vi

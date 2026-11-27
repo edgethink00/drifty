@@ -160,6 +160,8 @@ pub struct ClassificationQuery {
     pub end: Option<String>,
     pub limit: Option<u32>,
     pub segment_ids: Option<Vec<String>>,
+    /// Selection order for unclassified segments: `longest_first`, or time order when absent.
+    pub order: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -950,6 +952,7 @@ pub async fn tracker_get_unclassified_segments(
                 query.end,
                 query.limit,
                 query.segment_ids,
+                query.order,
             )
             .map_err(|error| error.to_string())
     })
@@ -1693,6 +1696,7 @@ pub async fn tracker_apply_classification_rules(
             end: None,
             limit: None,
             segment_ids: None,
+            order: None,
         });
         controller
             .apply_classification_rules(&app, query.day, query.start, query.end, query.limit)
