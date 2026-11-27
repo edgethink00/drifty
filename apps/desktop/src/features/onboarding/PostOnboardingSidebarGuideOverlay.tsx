@@ -21,7 +21,7 @@ import { usePetName } from "../pet-mode/petName";
 import { useScrollOverflowEdges } from "./useScrollOverflowEdges";
 import type { FirstDayRecap, FirstDayStoryDay } from "./firstDayStory";
 import { storyKindsList } from "./storyCategories";
-import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel } from "../../lib/formatting";
+import { formatLocalizedCompactDurationFromSeconds, formatLocalizedTimeLabel, localeForDisplayLanguage } from "../../lib/formatting";
 import "./post-onboarding-sidebar-guide.css";
 import type { AutoCloseMode } from "../focus-session/focusSession";
 
@@ -126,6 +126,7 @@ const RECAP_KINDS_TITLE_KEYS = {
   yesterday: ["postOnboarding.story.recapKindsTitleYesterday", "postOnboarding.story.recapKindsTitleYesterdayBrowser"],
   today: ["postOnboarding.story.recapKindsTitleToday", "postOnboarding.story.recapKindsTitleTodayBrowser"],
   dayBefore: ["postOnboarding.story.recapKindsTitleDayBefore", "postOnboarding.story.recapKindsTitleDayBeforeBrowser"],
+  recentDays: ["postOnboarding.story.recapKindsTitleRecent", "postOnboarding.story.recapKindsTitleRecentBrowser"],
 } as const satisfies Record<FirstDayStoryDay, readonly [TranslationKey, TranslationKey]>;
 /** How many categories the first card names; the rest of its chart reads as Other. */
 const RECAP_KINDS_NAMED = 3;
@@ -154,10 +155,15 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
   }
   if (step === "focus") {
     const longest = recap.longestFocus;
+    // Over the recent days the stretch also says which day it was ("수요일 오후 3:13", "Wed 3:13 PM").
+    const weekday = recap.dayRelation === "recentDays" && longest
+      ? new Intl.DateTimeFormat(localeForDisplayLanguage(language), { weekday: language === "ko" || language === "ja" || language === "zh-Hans" ? "long" : "short" })
+        .format(new Date(longest.startedAt)) + " "
+      : "";
     return {
       title: t("postOnboarding.story.focusTitle", { focus: duration(recap.focusSeconds) }),
       body: longest ? t("postOnboarding.story.recapBody", {
-        time: formatLocalizedTimeLabel(longest.startedAt, language),
+        time: weekday + formatLocalizedTimeLabel(longest.startedAt, language),
         duration: duration(longest.seconds),
         source: longest.source.label,
       }) : "",
@@ -180,7 +186,8 @@ function storyText(step: PostOnboardingSidebarGuideStep, recap: FirstDayRecap | 
   return {
     // Today is still going, so it is not yet "a day" with almost no drift.
     title: t(browser ? "postOnboarding.story.driftNoneTitleBrowser"
-      : recap.dayRelation === "today" ? "postOnboarding.story.driftNoneTitleToday" : "postOnboarding.story.driftNoneTitle"),
+      : recap.dayRelation === "today" ? "postOnboarding.story.driftNoneTitleToday"
+        : recap.dayRelation === "recentDays" ? "postOnboarding.story.driftNoneTitleRecent" : "postOnboarding.story.driftNoneTitle"),
     body: sentences(quietBody, t("postOnboarding.story.driftQuietFixHint")),
   };
 }

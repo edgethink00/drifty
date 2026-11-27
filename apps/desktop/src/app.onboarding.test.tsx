@@ -1591,6 +1591,64 @@ describe("App onboarding", () => {
     }
   });
 
+  it("tells the three recent days together when the day on screen is too short on its own", async () => {
+    const { trackerClient } = await import("./lib/api/trackerClient");
+    const { buildIntroReviewCase } = await import("./features/onboarding/introStoryReview");
+    const { logicalTodayIsoDate } = await import("./lib/formatting");
+    const { DEFAULT_START_OF_DAY_MINUTES } = await import("./features/settings/settingsStorage");
+    const { shiftIsoDate } = await import("@drifty/domain");
+    const today = logicalTodayIsoDate(DEFAULT_START_OF_DAY_MINUTES);
+    // 17, 18 and 11 minutes: today alone (11) is under the story's minimum, the three days (46) are not.
+    const thin = buildIntroReviewCase("thinDays", (offset) => shiftIsoDate(today, offset));
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue(thin.segments);
+    window.localStorage.setItem(getUserOnboardingStorageKey("user-1"), JSON.stringify({
+      version: 2, completed: true, displayName: "Alex", workType: "Design", workTypeOther: "", workDomain: "Tech",
+      workDomainOther: "", focusGoalHours: null, driftThresholdMinutes: null, purpose: null, completedAt: "2026-05-08T00:00:00.000Z",
+    }));
+    window.localStorage.setItem(postOnboardingSidebarGuideStorageKey("user-1"), JSON.stringify({
+      version: 1, status: "active", step: "recap", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }));
+
+    try {
+      render(<App />);
+      expect(await screen.findByRole("dialog", { name: /46m of your browsing over the last three days/i }, { timeout: 8_000 })).toBeTruthy();
+      await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
+        action: "step_viewed", step: "recap", sequence: "story", decision_reason: "story_low_focus", story_day: "recent_days",
+      })));
+    } finally {
+      vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
+    }
+  });
+
+  it("opens a long day with too little classified on the sample cards at once and says why", async () => {
+    const { trackerClient } = await import("./lib/api/trackerClient");
+    const { buildFirstDayReviewSegments } = await import("./features/onboarding/introStoryReview");
+    const { beginClassificationRun, endClassificationRun } = await import("./features/classification/classificationActivity");
+    const { logicalTodayIsoDate } = await import("./lib/formatting");
+    const { DEFAULT_START_OF_DAY_MINUTES } = await import("./features/settings/settingsStorage");
+    // Seven hours recorded, one 14-minute visit sorted so far.
+    vi.mocked(trackerClient.getTimeline).mockResolvedValue(buildFirstDayReviewSegments(logicalTodayIsoDate(DEFAULT_START_OF_DAY_MINUTES), 1));
+    window.localStorage.setItem(getUserOnboardingStorageKey("user-1"), JSON.stringify({
+      version: 2, completed: true, displayName: "Alex", workType: "Design", workTypeOther: "", workDomain: "Tech",
+      workDomainOther: "", focusGoalHours: null, driftThresholdMinutes: null, purpose: null, completedAt: "2026-05-08T00:00:00.000Z",
+    }));
+    window.localStorage.setItem(postOnboardingSidebarGuideStorageKey("user-1"), JSON.stringify({
+      version: 1, status: "active", step: "welcome", startedAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    }));
+
+    // Classification still running does not hold the intro back (a wait was tried and dropped on 2026-11-27).
+    beginClassificationRun();
+    try {
+      render(<App />);
+      await waitFor(() => expect(capturePostHogEvent).toHaveBeenCalledWith("onboarding_intro", expect.objectContaining({
+        action: "step_viewed", sequence: "sample", decision_reason: "below_classified_unsorted",
+      })), { timeout: 4_000 });
+    } finally {
+      endClassificationRun();
+      vi.mocked(trackerClient.getTimeline).mockResolvedValue([]);
+    }
+  });
+
   it("applies the intro's Automatic close and desktop cat choices and asks before closing", async () => {
     window.localStorage.setItem(getUserOnboardingStorageKey("user-1"), JSON.stringify({
       version: 2, completed: true, displayName: "Alex", workType: "Design", workTypeOther: "", workDomain: "Tech",
