@@ -60,14 +60,33 @@ export function buildFirstDayReviewSegments(day: string, classifiedCount = ENTRI
   return reviewSegmentsFrom(ENTRIES, day, classifiedCount);
 }
 
-function reviewSegmentsFrom(entries: readonly Entry[], day: string, classifiedCount = entries.length): ActivitySegment[] {
+// Three thin days of browser history from someone who works mostly in apps: no day reaches the story's
+// 20 minutes on its own (17, 18 and 11 minutes), the three together do (46 minutes, 21 of them focus).
+const THIN_DAYS_ENTRIES: readonly (readonly [offset: number, entries: readonly Entry[]])[] = [
+  [-2, [
+    [10, 5, 6, "figma.com", "Onboarding v3", "workspace", "focus"],
+    [14, 10, 5, "youtube.com", "Lo-fi beats to focus", "music", "neutral"],
+    [21, 0, 6, "netflix.com", "Netflix", "entertainment", "drift"],
+  ]],
+  [-1, [
+    [9, 40, 5, "mail.google.com", "Inbox", "communication", "neutral"],
+    [11, 2, 7, "docs.google.com", "Release notes", "workspace", "focus"],
+    [15, 30, 6, "x.com", "Home / X", "social_media", "drift"],
+  ]],
+  [0, [
+    [10, 0, 8, "github.com", "drifty / onboarding", "workspace", "focus"],
+    [10, 20, 3, "youtube.com", "Street food tour", "entertainment", "drift"],
+  ]],
+];
+
+function reviewSegmentsFrom(entries: readonly Entry[], day: string, classifiedCount = entries.length, idPrefix = "first-day-review-"): ActivitySegment[] {
   const order = entries.map((_, index) => index).sort((left, right) => ((left * 7) % entries.length) - ((right * 7) % entries.length));
   const classified = new Set(order.slice(0, Math.max(0, classifiedCount)));
   return entries.map(([hour, minute, minutes, domain, title, category, productivity], index) => {
     const startedAt = new Date(day + "T" + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0") + ":00");
     const endedAt = new Date(startedAt.getTime() + minutes * 60_000);
     return {
-      id: "first-day-review-" + index,
+      id: idPrefix + index,
       startedAt: startedAt.toISOString(),
       endedAt: endedAt.toISOString(),
       durationSeconds: minutes * 60,
@@ -95,10 +114,12 @@ export const FIRST_DAY_REVIEW_ENTRY_COUNT = ENTRIES.length;
  * today (the prepared day is today: the story says so far today), earlier (the day before yesterday, whole in the 72-hour import), watched (recorded by the tracker, so no rebuilt
  * note), mixed (part watched, part rebuilt: no note), appDrift (the top drift is an app), lowDrift (2 min
  * of drift), noDrift, lowFocus (22 min of focus: the story opens on the time it read), noFocus (no focus:
- * the story names where the time went), short (too little to tell: the sample cards), empty.
+ * the story names where the time went), thinDays (no day holds 20 minutes but the three recent days
+ * together do: the story tells them together), brief (23 minutes: over the story's 20-minute minimum,
+ * under the 30 it was before 2026-11-27), short (15 minutes, too little to tell: the sample cards), empty.
  */
-export type IntroReviewDataMode = "story" | "today" | "earlier" | "watched" | "mixed" | "appDrift" | "lowDrift" | "noDrift" | "lowFocus" | "noFocus" | "short" | "empty";
-const REVIEW_MODES: readonly IntroReviewDataMode[] = ["story", "today", "earlier", "watched", "mixed", "appDrift", "lowDrift", "noDrift", "lowFocus", "noFocus", "short", "empty"];
+export type IntroReviewDataMode = "story" | "today" | "earlier" | "watched" | "mixed" | "appDrift" | "lowDrift" | "noDrift" | "lowFocus" | "noFocus" | "thinDays" | "brief" | "short" | "empty";
+const REVIEW_MODES: readonly IntroReviewDataMode[] = ["story", "today", "earlier", "watched", "mixed", "appDrift", "lowDrift", "noDrift", "lowFocus", "noFocus", "thinDays", "brief", "short", "empty"];
 export function introReviewDataMode(search: string): IntroReviewDataMode {
   const mode = new URLSearchParams(search).get(INTRO_REVIEW_DATA_QUERY_PARAM);
   return REVIEW_MODES.find((candidate) => candidate === mode) ?? "story";
@@ -109,6 +130,9 @@ export function buildIntroReviewCase(mode: IntroReviewDataMode, dayFor: (offset:
   const offset = mode === "today" ? 0 : mode === "earlier" ? -2 : -1;
   const day = dayFor(offset);
   if (mode === "empty") return { day, segments: [] };
+  if (mode === "thinDays") {
+    return { day, segments: THIN_DAYS_ENTRIES.flatMap(([entryOffset, entries]) => reviewSegmentsFrom(entries, dayFor(entryOffset), entries.length, "first-day-review-thin" + entryOffset + "-")) };
+  }
   let segments = buildFirstDayReviewSegments(day);
   const drift = (segment: ActivitySegment) => segment.classification?.productivity === "drift";
   if (mode === "noDrift") segments = segments.filter((segment) => !drift(segment));
@@ -117,7 +141,9 @@ export function buildIntroReviewCase(mode: IntroReviewDataMode, dayFor: (offset:
     segments = segments.map((segment, index) => index === 2
       ? { ...segment, durationSeconds: 120, endedAt: new Date(Date.parse(segment.startedAt) + 120_000).toISOString() } : segment);
   }
-  if (mode === "short") segments = segments.filter((_, index) => index === 0 || index === 2);
+  // brief: the morning's inbox and a YouTube break (14 + 9 minutes); short: YouTube and X (9 + 6).
+  if (mode === "brief") segments = segments.filter((_, index) => index === 0 || index === 2);
+  if (mode === "short") segments = segments.filter((_, index) => index === 2 || index === 4);
   // Only the morning's Q4 planning doc stays focus: 22 minutes, the rest of the work reads as neutral.
   if (mode === "lowFocus") segments = segments.map((segment) => segment.classification?.productivity === "focus" && segment.siteTitle !== "Q4 planning"
     ? { ...segment, classification: { ...segment.classification, productivity: "neutral" } } satisfies ActivitySegment : segment);

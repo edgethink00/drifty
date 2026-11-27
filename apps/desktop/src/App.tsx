@@ -245,7 +245,7 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { refineIntroDecisionReason, resolveFirstDayRecap, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
+import { firstDayRecentDays, firstDayStoryMayUseRecentDays, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataFile, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
@@ -771,7 +771,12 @@ export default function App() {
 
 /** How long the intro waits for the prepared day to load before opening on the sample cards. */
 const INTRO_STORY_WAIT_MS = 6_000;
-const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before" } as const satisfies Record<FirstDayStoryDay, string>;
+/**
+ * How long the intro waits, at most, while the prepared day holds enough time but too little of it is
+ * classified yet and classification is still running (the dashboard opened before it finished).
+ */
+const INTRO_STORY_SORT_WAIT_MS = 30_000;
+const INTRO_STORY_DAY_EVENT = { yesterday: "yesterday", today: "today", dayBefore: "day_before", recentDays: "recent_days" } as const satisfies Record<FirstDayStoryDay, string>;
 
 type HistoryReturnPoint = {
   readonly query: string;
@@ -2016,6 +2021,12 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   const firstDayPreparedFactsRef = useRef<FirstDayPreparedFacts | null>(null);
   // Dev review only: one request for a local file of real records (see introReviewDataFile).
   const introReviewFileRequestedRef = useRef(false);
+  // A prepared day too short for a story reads the recent days once, to tell them together instead.
+  const introRecentDaysRequestedRef = useRef(false);
+  // While the prepared day's time is still being classified, the intro waits until this moment at most.
+  const [introSortWaitUntil, setIntroSortWaitUntil] = useState<number | null>(null);
+  const [introSortWaitOver, setIntroSortWaitOver] = useState(false);
+  const introClassificationRunning = useClassificationActivity().running;
   // A story of a day with almost no focus has no focus card, so it is one card shorter.
   const introSequence = introStory.recap ? postOnboardingStorySteps(storyHasFocusCard(introStory.recap)) : POST_ONBOARDING_SIDEBAR_GUIDE_STEPS;
   const firstDayReviewEnabled = isFirstDayReviewEnabled(window.location.search, import.meta.env.DEV);
@@ -2395,6 +2406,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   useEffect(() => {
     if (!postOnboardingSidebarGuideActive) {
       if (introStory.resolved) setIntroStory({ resolved: false, recap: null });
+      introRecentDaysRequestedRef.current = false;
+      if (introSortWaitUntil !== null) setIntroSortWaitUntil(null);
+      if (introSortWaitOver) setIntroSortWaitOver(false);
       return;
     }
     if (introStory.resolved || preparingFirstDay) return;
@@ -2408,13 +2422,13 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
           .then((response) => response.json() as Promise<{ readonly day: string; readonly segments: ActivitySegment[] }>)
           .then((file) => setIntroStory({
             resolved: true,
-            ...resolveFirstDayRecap({ segments: file.segments, day: file.day, today: shiftIsoDate(file.day, 1), startOfDayMinutes }),
+            ...resolveFirstDayStory({ segments: file.segments, recentSegments: file.segments, day: file.day, today: shiftIsoDate(file.day, 1), startOfDayMinutes }),
           }))
           .catch(() => setIntroStory({ resolved: true, recap: null, decisionReason: "history_read_failed" }));
         return;
       }
       const review = buildIntroReviewCase(introReviewDataMode(window.location.search), (offset) => shiftIsoDate(today, offset));
-      setIntroStory({ resolved: true, ...resolveFirstDayRecap({ segments: review.segments, day: review.day, today, startOfDayMinutes }) });
+      setIntroStory({ resolved: true, ...resolveFirstDayStory({ segments: review.segments, recentSegments: review.segments, day: review.day, today, startOfDayMinutes }) });
       return;
     }
     if (segmentsLoadedDay !== selectedDay) {
@@ -2423,21 +2437,51 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
       return;
     }
     const decision = resolveFirstDayRecap({ segments, day: selectedDay, today, options: selectedDayClassificationOptions, startOfDayMinutes });
-    setIntroStory({
+    // The day holds enough time but too little of it is classified yet, and classification is still
+    // running: wait for it (each saved batch reloads the day and runs this again), up to a limit.
+    if (decision.decisionReason === "below_classified_unsorted" && introClassificationRunning && !introSortWaitOver) {
+      if (introSortWaitUntil === null) setIntroSortWaitUntil(Date.now() + INTRO_STORY_SORT_WAIT_MS);
+      return;
+    }
+    const settle = (next: { readonly recap: FirstDayRecap | null; readonly decisionReason: ReturnType<typeof resolveFirstDayRecap>["decisionReason"] }) => setIntroStory((current) => current.resolved ? current : {
       resolved: true,
-      recap: decision.recap,
-      decisionReason: refineIntroDecisionReason(decision.decisionReason, firstDayPreparedFactsRef.current),
+      recap: next.recap,
+      decisionReason: refineIntroDecisionReason(next.decisionReason, firstDayPreparedFactsRef.current),
     });
-  }, [error, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
-  // A day that is still loading after a few seconds does not hold the intro back either.
+    if (decision.recap || !firstDayStoryMayUseRecentDays(decision.decisionReason)) {
+      settle(decision);
+      return;
+    }
+    // Too short on its own: read the three recent days once and tell them together when they hold enough.
+    if (introRecentDaysRequestedRef.current) return;
+    introRecentDaysRequestedRef.current = true;
+    const recentDays = firstDayRecentDays(today);
+    void trackerClient.getTimeline(getLogicalDayRange(recentDays[0], today, startOfDayMinutes))
+      .then((recentSegments) => settle(resolveFirstDayStory({
+        segments,
+        recentSegments,
+        day: selectedDay,
+        today,
+        options: { ...selectedDayClassificationOptions, fallbackCandidates: recentSegments },
+        startOfDayMinutes,
+      })))
+      .catch(() => settle(decision));
+  }, [error, introClassificationRunning, introSortWaitOver, introSortWaitUntil, introStory.resolved, postOnboardingSidebarGuideActive, postOnboardingSidebarGuideReviewEnabled, preparingFirstDay, segments, segmentsLoadedDay, selectedDay, selectedDayClassificationOptions, startOfDayMinutes]);
+  // A day that is still loading after a few seconds does not hold the intro back either; a day still
+  // being classified holds it until the sort wait ends, and then the intro decides on what is classified.
   const introStoryPending = postOnboardingSidebarGuideActive && !introStory.resolved && !preparingFirstDay;
   useEffect(() => {
     if (!introStoryPending) return undefined;
+    const sorting = introSortWaitUntil !== null && !introSortWaitOver;
     const timer = window.setTimeout(() => {
+      if (sorting) {
+        setIntroSortWaitOver(true);
+        return;
+      }
       setIntroStory((current) => (current.resolved ? current : { resolved: true, recap: null, decisionReason: "history_wait_timed_out" }));
-    }, INTRO_STORY_WAIT_MS);
+    }, sorting ? Math.max(0, introSortWaitUntil - Date.now()) : INTRO_STORY_WAIT_MS);
     return () => window.clearTimeout(timer);
-  }, [introStoryPending]);
+  }, [introSortWaitOver, introSortWaitUntil, introStoryPending]);
   /* The intro reports each card it shows and, when it ends, the focus-support choices it settled
      (the same three booleans onboarding_completed carried while setup still asked about them) and
      whether the cat has a name. Only that boolean leaves the computer, never the name. */

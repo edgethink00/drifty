@@ -408,6 +408,42 @@ describe("useFirstDayPreparation", () => {
     expect(withoutImport).toHaveBeenLastCalledWith({ importEnabled: false, safariLocked: null, windowRecordedSeconds: 36 * 60 });
   });
 
+  it("classifies the other recent days before the reveal when only the three together hold a story", async () => {
+    trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(4, 0));
+    // Twelve minutes a day: no day reaches 20 minutes, the three together do.
+    trackerMocks.getTimeline.mockImplementation(async (query: { day?: string }) => [{
+      id: "visit-" + query.day, startedAt: query.day + "T09:00:00", endedAt: query.day + "T09:12:00", durationSeconds: 12 * 60,
+      appName: "Google Chrome", bundleId: "com.google.Chrome", source: "browser-history-import",
+    }]);
+    const order: string[] = [];
+    const runAiClassificationUntilEmpty = vi.fn(async (query: { day?: string }) => {
+      order.push("classify " + query.day);
+      return emptySummary;
+    });
+    const onReveal = vi.fn(() => { order.push("reveal"); });
+    renderHook(() => useFirstDayPreparation(makeOptions({
+      runAiClassificationUntilEmpty: runAiClassificationUntilEmpty as unknown as UseFirstDayPreparationOptions["runAiClassificationUntilEmpty"],
+      onReveal,
+    })));
+    await flushAsync(40);
+    // Yesterday is prepared; the day before and today follow before the dashboard opens.
+    expect(order.slice(0, order.indexOf("reveal") + 1)).toEqual(expect.arrayContaining(["classify 2026-07-02", "classify 2026-07-04", "reveal"]));
+    expect(order.indexOf("classify 2026-07-02")).toBeLessThan(order.indexOf("reveal"));
+
+    // A day that holds a story on its own keeps the others for the background pass.
+    order.length = 0;
+    trackerMocks.getTimeline.mockImplementation(async (query: { day?: string }) => [{
+      id: "visit-" + query.day, startedAt: query.day + "T09:00:00", endedAt: query.day + "T10:00:00", durationSeconds: 60 * 60,
+      appName: "Google Chrome", bundleId: "com.google.Chrome", source: "browser-history-import",
+    }]);
+    renderHook(() => useFirstDayPreparation(makeOptions({
+      runAiClassificationUntilEmpty: runAiClassificationUntilEmpty as unknown as UseFirstDayPreparationOptions["runAiClassificationUntilEmpty"],
+      onReveal,
+    })));
+    await flushAsync(40);
+    expect(order.slice(0, order.indexOf("reveal"))).not.toContain("classify 2026-07-02");
+  });
+
   it("spaces background reloads at least a second apart when batches finish faster than that", async () => {
     trackerMocks.getClassificationMetrics.mockResolvedValue(metrics(40, 3));
     let calls = 0;
@@ -1275,7 +1311,17 @@ describe("resolveFirstDayTargetDay", () => {
     mockMetricsByDay({ "2026-07-04": 40, "2026-07-03": 15 });
     trackerMocks.getTimeline.mockRejectedValue(new Error("timeline unavailable"));
     await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-03");
-    await expect(resolveFirstDayTarget("2026-07-04")).resolves.toEqual({ day: "2026-07-03", windowRecordedSeconds: null });
+    await expect(resolveFirstDayTarget("2026-07-04")).resolves.toEqual({ day: "2026-07-03", dayRecordedSeconds: null, windowRecordedSeconds: null });
+  });
+
+  it("takes the day with the most time over a nearly empty today when no day holds a story", async () => {
+    // No day reaches 20 minutes, and none has 15 segments: yesterday's 14 minutes win over today's 2.
+    mockMetricsByDay({ "2026-07-04": 3, "2026-07-03": 6, "2026-07-02": 4 });
+    mockRecordedMinutesByDay({ "2026-07-04": 2, "2026-07-03": 14, "2026-07-02": 9 });
+    await expect(resolveFirstDayTarget("2026-07-04")).resolves.toEqual({ day: "2026-07-03", dayRecordedSeconds: 14 * 60, windowRecordedSeconds: 25 * 60 });
+    // 20 minutes is now enough on its own.
+    mockRecordedMinutesByDay({ "2026-07-04": 2, "2026-07-03": 14, "2026-07-02": 20 });
+    await expect(resolveFirstDayTargetDay("2026-07-04")).resolves.toBe("2026-07-02");
   });
 
   it("prefers yesterday, a whole day, even when today already has enough segments", async () => {

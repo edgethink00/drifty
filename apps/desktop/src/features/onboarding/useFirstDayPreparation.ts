@@ -5,7 +5,7 @@ import { toAnalyticsErrorKind, toCountBucket, toFirstDayPreparationDurationBucke
 import { capturePostHogEvent } from "../../lib/analytics/posthogClient";
 import { logicalTodayIsoDate } from "../../lib/formatting";
 import { FIRST_RUN_BROWSER_HISTORY_LOOKBACK_DAYS } from "../../lib/browserHistoryImportWindow";
-import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecordedSeconds, type FirstDayPreparedFacts } from "./firstDayStory";
+import { FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS, firstDayRecentDays, firstDayRecordedSeconds, type FirstDayPreparedFacts } from "./firstDayStory";
 import { getClassificationActivitySnapshot } from "../classification/classificationActivity";
 import {
   describeAiClassificationFailure,
@@ -166,7 +166,9 @@ export type UseFirstDayPreparationOptions = {
 // A candidate is chosen by the time it holds as well as its segment count, so a day of many short
 // visits does not win over a later day that can actually tell a story, and a day of a few long visits
 // is not skipped. In order: the first day with both enough segments and enough recorded time, else the
-// first with enough recorded time, else the first with enough segments (the earlier rule), else today.
+// first with enough recorded time, else the day with the most recorded time (so a nearly empty today
+// never wins over a yesterday that holds more), else the first with enough segments (when no time
+// could be read), else today.
 // The recorded-time floor is the recap's classified minimum: a day under it cannot open the story.
 // Exported for unit tests.
 export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayMinutes = 0): Promise<string> {
@@ -174,11 +176,12 @@ export async function resolveFirstDayTargetDay(logicalToday: string, startOfDayM
 }
 
 /**
- * The chosen day, plus the recorded time of all three candidate days together (null when none could be
- * read), which tells whether the whole import window held a story's worth of time.
+ * The chosen day and its recorded time, plus the recorded time of all three candidate days together
+ * (null when none could be read), which tells whether the whole import window held a story's worth of time.
  */
 export async function resolveFirstDayTarget(logicalToday: string, startOfDayMinutes = 0): Promise<{
   readonly day: string;
+  readonly dayRecordedSeconds: number | null;
   readonly windowRecordedSeconds: number | null;
 }> {
   const candidates = [shiftIsoDate(logicalToday, -1), logicalToday, shiftIsoDate(logicalToday, -2)];
@@ -196,12 +199,15 @@ export async function resolveFirstDayTarget(logicalToday: string, startOfDayMinu
   type DayFacts = (typeof facts)[number];
   const enoughSegments = (facts: DayFacts) => facts.segmentCount !== null && facts.segmentCount >= FIRST_DAY_PREPARATION_MIN_MEANINGFUL_SEGMENTS;
   const enoughTime = (facts: DayFacts) => facts.recordedSeconds !== null && facts.recordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS;
+  const mostRecorded = facts.reduce<DayFacts | null>((best, candidate) => (candidate.recordedSeconds ?? 0) > (best?.recordedSeconds ?? 0) ? candidate : best, null);
   const chosen = facts.find((candidate) => enoughSegments(candidate) && enoughTime(candidate))
     ?? facts.find(enoughTime)
+    ?? mostRecorded
     ?? facts.find(enoughSegments);
   const readDays = facts.filter((candidate) => candidate.recordedSeconds !== null);
   return {
     day: chosen?.day ?? logicalToday,
+    dayRecordedSeconds: chosen ? chosen.recordedSeconds : null,
     windowRecordedSeconds: readDays.length === 0 ? null
       : readDays.reduce((total, candidate) => total + (candidate.recordedSeconds ?? 0), 0),
   };
@@ -766,8 +772,15 @@ export function useFirstDayPreparation({
         }
         // Complete + reveal yesterday when it has data (otherwise today, then the day before), and
         // open the dashboard there.
+        const logicalToday = today;
         const target = await resolveFirstDayTarget(today, startOfDayMinutes);
         today = target.day;
+        // No single day holds a story but the import window together does: the intro then tells the
+        // recent days, so those are classified now too. Each is short, since none reached the minimum.
+        const recentDaysToClassify = target.dayRecordedSeconds !== null && target.dayRecordedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS
+          && target.windowRecordedSeconds !== null && target.windowRecordedSeconds >= FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS
+          ? firstDayRecentDays(logicalToday).filter((day) => day !== today)
+          : [];
         const safariLocked = await environmentRead;
         if (!cancelled) {
           onPreparedFacts?.({
@@ -835,6 +848,11 @@ export function useFirstDayPreparation({
             setProgress(null);
             const complete = await classifyTodayWithProgress(today, classifyOptions);
             if (complete) await completeCloudBacklogIfEmpty(today, "foreground");
+            for (const day of complete ? recentDaysToClassify : []) {
+              if (settled || cancelled || !selectedProviderUnchanged()) break;
+              // Best effort: a day left unsorted only keeps the intro on its sample cards.
+              await runClassificationForDay(day, classifyOptions).catch(() => undefined);
+            }
             if (!complete && !settled) {
               // Only quota pacing may bypass the retry choice. A confirmed
               // non-quota failure remains visible as the product decision requires.
