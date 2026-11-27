@@ -137,6 +137,25 @@ describe("billingService", () => {
     });
   });
 
+  it("keeps the checkout states the server codes and drops codes it does not know", async () => {
+    const refusal = (body: Record<string, unknown>) => vi.fn().mockResolvedValue({
+      data: null,
+      error: { context: { json: () => Promise.resolve(body) } },
+    });
+    const pending = refusal({ code: "checkout_payment_pending", error: "The previous checkout is being processed." });
+    await expect(createIndividualCheckout("monthly", { functions: { invoke: pending } })).resolves.toEqual({
+      success: false,
+      code: "checkout_payment_pending",
+      error: "The previous checkout is being processed.",
+    });
+
+    const unknown = refusal({ code: "uncoded", error: "Unable to create checkout." });
+    await expect(createIndividualCheckout("monthly", { functions: { invoke: unknown } })).resolves.toEqual({
+      success: false,
+      error: "Unable to create checkout.",
+    });
+  });
+
   it("creates a Polar customer portal session", async () => {
     const invoke = vi.fn().mockResolvedValue({
       data: { url: "https://portal.example.test" },

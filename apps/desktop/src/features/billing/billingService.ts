@@ -3,6 +3,7 @@ export type BillingPlanId = "free" | "individual";
 
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { supabase } from "../../lib/supabase/client";
+import { CHECKOUT_FAILURE_CODES } from "../../lib/analytics/eventTaxonomy";
 import { withCloudDevicePayload } from "../cloud-devices/cloudDeviceIdentity";
 import { resolveInitialDisplayLanguage } from "../localization/languagePreference";
 import type { CloudDeviceAccess, CloudDeviceRecord } from "../cloud-devices/cloudDeviceService";
@@ -47,7 +48,7 @@ export type BillingResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-export type CheckoutFailureCode = "checkout_maintenance" | "pricing_revision_mismatch" | "pricing_quote_mismatch";
+export type CheckoutFailureCode = Exclude<(typeof CHECKOUT_FAILURE_CODES)[number], "uncoded">;
 
 export type CheckoutResult<T> =
   | { success: true; data: T }
@@ -345,10 +346,9 @@ export async function fetchIndividualPricingQuote(
 }
 
 function readCheckoutFailureCode(value: unknown): CheckoutFailureCode | null {
-  return value === "checkout_maintenance"
-    || value === "pricing_revision_mismatch"
-    || value === "pricing_quote_mismatch"
-    ? value
+  return typeof value === "string" && value !== "uncoded"
+    && (CHECKOUT_FAILURE_CODES as readonly string[]).includes(value)
+    ? value as CheckoutFailureCode
     : null;
 }
 
