@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ActivityCategory, ActivitySegment, ProductivityLabel } from "@drifty/domain";
 import { shiftIsoDate } from "@drifty/domain";
-import { buildFirstDayRecap, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, storyTitle } from "./firstDayStory";
+import { buildFirstDayRecap, firstDayStoryReadyNow, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, storyTitle } from "./firstDayStory";
 import { firstDaySourceOf } from "./firstDayPreparationStory";
 import { buildFirstDayReviewSegments, buildIntroReviewCase } from "./introStoryReview";
 import { sanitizePostHogEventProperties } from "../../lib/analytics/events";
@@ -222,5 +222,24 @@ describe("tutorial story", () => {
 
     const noDrift = buildIntroReviewCase("noDrift", () => DAY);
     expect(buildFirstDayRecap({ segments: noDrift.segments, day: DAY, today: TODAY })?.topDriftSite).toBeNull();
+  });
+});
+describe("first-day story readiness at the preparation time limit", () => {
+  it("decides as the intro does: the day alone, then the three recent days, read only when needed", async () => {
+    const readRecentDays = vi.fn(async () => [] as ActivitySegment[]);
+    expect(await firstDayStoryReadyNow({ day: DAY, today: TODAY, readDay: async () => buildFirstDayReviewSegments(DAY), readRecentDays })).toBe(true);
+    expect(readRecentDays).not.toHaveBeenCalled();
+
+    // Yesterday alone holds 18 minutes; the three days together hold 46.
+    const thin = buildIntroReviewCase("thinDays", (offset) => shiftIsoDate(TODAY, offset));
+    const yesterday = thin.segments.filter((segment) => segment.startedAt.slice(0, 10) === DAY || segment.id.includes("thin-1-"));
+    expect(await firstDayStoryReadyNow({ day: DAY, today: TODAY, readDay: async () => yesterday, readRecentDays: async () => thin.segments })).toBe(true);
+    expect(await firstDayStoryReadyNow({ day: DAY, today: TODAY, readDay: async () => yesterday, readRecentDays: async () => yesterday })).toBe(false);
+  });
+
+  it("is not ready on a long day that is still mostly unsorted", async () => {
+    // Seven hours recorded, one 14-minute visit sorted so far: the intro would show the sample cards.
+    const unsorted = buildFirstDayReviewSegments(DAY, 1);
+    expect(await firstDayStoryReadyNow({ day: DAY, today: TODAY, readDay: async () => unsorted, readRecentDays: async () => unsorted })).toBe(false);
   });
 });

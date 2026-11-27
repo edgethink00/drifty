@@ -514,6 +514,41 @@ export function buildFirstDayRecap(input: Parameters<typeof resolveFirstDayRecap
   return resolveFirstDayRecap(input).recap;
 }
 
+/**
+ * Whether the intro would tell its story for this day now, decided as the intro decides it: the day
+ * alone, then (only when its reason allows) the three recent days together, read just when needed.
+ * First-run preparation asks this at its time limit, so it opens the dashboard only on a story.
+ */
+export async function firstDayStoryReadyNow({
+  day,
+  today,
+  options,
+  startOfDayMinutes = 0,
+  readDay,
+  readRecentDays,
+}: {
+  readonly day: string;
+  readonly today: string;
+  readonly options?: ClassificationOptions;
+  readonly startOfDayMinutes?: number;
+  readonly readDay: () => Promise<ActivitySegment[]>;
+  readonly readRecentDays: () => Promise<ActivitySegment[]>;
+}): Promise<boolean> {
+  const segments = await readDay();
+  const single = resolveFirstDayRecap({ segments, day, today, options: { ...options, fallbackCandidates: segments }, startOfDayMinutes });
+  if (single.recap) return true;
+  if (!firstDayStoryMayUseRecentDays(single.decisionReason)) return false;
+  const recentSegments = await readRecentDays();
+  return resolveFirstDayStory({
+    segments,
+    recentSegments,
+    day,
+    today,
+    options: { ...options, fallbackCandidates: recentSegments },
+    startOfDayMinutes,
+  }).recap !== null;
+}
+
 /** Whether the story has a card on the day's focus: not on a day with almost no focus (see FirstDayStoryLead). */
 export function storyHasFocusCard(recap: FirstDayRecap): boolean {
   return recap.lead !== "kinds" && recap.longestFocus !== null;

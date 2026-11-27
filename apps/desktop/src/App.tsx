@@ -246,7 +246,7 @@ import {
 } from "./features/onboarding/OnboardingModal";
 import { FirstDayPreparationScreen, type FirstDayPreparationPhase, type FirstDayPreparationPlan } from "./features/onboarding/FirstDayPreparationScreen";
 import { FIRST_DAY_PREPARATION_READY_HOLD_MS } from "./features/onboarding/firstDayPreparationProgress";
-import { firstDayRecentDays, firstDayStoryMayUseRecentDays, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
+import { firstDayRecentDays, firstDayStoryMayUseRecentDays, firstDayStoryReadyNow, refineIntroDecisionReason, resolveFirstDayRecap, resolveFirstDayStory, storyHasFocusCard, type FirstDayPreparedFacts, type FirstDayRecap, type FirstDayStoryDay } from "./features/onboarding/firstDayStory";
 import { buildFirstDayReviewSiteIcons as buildIntroReviewSiteIcons, buildIntroReviewCase, introReviewDataFile, introReviewDataMode } from "./features/onboarding/introStoryReview";
 import { FirstDayPreparationReview } from "./features/onboarding/FirstDayPreparationReview";
 import { buildFirstDayChart, buildFirstDayDiscoveries, buildFirstDayReadingSources, firstDayDayRelation } from "./features/onboarding/firstDayPreparationStory";
@@ -5163,11 +5163,31 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     }
   }, [recordCloudAiClassificationError, recordCloudAiClassificationSummary, recordLocalAiClassificationError, recordLocalAiClassificationSummary]);
 
+  // The intro's own story decision for a day (the day alone, then the three recent days together),
+  // so preparation past its time limit opens the dashboard only when the intro will tell that day.
+  const firstDayStoryReady = useCallback(async (day: string): Promise<boolean> => {
+    const today = logicalTodayIsoDate(startOfDayMinutes);
+    return firstDayStoryReadyNow({
+      day,
+      today,
+      options: selectedDayClassificationOptions,
+      startOfDayMinutes,
+      // The intro reads the day as the dashboard shows it, and the recent days as stored.
+      readDay: async () => materializeBuiltInHeuristicTimeline(
+        await trackerClient.getTimeline(getLogicalDayRange(day, day, startOfDayMinutes)),
+      ).segments,
+      readRecentDays: () => trackerClient.getTimeline(getLogicalDayRange(firstDayRecentDays(today)[0], today, startOfDayMinutes)),
+    });
+  }, [materializeBuiltInHeuristicTimeline, selectedDayClassificationOptions, startOfDayMinutes]);
+
   const {
     continueAnyway: continueFirstDayPreparationAnyway,
+    continueNow: continueFirstDayPreparationNow,
     failure: firstDayPreparationFailure,
+    keepWaiting: keepWaitingForFirstDayPreparation,
     rearm: rearmFirstDayPreparation,
     retry: retryFirstDayPreparation,
+    slowWait: firstDayPreparationSlowWait,
   } = useFirstDayPreparation({
     browserHistoryImportEnabled: browserHistoryBootstrapEnabled,
     canUseCloudAiClassificationRef,
@@ -5221,6 +5241,7 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     onPreparedFacts: (facts) => { firstDayPreparedFactsRef.current = facts; },
     shouldBlockLocalTrackerAccess,
     startOfDayMinutes,
+    isStoryReady: firstDayStoryReady,
   });
 
   useEffect(() => () => {
@@ -12082,6 +12103,17 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
   ].filter(Boolean).join(" ");
 
 
+  // The dev-only first-day review opens on any browser, also one that has not finished onboarding.
+  if (firstDayReviewEnabled) {
+    return (
+      <SiteIconProvider value={siteIcons}>
+        <LocalizationProvider controller={localization}>
+          <FirstDayPreparationReview appIcons={appIcons} />
+        </LocalizationProvider>
+      </SiteIconProvider>
+    );
+  }
+
   if (onboardingOpen) {
     const promoAuthOnboardingOpen = authModalOpen && authModalIntent === "promo";
     return (
@@ -12118,16 +12150,6 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
     );
   }
 
-  if (firstDayReviewEnabled) {
-    return (
-      <SiteIconProvider value={siteIcons}>
-        <LocalizationProvider controller={localization}>
-          <FirstDayPreparationReview appIcons={appIcons} />
-        </LocalizationProvider>
-      </SiteIconProvider>
-    );
-  }
-
   if (preparingFirstDay) {
     return (
       <SiteIconProvider value={siteIcons}>
@@ -12139,6 +12161,9 @@ function AppBody({ localization }: { readonly localization: LocalizationControll
             failure={firstDayPreparationFailure}
             onContinueAnyway={continueFirstDayPreparationAnyway}
             onRetry={retryFirstDayPreparation}
+            slowWait={firstDayPreparationSlowWait}
+            onKeepWaiting={keepWaitingForFirstDayPreparation}
+            onContinueNow={continueFirstDayPreparationNow}
             phase={firstDayPreparationPhase}
             plan={firstDayPreparationPlan}
             progress={firstDayPreparationProgress}

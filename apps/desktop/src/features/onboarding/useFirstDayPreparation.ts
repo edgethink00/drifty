@@ -164,6 +164,11 @@ export type UseFirstDayPreparationOptions = {
   readonly runAiClassification: RunAiClassificationBatch;
   readonly runAiClassificationUntilEmpty: RunAiClassificationBatch;
   readonly selectedAiProviderKeyRef: MutableRefObject<string>;
+  /**
+   * Whether the intro could tell its story for this day now, decided the way the intro decides it.
+   * At the local time limit a day that already tells one opens at once; without this check no day does.
+   */
+  readonly isStoryReady?: (day: string) => Promise<boolean>;
 };
 
 // The day first-run prepares and the intro tells: yesterday first, because a whole finished day
@@ -245,11 +250,18 @@ export function useFirstDayPreparation({
   onPreparedFacts,
   shouldBlockLocalTrackerAccess,
   startOfDayMinutes,
+  isStoryReady,
 }: UseFirstDayPreparationOptions): {
   readonly continueAnyway: () => void;
+  /** Opens the dashboard from a run past its time limit; the day keeps classifying in the background. */
+  readonly continueNow: () => void;
   readonly failure: FirstDayPreparationFailure | null;
+  /** Gives a run past its time limit another full limit before asking again. */
+  readonly keepWaiting: () => void;
   readonly rearm: () => void;
   readonly retry: () => void;
+  /** True while a local run is past its time limit, still classifying, and asking whether to keep waiting. */
+  readonly slowWait: boolean;
 } {
   const runRef = useRef(false);
   const runGenerationRef = useRef(0);
@@ -260,8 +272,16 @@ export function useFirstDayPreparation({
     readonly promise: Promise<AiClassificationSummary>;
   } | null>(null);
   const [failure, setFailure] = useState<FirstDayPreparationFailure | null>(null);
+  const [slowWait, setSlowWait] = useState(false);
   const checkLocalModelOnRetry = useRef(false);
   const [retryRevision, setRetryRevision] = useState(0);
+  // A retry after a real failure goes on from the import this hook already finished.
+  const historyImportedRef = useRef(false);
+  const isStoryReadyRef = useRef(isStoryReady);
+  isStoryReadyRef.current = isStoryReady;
+  // The running attempt's answers to the time-limit question; no-ops between attempts.
+  const keepWaitingRef = useRef<() => void>(() => undefined);
+  const continueNowRef = useRef<() => void>(() => undefined);
 
   // Re-arms the one-shot gate so the next `preparingFirstDay: true` starts a fresh run
   // (used when onboarding completes again, e.g. re-running onboarding from Dev mode).
@@ -269,7 +289,9 @@ export function useFirstDayPreparation({
     runGenerationRef.current += 1;
     runRef.current = false;
     setFailure(null);
+    setSlowWait(false);
     checkLocalModelOnRetry.current = false;
+    historyImportedRef.current = false;
   }, []);
 
   const retry = useCallback(() => {
@@ -286,17 +308,24 @@ export function useFirstDayPreparation({
     onReveal("continue");
   }, [onReveal]);
 
+  const keepWaiting = useCallback(() => keepWaitingRef.current(), []);
+  const continueNow = useCallback(() => continueNowRef.current(), []);
+
   useEffect(() => {
     if (!preparingFirstDay) return;
     if (runRef.current) return;
     runRef.current = true;
     const recheckLocalModel = checkLocalModelOnRetry.current;
     checkLocalModelOnRetry.current = false;
+    // A question left from an attempt that ended elsewhere belongs to that attempt.
+    setSlowWait(false);
 
     let settled = false;
     let cancelled = false;
     let revealed = false;
-    let partialCloudReveal = false;
+    // The dashboard opened before the day was classified (Cloud's short limit or quota, or the local
+    // time limit); the background pass then finishes the day itself first.
+    let partialReveal = false;
     const attemptStartedAt = Date.now();
     setPreparedDay?.(null);
     onPreparedFacts?.(null);
@@ -313,6 +342,12 @@ export function useFirstDayPreparation({
       : Promise.resolve(null);
     let lastQuotaWindow: AiClassificationQuotaWindow | null = null;
     let quotaWaitCount = 0;
+    // The local time limit: whether this attempt reached it, how often the user chose to keep
+    // waiting, and how a partial reveal left it. The day it checks is set once it is chosen.
+    let timeLimitReached = false;
+    let keepWaitingCount = 0;
+    let timeLimitExit: "story_ready" | "continued" | null = null;
+    let preparedDay: string | null = null;
     let lastForegroundFailure: "quota" | "transient" | "content" | null = null;
     let lastForegroundErrorKind: AnalyticsErrorKind | null = null;
     let lastCloudErrorType: AiClassificationCloudErrorType | null = null;
@@ -336,7 +371,10 @@ export function useFirstDayPreparation({
         activeCloudRequestStartedAt = null;
       }
     };
-    let currentPhase: Exclude<FirstDayPreparationPhase, "ready"> = browserHistoryImportEnabled ? "importing" : "classifying";
+    // A retry after a real failure keeps a complete import from the earlier attempt instead of
+    // reading every browser database again; a partial or failed import is tried again.
+    const historyAlreadyImported = browserHistoryImportEnabled && historyImportedRef.current;
+    let currentPhase: Exclude<FirstDayPreparationPhase, "ready"> = browserHistoryImportEnabled && !historyAlreadyImported ? "importing" : "classifying";
     const markPhase = (phase: Exclude<FirstDayPreparationPhase, "ready">) => {
       currentPhase = phase;
       setPhase(phase);
@@ -464,6 +502,11 @@ export function useFirstDayPreparation({
           ...(remainingSegmentCount === null ? {} : {
             remaining_segment_count_bucket: toFirstDayPreparationSegmentCountBucket(remainingSegmentCount),
           }),
+          ...(timeLimitReached ? {
+            time_limit_reached: true,
+            keep_waiting_count_bucket: toCountBucket(keepWaitingCount),
+          } : {}),
+          ...(timeLimitExit ? { time_limit_exit: timeLimitExit } : {}),
         });
       } catch {
         // Analytics is best-effort and must never block the dashboard reveal or retry UI.
@@ -475,16 +518,18 @@ export function useFirstDayPreparation({
       revealed = true;
       clearReading();
       setFailure(null);
+      setSlowWait(false);
       onReveal("complete");
       captureOutcome("success", "dashboard_complete");
     };
-    const revealPartialCloudDay = (reason: FirstDayPreparationFailureReason) => {
+    const revealPartialDay = (reason: FirstDayPreparationFailureReason) => {
       if (settled || cancelled) return;
       settled = true;
       revealed = true;
-      partialCloudReveal = true;
+      partialReveal = true;
       clearReading();
       setFailure(null);
+      setSlowWait(false);
       onReveal("continue");
       captureOutcome(reason, "dashboard_partial", lastForegroundErrorKind);
     };
@@ -492,18 +537,56 @@ export function useFirstDayPreparation({
       if (settled || cancelled) return;
       settled = true;
       clearReading();
+      setSlowWait(false);
       if (detail) console.warn("First-day preparation paused", detail);
       setFailure(reason);
       captureOutcome(reason === "local_model_unavailable" ? "classification_incomplete" : reason, "retry_screen", detail ? toAnalyticsErrorKind(detail) : lastForegroundErrorKind);
     };
     const preparationLimitMs = cloudAiSelected ? FIRST_DAY_PREPARATION_CLOUD_MAX_MS : FIRST_DAY_PREPARATION_MAX_MS;
-    const preparationEndsAt = Date.now() + preparationLimitMs;
-    const safetyTimeout = setTimeout(
-      () => cloudAiSelected
-        ? revealPartialCloudDay("preparation_timed_out")
-        : fail("preparation_timed_out"),
+    let preparationEndsAt = Date.now() + preparationLimitMs;
+    // Whether the intro could already tell the prepared day; false before a day is chosen.
+    const storyReady = async (): Promise<boolean> => {
+      const check = isStoryReadyRef.current;
+      if (!check || preparedDay === null) return false;
+      try {
+        return await check(preparedDay);
+      } catch {
+        return false;
+      }
+    };
+    // Reaching the local limit never stops the work. A day that already tells a story opens with
+    // the rest classified in the background; otherwise classification keeps going and the screen
+    // asks whether to keep waiting or look around now.
+    const reachTimeLimit = () => {
+      if (settled || cancelled) return;
+      timeLimitReached = true;
+      void storyReady().then((ready) => {
+        if (settled || cancelled) return;
+        if (ready) {
+          timeLimitExit = "story_ready";
+          revealPartialDay("preparation_timed_out");
+          return;
+        }
+        setSlowWait(true);
+      });
+    };
+    let timeLimitTimer = setTimeout(
+      () => cloudAiSelected ? revealPartialDay("preparation_timed_out") : reachTimeLimit(),
       preparationLimitMs,
     );
+    keepWaitingRef.current = () => {
+      if (settled || cancelled || !timeLimitReached) return;
+      keepWaitingCount += 1;
+      setSlowWait(false);
+      clearTimeout(timeLimitTimer);
+      preparationEndsAt = Date.now() + FIRST_DAY_PREPARATION_MAX_MS;
+      timeLimitTimer = setTimeout(reachTimeLimit, FIRST_DAY_PREPARATION_MAX_MS);
+    };
+    continueNowRef.current = () => {
+      if (settled || cancelled || !timeLimitReached) return;
+      timeLimitExit = "continued";
+      revealPartialDay("preparation_timed_out");
+    };
 
     const runClassificationForDay = (day: string, classifyOptions: LocalAiClassificationOptions | null) => {
       const query = toClassificationQueryForDay(day);
@@ -695,13 +778,17 @@ export function useFirstDayPreparation({
             // on a 60-second foreground retry loop.
             break;
           }
+          if (timedOut) {
+            // The batch is slow, not failed: it is still running and this loop keeps waiting on it.
+            // The time limit decides when to ask the user, and each request has its own deadline,
+            // past which it settles as an error that counts below.
+            continue;
+          }
           consecutiveTransientFailures += 1;
           if (consecutiveTransientFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
-          if (!timedOut) {
-            await firstDayPreparationDelay(
-              FIRST_DAY_PREPARATION_RETRY_BASE_MS * (2 ** (consecutiveTransientFailures - 1)),
-            );
-          }
+          await firstDayPreparationDelay(
+            FIRST_DAY_PREPARATION_RETRY_BASE_MS * (2 ** (consecutiveTransientFailures - 1)),
+          );
           continue;
         }
         if (!timedOut && summary.savedRecords > 0) {
@@ -710,6 +797,14 @@ export function useFirstDayPreparation({
           lastCloudErrorType = null;
           consecutiveNoProgress = 0;
           consecutiveTransientFailures = 0;
+          // Past the time limit, the first batch that lets the intro tell the day opens it.
+          if (timeLimitReached && await storyReady()) {
+            if (!settled && !cancelled) {
+              timeLimitExit = "story_ready";
+              revealPartialDay("preparation_timed_out");
+            }
+            break;
+          }
           continue;
         }
         lastForegroundFailure = "content";
@@ -762,7 +857,9 @@ export function useFirstDayPreparation({
             return;
           }
         }
-        if (browserHistoryImportEnabled) {
+        if (historyAlreadyImported) {
+          updateCloudBacklog({ importPending: false });
+        } else if (browserHistoryImportEnabled) {
           markPhase("importing");
           setProgress(null);
           importStartedAt = Date.now();
@@ -771,7 +868,10 @@ export function useFirstDayPreparation({
             // copies and scans every browser database twice on the critical path.
             const result = await trackerClient.importBrowserHistory({ lookbackDays: FIRST_DAY_PREPARATION_LOOKBACK_DAYS });
             if (result.insertedCount > 0) clearLocalActivityCaches();
-            if (result.errorCount === 0) updateCloudBacklog({ importPending: false });
+            if (result.errorCount === 0) {
+              updateCloudBacklog({ importPending: false });
+              historyImportedRef.current = true;
+            }
           } catch (error) {
             // Import is optional reconstruction. Continue with activity the
             // tracker already has instead of treating it as a Cloud failure.
@@ -787,6 +887,7 @@ export function useFirstDayPreparation({
         const logicalToday = today;
         const target = await resolveFirstDayTarget(today, startOfDayMinutes);
         today = target.day;
+        preparedDay = today;
         // No single day holds a story but the import window together does: the intro then tells the
         // recent days, so those are classified now too. Each is short, since none reached the minimum.
         const recentDaysToClassify = target.dayRecordedSeconds !== null && target.dayRecordedSeconds < FIRST_DAY_RECAP_MIN_CLASSIFIED_SECONDS
@@ -836,7 +937,7 @@ export function useFirstDayPreparation({
                 // The readiness flag cannot distinguish a slow account refresh
                 // from a lasting Cloud denial. Let the dashboard open and keep
                 // watching for readiness instead of declaring preparation failed.
-                revealPartialCloudDay("cloud_not_ready");
+                revealPartialDay("cloud_not_ready");
               }
               return;
             }
@@ -875,7 +976,7 @@ export function useFirstDayPreparation({
             if (!complete && !settled) {
               // Only quota pacing may bypass the retry choice. A confirmed
               // non-quota failure remains visible as the product decision requires.
-              if (cloudAiSelected && lastForegroundFailure === "quota") revealPartialCloudDay("classification_incomplete");
+              if (cloudAiSelected && lastForegroundFailure === "quota") revealPartialDay("classification_incomplete");
               else fail("classification_incomplete");
               return;
             }
@@ -890,7 +991,7 @@ export function useFirstDayPreparation({
       } catch (error) {
         fail("classification_incomplete", error);
       } finally {
-        clearTimeout(safetyTimeout);
+        clearTimeout(timeLimitTimer);
         stopLiveRefresh();
         if (!settled) reveal();
         if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
@@ -908,7 +1009,7 @@ export function useFirstDayPreparation({
               if (!backgroundOptions) return;
             }
             if (!backgroundOptions && (!cloudAiSelected || !(await waitForCloudInBackground()))) return;
-            const offsets = partialCloudReveal ? [0, ...FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS] : FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS;
+            const offsets = partialReveal ? [0, ...FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS] : FIRST_DAY_PREPARATION_BACKGROUND_DAY_OFFSETS;
             for (const offset of offsets) {
               if (cancelled || !selectedProviderUnchanged()) return;
               const day = shiftIsoDate(today, offset);
@@ -931,7 +1032,8 @@ export function useFirstDayPreparation({
                 let consecutiveBackgroundFailures = 0;
                 for (let attempt = 0; attempt < FIRST_DAY_PREPARATION_MAX_CLASSIFY_BATCHES; attempt += 1) {
                   if (cancelled || !selectedProviderUnchanged()) return;
-                  if (!(await waitForCloudInBackground())) return;
+                  // A local route has nothing to wait for; Cloud waits for readiness to return.
+                  if (!backgroundOptions && !(await waitForCloudInBackground())) return;
                   while (!cancelled && selectedProviderUnchanged() && getClassificationActivitySnapshot().running) {
                     await firstDayPreparationDelay(1_000);
                   }
@@ -947,6 +1049,9 @@ export function useFirstDayPreparation({
                     }
                     if (failure.failureKind === "content") break;
                     consecutiveBackgroundFailures += 1;
+                    // The background is not the place to keep retrying a failing local model; the app's
+                    // own classification picks the day up later.
+                    if (backgroundOptions && consecutiveBackgroundFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
                     await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
                     continue;
                   }
@@ -962,6 +1067,7 @@ export function useFirstDayPreparation({
                   if (summary.failureKind === "content") break;
                   if (summary.status === "error" || summary.status === "disabled" || summary.savedRecords === 0) {
                     consecutiveBackgroundFailures += 1;
+                    if (backgroundOptions && consecutiveBackgroundFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
                     await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
                     continue;
                   }
@@ -971,6 +1077,7 @@ export function useFirstDayPreparation({
                     remaining = await trackerClient.getUnclassifiedSegments({ ...toClassificationQueryForDay(day), limit: 1 });
                   } catch {
                     consecutiveBackgroundFailures += 1;
+                    if (backgroundOptions && consecutiveBackgroundFailures >= FIRST_DAY_PREPARATION_TRANSIENT_FAILURE_LIMIT) break;
                     await firstDayPreparationDelay(cloudBackgroundRetryDelay(consecutiveBackgroundFailures));
                     continue;
                   }
@@ -996,7 +1103,7 @@ export function useFirstDayPreparation({
     return () => {
       if (!revealed) cancelled = true;
       if (!revealed && cloudBacklog) releaseFirstDayCloudBacklog(cloudBacklog.runId);
-      clearTimeout(safetyTimeout);
+      clearTimeout(timeLimitTimer);
       stopLiveRefresh();
     };
     // Retrying is the only dependency besides the gate itself that starts a new
@@ -1004,5 +1111,5 @@ export function useFirstDayPreparation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preparingFirstDay, retryRevision]);
 
-  return { continueAnyway, failure, rearm, retry };
+  return { continueAnyway, continueNow, failure, keepWaiting, rearm, retry, slowWait };
 }

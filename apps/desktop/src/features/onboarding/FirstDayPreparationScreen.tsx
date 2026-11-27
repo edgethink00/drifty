@@ -96,6 +96,13 @@ type FirstDayPreparationScreenProps = {
   readonly failure?: FirstDayPreparationFailure | null;
   readonly onContinueAnyway?: () => void;
   readonly onRetry?: () => void;
+  /**
+   * The run passed its time limit and is still classifying. The screen keeps its progress and
+   * offers to keep waiting or to look around now while the rest finishes in the background.
+   */
+  readonly slowWait?: boolean;
+  readonly onKeepWaiting?: () => void;
+  readonly onContinueNow?: () => void;
   /** 0..1 for a determinate bar, or null while the step has no measurable progress. */
   readonly progress: number | null;
   /** Phases this run expects to go through, so one bar can span all of them. */
@@ -117,6 +124,9 @@ export function FirstDayPreparationScreen({
   failure = null,
   onContinueAnyway,
   onRetry,
+  slowWait = false,
+  onKeepWaiting,
+  onContinueNow,
   phase,
   plan = IMPLICIT_PLAN,
   progress,
@@ -188,11 +198,17 @@ export function FirstDayPreparationScreen({
     })
     : null;
   const firstFailureActionRef = useRef<HTMLButtonElement>(null);
+  const keepWaitingRef = useRef<HTMLButtonElement>(null);
+  const asking = slowWait && !ready && Boolean(onKeepWaiting && onContinueNow);
   useVerdictFlights(rootRef, discoveries?.items ?? EMPTY_ITEMS);
 
   useEffect(() => {
     if (failure) firstFailureActionRef.current?.focus();
   }, [failure]);
+
+  useEffect(() => {
+    if (asking) keepWaitingRef.current?.focus();
+  }, [asking]);
 
   if (failure) {
     const detail = t(({
@@ -325,9 +341,26 @@ export function FirstDayPreparationScreen({
         </div>
         {/* Held back until the wait is long enough to feel wrong: the reassurance
             only helps someone who has started to wonder whether it is stuck. */}
-        <p className={`first-day-prep__note${longWait && !ready ? " first-day-prep__note--visible" : ""}`}>
-          {t("onboarding.preparing.onceOnly")}
-        </p>
+        {asking ? (
+          /* Past the time limit the work goes on; the person only chooses whether to watch it. */
+          <div className="first-day-prep__slow">
+            <p className="first-day-prep__note first-day-prep__note--visible" role="status">
+              {t("onboarding.preparing.slowLine")}
+            </p>
+            <div className="first-day-prep__actions">
+              <button ref={keepWaitingRef} type="button" className="first-day-prep__action first-day-prep__action--primary" onClick={onKeepWaiting}>
+                {t("onboarding.preparing.keepWaiting")}
+              </button>
+              <button type="button" className="first-day-prep__action" onClick={onContinueNow}>
+                {t("onboarding.preparing.continue")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className={`first-day-prep__note${longWait && !ready ? " first-day-prep__note--visible" : ""}`}>
+            {t("onboarding.preparing.onceOnly")}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -27,6 +27,7 @@ import type {
   CLASSIFICATION_FAILURE_KINDS,
   CLASSIFICATION_TRIGGERS,
   FIRST_DAY_BACKLOG_SOURCES,
+  FIRST_DAY_TIME_LIMIT_EXITS,
   USAGE_MILESTONE_DAY_BUCKETS,
   GITHUB_STAR_PROMPT_ACTIONS,
   GITHUB_STAR_PROMPT_METHODS,
@@ -171,6 +172,11 @@ export type PostHogEventPropertiesByName = {
     readonly initial_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
     readonly remaining_segment_count_bucket?: (typeof FIRST_DAY_PREPARATION_SEGMENT_COUNT_BUCKETS)[number];
     readonly ai_route?: (typeof AI_ROUTES)[number];
+    /** The local run reached its time limit; classification went on past it. */
+    readonly time_limit_reached?: boolean;
+    /** How often the person chose to keep waiting past the limit. */
+    readonly keep_waiting_count_bucket?: (typeof COUNT_BUCKETS)[number];
+    readonly time_limit_exit?: (typeof FIRST_DAY_TIME_LIMIT_EXITS)[number];
   };
   readonly first_day_backlog: {
     readonly source: (typeof FIRST_DAY_BACKLOG_SOURCES)[number];

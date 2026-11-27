@@ -177,6 +177,8 @@ export const GERMAN_PART_9 = {
   "onboarding.preparing.checkModel": "Modellstatus prüfen",
   "onboarding.preparing.retry": "Erneut versuchen",
   "onboarding.preparing.continue": "Vorerst fortfahren",
+  "onboarding.preparing.slowLine": "Das dauert länger als erwartet. Die Sortierung läuft weiter: Warte noch etwas oder sieh dich schon um, während Drifty den Rest erledigt.",
+  "onboarding.preparing.keepWaiting": "Weiter warten",
   "onboarding.dropdown.noResults": "Keine Ergebnisse",
   "onboarding.dropdown.clearSelection": "Auswahl löschen",
   "onboarding.dropdown.tellUsMore": "Erzähl uns mehr…",
