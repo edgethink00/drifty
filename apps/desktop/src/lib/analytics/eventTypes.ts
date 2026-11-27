@@ -19,6 +19,7 @@ import type {
   APP_SURFACES,
   AUTH_STATES,
   BILLING_ACTIONS,
+  CHECKOUT_FAILURE_CODES,
   BILLING_INTERVALS,
   CLASSIFICATION_RANGES,
   CLASSIFICATION_FAILURE_KINDS,
@@ -217,6 +218,7 @@ export type PostHogEventPropertiesByName = {
     readonly entitlement_status?: (typeof ENTITLEMENT_STATUSES)[number];
     readonly locked_reason?: (typeof LOCKED_REASONS)[number];
     readonly error_kind?: (typeof ERROR_KINDS)[number];
+    readonly failure_code?: (typeof CHECKOUT_FAILURE_CODES)[number];
   };
   readonly leaderboard_action: {
     readonly action: (typeof LEADERBOARD_ACTIONS)[number];

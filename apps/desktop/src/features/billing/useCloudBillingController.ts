@@ -28,6 +28,8 @@ import { toPostHogPersonPlan } from "../../lib/analytics/accountProfile";
 import { canStartIndividualCheckout } from "./billingEligibility";
 import { useNativeTrialStatus } from "./useNativeTrialStatus";
 import { useLocalization } from "../localization/LocalizationContext";
+import type { TranslationKey } from "../localization/translations";
+import type { AnalyticsErrorKind } from "../../lib/analytics/eventHelpers";
 
 type UseCloudBillingControllerInput = {
   readonly hasRequiredAccountAuth: boolean;
@@ -100,6 +102,22 @@ async function fetchBillingEntitlementWithConfirmation(
   if (!shouldContinue()) return firstResult;
   return fetchBillingEntitlement();
 }
+
+/**
+ * What the person reads when the server refuses to open checkout, and the
+ * analytics kind it is filed under. The server sends the same refusals as codes
+ * so every supported language gets its own sentence.
+ */
+const CHECKOUT_FAILURE_COPY: Readonly<Record<CheckoutFailureCode, { readonly message: TranslationKey; readonly errorKind: AnalyticsErrorKind }>> = {
+  checkout_maintenance: { message: "billing.checkout.maintenance", errorKind: "unavailable" },
+  pricing_revision_mismatch: { message: "billing.checkout.updateRequired", errorKind: "validation" },
+  pricing_quote_mismatch: { message: "billing.checkout.priceChanged", errorKind: "validation" },
+  checkout_in_progress: { message: "billing.checkout.inProgress", errorKind: "unavailable" },
+  checkout_payment_pending: { message: "billing.checkout.paymentPending", errorKind: "unavailable" },
+  checkout_session_closed: { message: "billing.checkout.sessionClosed", errorKind: "unavailable" },
+  checkout_interval_conflict: { message: "billing.checkout.intervalConflict", errorKind: "unavailable" },
+  already_subscribed: { message: "billing.checkout.alreadySubscribed", errorKind: "validation" },
+};
 
 export function useCloudBillingController({
   hasRequiredAccountAuth,
@@ -407,28 +425,20 @@ export function useCloudBillingController({
         : await createIndividualCheckout(billingInterval);
       if (!isCurrentRequest()) return;
       if (!checkoutResult.success) {
-        const checkoutError = checkoutResult.code === "checkout_maintenance"
-          ? t("billing.checkout.maintenance")
-          : checkoutResult.code === "pricing_revision_mismatch"
-            ? t("billing.checkout.updateRequired")
-            : checkoutResult.code === "pricing_quote_mismatch"
-              ? t("billing.checkout.priceChanged")
-              : checkoutResult.error;
-        setBillingActionError(checkoutError);
-        setBillingActionErrorCode(checkoutResult.code ?? null);
+        const code = checkoutResult.code ?? null;
+        setBillingActionError(code ? t(CHECKOUT_FAILURE_COPY[code].message) : checkoutResult.error);
+        setBillingActionErrorCode(code);
         capturePostHogEvent("billing_action", {
           action: "checkout_created",
           result: "error",
           billing_interval: billingInterval,
-          error_kind: checkoutResult.code === "checkout_maintenance"
-            ? "unavailable"
-            : checkoutResult.code === "pricing_revision_mismatch"
-              ? "validation"
-              : checkoutResult.code === "pricing_quote_mismatch"
-                ? "validation"
-              : toAnalyticsErrorKind(checkoutResult.error),
+          error_kind: code ? CHECKOUT_FAILURE_COPY[code].errorKind : toAnalyticsErrorKind(checkoutResult.error),
+          failure_code: code ?? "uncoded",
         });
-        if (checkoutResult.code === "pricing_quote_mismatch") void refreshIndividualPricingQuote();
+        if (code === "pricing_quote_mismatch") void refreshIndividualPricingQuote();
+        // A payment still processing, or a plan that is already active, can turn
+        // Pro on without another checkout. Read the plan again instead.
+        if (code === "checkout_payment_pending" || code === "already_subscribed") void refreshBillingEntitlement();
         return;
       }
 
