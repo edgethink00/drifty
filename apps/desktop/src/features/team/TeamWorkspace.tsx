@@ -1255,7 +1255,7 @@ export function TeamWorkspace({
           <div className="team-header-actions">
             {qaMock ? <span className="chip gold team-preview-badge" title={t("team.preview.badgeHint")}>{t("team.preview.badge")}</span> : null}
             {canInvite ? (
-              <button type="button" className="app-btn app-btn--secondary" onClick={() => setInviteOpen(true)}>
+              <button type="button" className="app-btn app-btn--secondary app-btn--header-action" onClick={() => setInviteOpen(true)}>
                 {t("team.nav.inviteTeammate")}
               </button>
             ) : null}
