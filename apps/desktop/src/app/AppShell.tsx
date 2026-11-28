@@ -96,9 +96,9 @@ export function WindowSidebarToggle({ collapsed, placement, onToggle }: WindowSi
 /**
  * Where a drag on the sidebar edge folds or opens the sidebar: midway between
  * the rail (--sidebar-collapsed-width, 3.375rem) and the open sidebar
- * (--sidebar-expanded-width, 11.0625rem), measured from the sidebar's left.
+ * (--sidebar-expanded-width, 12rem), measured from the sidebar's left.
  */
-export const SIDEBAR_EDGE_SNAP_REM = (3.375 + 11.0625) / 2;
+export const SIDEBAR_EDGE_SNAP_REM = (3.375 + 12) / 2;
 
 const appSidebar = () => document.getElementById("app-sidebar");
 
