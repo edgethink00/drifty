@@ -202,7 +202,7 @@ html {
   /* Expressed in rem so the sidebar keeps pace with the viewport-linked type
      scale. A fixed pixel rail plus larger labels is effectively a narrower
      sidebar, which wraps nav and CTA copy at wide window sizes. */
-  --sidebar-expanded-width: 11.0625rem;
+  --sidebar-expanded-width: 12rem;
   --sidebar-collapsed-width: 3.375rem;
   /* Collapsed rail: one square chip per row on the rail's centre axis. The
      rail's inline gutter follows from the chip, so the chip stays centred as

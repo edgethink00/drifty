@@ -468,9 +468,10 @@ const DEFAULT_MIN_WIDTH: f64 = 960.0;
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_MIN_HEIGHT: f64 = 680.0;
 /// Default sizes on either side of the dashboard's 804px compact boundary.
-/// The width is the 177px sidebar plus the 1024px content panel and the 8px
-/// content gap. The Breakdown block sits 7px from the panel edge instead of
-/// the 24px page inset, so the dashboard calendar keeps its 737px width.
+/// The width is the 192px sidebar plus the 1009px content panel and the 8px
+/// content gap. The width was kept when the sidebar grew from 177px, so the
+/// content panel gave up those 15px. The Breakdown block sits 7px from the
+/// panel edge instead of the 24px page inset.
 const DEFAULT_MAIN_WINDOW_WIDTH: f64 = 1209.0;
 const DEFAULT_MAIN_WINDOW_COMPACT_HEIGHT: f64 = 800.0;
 const DEFAULT_MAIN_WINDOW_ROOMY_HEIGHT: f64 = 809.0;
