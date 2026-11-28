@@ -24,7 +24,7 @@ export const FRENCH_PART_15 = {
   "history.exclude.saving": "Enregistrement…",
   "history.exclude.error": "Impossible d’enregistrer. Réessayez.",
   "history.exclude.noticeTitle": "{{name}} n’est plus enregistré",
-  "history.exclude.noticeKept": "Les anciens enregistrements sont conservés. Vous pouvez réactiver l’enregistrement dans Réglages › Confidentialité et données.",
+  "history.exclude.noticeKept": "Les anciens enregistrements sont conservés. Vous pouvez réactiver l’enregistrement dans Réglages › Vie privée et données.",
   "history.exclude.noticeDeleted": "{{count}} anciens enregistrements supprimés.",
   "history.exclude.noticeDeletedOne": "1 ancien enregistrement supprimé.",
   "history.exclude.noticePastTitle": "Anciens enregistrements de {{name}} supprimés",

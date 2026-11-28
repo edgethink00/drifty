@@ -4,7 +4,7 @@ export const FRENCH_PART_8 = {
   "settings.section.appearance": "Apparence",
   "settings.section.classification": "Règles de classification",
   "settings.section.notifications": "Compagnon et alertes",
-  "settings.section.privacy": "Confidentialité et données",
+  "settings.section.privacy": "Vie privée et données",
   "settings.ai.automaticMemory": "Mémoire automatique",
   "settings.ai.classificationMemory": "Mémoire de classification",
   "settings.section.developer": "Agents, CLI et API",
