@@ -740,6 +740,8 @@
 /* ── Shared projects toolbar + table ── */
 
 .content--team .projects-toolbar {
+  /* The main Projects and History toolbars' control height (2.14rem). */
+  --team-toolbar-control-height: 2.14rem;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -793,6 +795,63 @@
 
 .content--team .projects-toolbar__spacer {
   margin-left: auto;
+}
+
+/* The team Projects toolbar follows the main Projects toolbar: a filled pill
+   search field, then a pill filter and a pill action at the same height. */
+.content--team .projects-toolbar .projects-search .settings-input,
+.content--team .team-focus__search .settings-input {
+  min-width: 0;
+  height: var(--team-toolbar-control-height);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+}
+
+:root[data-theme="dark"] .content--team .projects-toolbar .projects-search .settings-input,
+:root[data-theme="dark"] .content--team .team-focus__search .settings-input {
+  background: color-mix(in srgb, var(--bg-2), var(--text) 9%);
+}
+
+.content--team .projects-toolbar .projects-search .settings-input::placeholder,
+.content--team .team-focus__search .settings-input::placeholder {
+  color: var(--text-soft);
+  opacity: 1;
+}
+
+.content--team .projects-toolbar .projects-search .settings-input:focus,
+.content--team .team-focus__search .settings-input:focus {
+  border-color: var(--field-focus-border);
+}
+
+.content--team .projects-toolbar .projects-status-filter {
+  align-self: center;
+  height: var(--team-toolbar-control-height);
+}
+
+.content--team .projects-toolbar .projects-status-filter .settings-select-control__trigger {
+  border-radius: var(--radius-pill);
+}
+
+.content--team .projects-toolbar > .app-btn {
+  --btn-h: var(--team-toolbar-control-height);
+  flex: none;
+  border-radius: var(--radius-pill);
+}
+
+@media (forced-colors: active) {
+  .content--team .projects-toolbar .projects-search .settings-input,
+  .content--team .team-focus__search .settings-input {
+    border-color: CanvasText;
+  }
+
+  .content--team .projects-toolbar .projects-search .settings-input:focus,
+  .content--team .team-focus__search .settings-input:focus {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
 
 .content--team .projects-table {
@@ -913,6 +972,13 @@
 .content--team .pt-total {
   display: grid;
   gap: 0.05rem;
+}
+
+/* Team time reads right-aligned under its head, as on the main Projects table. */
+.content--team .team-data-panel .projects-table__head > :nth-child(3),
+.content--team .team-data-panel .pt-total {
+  justify-items: end;
+  text-align: right;
 }
 
 .content--team .pt-total b {
@@ -1592,6 +1658,17 @@
   min-height: clamp(7.6rem, 12vw, 8.8rem);
 }
 
+/* An empty day chart says so in the middle of its card, the way the project
+   dial beside it does, instead of in a boxed strip pinned to the top. */
+.content--team .team-card--chart > .team-empty {
+  display: grid;
+  place-items: center;
+  min-height: clamp(7.6rem, 12vw, 8.8rem);
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    Focus dashboards (Overview + member detail), sharing-scope aware.
 
@@ -1898,14 +1975,20 @@
 
 /* The Projects tab toolbar's search and filter, at the same height side by side. */
 .content--team .team-focus__tool-group {
+  --team-toolbar-control-height: 2.14rem;
   display: inline-flex;
   align-items: stretch;
+  justify-content: flex-end;
   gap: var(--space-2);
   margin-left: auto;
 }
 
+/* A set width, not only a flex basis: WebKit sizes this inline-flex group from
+   the input's own intrinsic width, which left empty room after the grid-or-list
+   switch so the row stopped short of the panels' right edge. */
 .content--team .team-focus__search {
   flex: 0 1 14rem;
+  width: 14rem;
   min-width: 11rem;
 }
 
@@ -6737,11 +6820,11 @@ button.team-matrix__cell:disabled {
   display: inline-grid;
   place-items: center;
   align-self: stretch;
-  width: 2.1rem;
+  width: var(--team-toolbar-control-height);
   padding: 0;
-  border: 1px solid var(--field-line, var(--line));
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-2) 76%, var(--surface));
   color: var(--text-soft);
   cursor: pointer;
 }

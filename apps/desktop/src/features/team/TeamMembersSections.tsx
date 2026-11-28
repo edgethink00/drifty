@@ -289,7 +289,7 @@ export function TeamFocusByDayPanel({ model, language, showProjects }: { readonl
       {hasTime ? (
         <TeamTrendChart days={days} order={showProjects ? model.focusByProject : [focusSeries]} language={language} ariaLabel={title} unassignedLabel={t("team.focus.unassigned")} />
       ) : (
-        <div className="team-empty">{t("team.focus.noFocusYet")}</div>
+        <div className="team-empty">{t(showProjects ? "projects.chart.noActivity" : "team.focus.noFocusYet")}</div>
       )}
     </TeamCard>
   );

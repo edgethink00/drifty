@@ -172,6 +172,23 @@ describe("approved UI polish contracts", () => {
     expect(projectSearch).toContain("font-size: var(--text-sm);");
   });
 
+  it("keeps the Team member toolbar flush right and on the main toolbar's search treatment", () => {
+    // WebKit sized the inline-flex group from the input's intrinsic width, so a
+    // flex basis alone left empty room after the grid-or-list switch and the
+    // row ended short of the panels above it (reported 2026-11-28).
+    const search = ruleBody(team, ".content--team .team-focus__search {");
+    expect(search).toContain("width: 14rem;");
+    expect(ruleBody(team, ".content--team .team-focus__tool-group {")).toContain("justify-content: flex-end;");
+
+    // The same filled pill and 2.14rem height as the Projects and History toolbars.
+    const field = ruleBody(team, ".content--team .team-focus__search .settings-input {");
+    expect(field).toContain("height: var(--team-toolbar-control-height);");
+    expect(field).toContain("border-color: transparent;");
+    expect(field).toContain("border-radius: var(--radius-pill);");
+    expect(ruleBody(team, ".content--team .team-focus__tool-group {")).toContain("--team-toolbar-control-height: 2.14rem;");
+    expect(ruleBody(team, ".content--team .projects-toolbar {")).toContain("--team-toolbar-control-height: 2.14rem;");
+  });
+
   it("keeps the account language submenu solid and anchored to prevent background bleed", () => {
     const submenu = ruleBody(prototype, ".account-menu-language-submenu {");
     expect(submenu).toContain("background: var(--surface-strong);");
