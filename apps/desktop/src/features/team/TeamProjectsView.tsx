@@ -343,7 +343,7 @@ export function TeamProjectsView({
             onChange={setStatusFilter}
           />
           <span className="projects-toolbar__spacer" />
-          <button type="button" className="app-btn app-btn--primary" disabled={actionLoading} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); startCreate(); }}>
+          <button type="button" className="app-btn app-btn--quiet" disabled={actionLoading} onClick={(event) => { event.currentTarget.focus({ preventScroll: true }); startCreate(); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
             {t("team.projects.new")}
           </button>
