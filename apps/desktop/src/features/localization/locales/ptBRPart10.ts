@@ -2,7 +2,7 @@ export const BRAZILIAN_PORTUGUESE_PART_10 = {
   "settings.proLooks.iconPutAway": "O Pro terminou, então o ícone do Dock voltou para Clássico. Ative o Pro para ter ‘{{name}}’ de volta.",
   "settings.proLooks.coatPutAway": "O Pro terminou, então seu mascote voltou para Marfim. Ative o Pro para ter a pelagem ‘{{name}}’ de volta.",
   "settings.appearance.productivityColors": "Cores de produtividade",
-  "settings.pet.title": "Mascote da área de trabalho",
+  "settings.pet.title": "Mascote de desktop",
   "settings.pet.preview": "Prévia da aparência · {{size}}% · {{coat}}",
   "settings.pet.previewOff": "Desativado · {{size}}% · {{coat}}",
   "settings.pet.behavior": "Comportamento",
